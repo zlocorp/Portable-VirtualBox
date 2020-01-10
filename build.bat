@@ -135,7 +135,11 @@ IF exist "%PPATH%" (
 	goto done_signtool
 ) 
 
-
+set "PPATH=%ProgramFiles(x86)%\Windows Kits\10\bin\10.0.17763.0\x64\signtool.exe"
+IF exist "%PPATH%" (
+    set "signtool=%PPATH%"
+	goto done_signtool
+)
 
 :done_signtool
 IF "%~1"=="-s" IF not exist "%signtool%" (
@@ -182,7 +186,7 @@ pushd %build_folder%
 popd
 
 rem Change the icon on the self-extracting archive.
-"%reshack%" -addoverwrite "%release_folder%\Portable-VirtualBox.tmp", "%release_folder%\%output_name%", "%build_folder%\Portable-VirtualBox\source\VirtualBox.ico",ICONGROUP,1,1033
+"%reshack%" -open "%release_folder%\Portable-VirtualBox.tmp" -save "%release_folder%\%output_name%" -action addoverwrite -res "%build_folder%\Portable-VirtualBox\source\VirtualBox.ico" -mask ICONGROUP,1,1033
 
 del /q "%release_folder%\Portable-VirtualBox.tmp"
 
