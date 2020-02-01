@@ -7,7 +7,7 @@ More info is available at http://www.vbox.me/ - *the site is not updated for a l
 
 ### Changes in this fork ###
 
-- Updated kernel to the **latest** version of VirtualBox.
+- Updated kernel to the **latest** 5.2 version of VirtualBox.
 - Old versions of the included applications are replaced with new ones.
 - Fixed the English and Russian languages, the others are removed.
 - Updated license to CC BY-NC-SA 4.0
