@@ -20,6 +20,13 @@ set "build_folder=%input_folder%\build\source"
 set "release_folder=%input_folder%\build\release"
 set "output_name=Portable-VirtualBox_current.exe"
 
+echo .
+echo .
+echo ###############################################################################
+echo Prepare to build a new release, please wait...
+echo ###############################################################################
+echo .
+echo .
 
 rem Find path for aut2exe
 rem If the user supplied a aut2exe path use it
@@ -43,7 +50,7 @@ IF exist "%PPATH%" (
 
 :done_aut2exe
 IF not exist "%aut2exe%" (
-    echo Can't locate AutoIt. Is it installed? Pleas set the aut2exe variable if it is installed in a nonstandard path.
+    echo Can't locate AutoIt. Is it installed? Please set the aut2exe variable if it is installed in a nonstandard path.
     EXIT /B
 )
 
@@ -70,7 +77,7 @@ IF exist "%PPATH%" (
 
 :done_sevenzip
 IF not exist "%sevenzip%" (
-    echo Can't locate 7-Zip. Is it installed? Pleas set the sevenzip variable if it is installed in a nonstandard path.
+    echo Can't locate 7-Zip. Is it installed? Please set the sevenzip variable if it is installed in a nonstandard path.
     EXIT /B
 )
 
@@ -109,7 +116,7 @@ IF exist "%PPATH%" (
 
 :done_reshack
 IF not exist "%reshack%" (
-    echo Can't locate Reshack. Is it installed? Pleas set the reshack variable if it is installed in a nonstandard path.
+    echo Can't locate Reshack. Is it installed? Please set the reshack variable if it is installed in a nonstandard path.
     EXIT /B
 )
 
@@ -143,7 +150,7 @@ IF exist "%PPATH%" (
 
 :done_signtool
 IF "%~1"=="-s" IF not exist "%signtool%" (
-    echo Can't locate signtool. Is it installed? Pleas set the signtool variable if it is installed in a nonstandard path.
+    echo Can't locate signtool. Is it installed? Please set the signtool variable if it is installed in a nonstandard path.
     EXIT /B
 )
 
@@ -164,7 +171,6 @@ if not exist "%release_folder%" md "%release_folder%"
 rem Make a copy of the file for easy compression later.
 xcopy /i /e "%input_folder%data" "%build_folder%\Portable-VirtualBox\data\"
 xcopy /i /e "%input_folder%source" "%build_folder%\Portable-VirtualBox\source\"
-xcopy "%input_folder%LiesMich.txt" "%build_folder%\Portable-VirtualBox\"
 xcopy "%input_folder%ReadMe.txt"  "%build_folder%\Portable-VirtualBox\"
 
 rem Compile Portable-VirtualBox.
@@ -195,9 +201,11 @@ IF "%~1"=="-s" (
 	echo "Signing self extracting .exe file"
 	"%signtool%" sign /a "%release_folder%\%output_name%"
 )
-
+echo .
+echo .
 echo ###############################################################################
 echo Build new release as %release_folder%\%output_name%
 echo ###############################################################################
-
+echo .
+echo .
 pause
