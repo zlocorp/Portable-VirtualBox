@@ -1,13 +1,14 @@
 ; Language       : multilanguage
 ; Author         : Michael Meyer (michaelm_007) et al.
 ; e-Mail         : email.address@gmx.de
-; License        : http://creativecommons.org/licenses/by-nc-sa/3.0/
-; Version        : 6.4.9.0
+; License        : http://creativecommons.org/licenses/by-nc-sa/4.0/
+; Version        : 6.4.9.1
 ; Download       : http://www.vbox.me
 ; Support        : http://www.win-lite.de/wbb/index.php?page=Board&boardID=153
+; Updated        : jvolden, Zlocorp
 
-#AutoIt3Wrapper_Res_Fileversion=6.4.9.0
-#AutoIt3Wrapper_Res_ProductVersion=6.4.9.0
+#AutoIt3Wrapper_Res_Fileversion=6.4.9.1
+#AutoIt3Wrapper_Res_ProductVersion=6.4.9.1
 #AutoIt3Wrapper_Icon=VirtualBox.ico
 #AutoIt3Wrapper_Compression=4
 #AutoIt3Wrapper_Compile_both=Y
@@ -34,7 +35,7 @@ TraySetClick (16)
 TraySetState ()
 TraySetToolTip ("Portable-VirtualBox")
 
-Global $version = "6.4.9.0"
+Global $version = "6.4.9.1"
 Global $var1 = @ScriptDir&"\data\settings\settings.ini"
 Global $var2 = @ScriptDir&"\data\language\"
 Global $lng = IniRead ($var1, "language", "key", "NotFound")
@@ -42,6 +43,8 @@ Global $pwd = @ScriptDir
 Global $updateUrl = IniRead (@ScriptDir&"\data\settings\vboxinstall.ini", "download", "update", "NotFound")
 
 Global $new1 = 0, $new2 = 0
+
+
 
 If FileExists (@ScriptDir&"\update.exe") Then
   Sleep (2000)
@@ -126,17 +129,17 @@ If IniRead ($var1, "lang", "key", "NotFound") = 0 Then
 
   Local $WS_POPUP
 
-  GUICreate ("Language", 300, 136, -1, -1, $WS_POPUP)
+  GUICreate ("Select your language", 300, 136, -1, -1, $WS_POPUP)
   GUISetFont (9, 400, 0, "Arial")
   GUISetBkColor (0xFFFFFF)
   GUICtrlSetFont (-1, 10, 800, 0, "Arial")
 
-  GUICtrlCreateLabel ("Please select your language", 14, 8, 260, 14)
+  GUICtrlCreateLabel ("Please, select your language...", 14, 8, 260, 14)
   GUICtrlSetFont (-1, 9, 800, "Arial")
 
   $StartLng = GUICtrlCreateInput (IniRead ($var1, "language", "key", "NotFound"), 13, 34, 180, 21)
 
-  GUICtrlCreateButton ("Search", 200, 32, 80, 24, 0)
+  GUICtrlCreateButton ("Select", 200, 32, 80, 24, 0)
   GUICtrlSetOnEvent (-1, "SRCLanguage")
   GUICtrlCreateButton ("OK", 30, 66, 100, 28, 0)
   GUICtrlSetOnEvent (-1, "OKLanguage")
@@ -286,6 +289,7 @@ If IniRead (@ScriptDir&"\data\settings\settings.ini", "update", "key", "NotFound
   Sleep (2000)
   FileDelete (@TempDir&"\update.ini")
 EndIf
+
 
 ; Thibaut : use Hybrid Mode if available
 HybridMode()
@@ -639,6 +643,7 @@ EndIf
       RunWait (@SystemDir&"\regsvr32.exe /S "& $arch &"\VBoxC.dll", @ScriptDir, @SW_HIDE)
       DllCall ($arch&"\VBoxRT.dll", "hwnd", "RTR3Init")
 
+      SetHomeDir('set')
       SplashOff ()
 
       If RegRead ("HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\VBoxDRV", "DisplayName") <> "VirtualBox Service" Then
@@ -765,8 +770,9 @@ EndIf
       SplashTextOn ("Portable-VirtualBox", IniRead ($var2 & $lng &".ini", "messages", "07", "NotFound"), 220, 40, -1, -1, 1, "arial", 12)
 
       ProcessWaitClose ("VBoxSVC.exe")
+	  SetHomeDir('unset')
 
-      EnvSet ("VBOX_USER_HOME")
+      ;EnvSet ("VBOX_USER_HOME")
       Local $timer=0
 
       Local $PID = ProcessExists ("VBoxSVC.exe")
@@ -1733,7 +1739,7 @@ Func UseSettings ()
 EndFunc
 
 Func Licence ()
-  _IECreate ("http://www.virtualbox.org/wiki/VirtualBox_PUEL", 1, 1)
+  _IECreate ("https://www.virtualbox.org/wiki/Licensing_FAQ", 1, 1)
 EndFunc
 
 Func ExitExtraction ()
@@ -1792,12 +1798,12 @@ Func UpdateYes ()
     If GUICtrlRead ($Checkbox200) = $GUI_CHECKED Then
       DirMove (@ScriptDir&"\data\language", @ScriptDir&"\data\language_BAK", 1)
       DirMove (@ScriptDir&"\data\tools", @ScriptDir&"\data\tools_BAK", 1)
-      DirMove (@ScriptDir&"\source", @ScriptDir&"\source_BAK", 1)
+      ;DirMove (@ScriptDir&"\source", @ScriptDir&"\source_BAK", 1)
     Else
       DirRemove (@ScriptDir&"\data\language", 1)
       DirRemove (@ScriptDir&"\data\tools", 1)
-      DirRemove (@ScriptDir&"\source", 1)
-      FileDelete (@ScriptDir&"\LiesMich.txt")
+      ;DirRemove (@ScriptDir&"\source", 1)
+      ;FileDelete (@ScriptDir&"\LiesMich.txt")
       FileDelete (@ScriptDir&"\ReadMe.txt")
     EndIf
 
@@ -1805,8 +1811,8 @@ Func UpdateYes ()
 
     DirMove (@ScriptDir&"\update\Portable-VirtualBox\data\language", @ScriptDir&"\data", 1)
     DirMove (@ScriptDir&"\update\Portable-VirtualBox\data\tools", @ScriptDir&"\data", 1)
-    DirMove (@ScriptDir&"\update\Portable-VirtualBox\source", @ScriptDir, 1)
-    FileMove (@ScriptDir&"\update\Portable-VirtualBox\LiesMich.txt", @ScriptDir, 9)
+    ;DirMove (@ScriptDir&"\update\Portable-VirtualBox\source", @ScriptDir, 1)
+    ;FileMove (@ScriptDir&"\update\Portable-VirtualBox\LiesMich.txt", @ScriptDir, 9)
     FileMove (@ScriptDir&"\update\Portable-VirtualBox\ReadMe.txt", @ScriptDir, 9)
     FileMove (@ScriptDir&"\update\Portable-VirtualBox\Portable-VirtualBox.exe", @ScriptDir&"\Portable-VirtualBox.exe_NEW", 9)
     FileMove (@ScriptDir&"\update\Portable-VirtualBox\UpDate.exe", @ScriptDir&"\update.exe", 9)
@@ -1875,4 +1881,21 @@ Func HybridMode()
 		; Does not need to wait since it's a regular version of VirtualBox
 		Exit
 	EndIf
+ EndFunc
+
+ ; Set VBOX_USER_HOME to our portable directory.
+; Unset VBOX_USER_HOME when closed.
+; Create it first if it doesn't exist or VirtualBox.exe will fail to load.
+Func SetHomeDir($action)
+  local $userHome = @ScriptDir & IniRead ($var1, "userhome", "key", "NotFound")
+  If $action = 'set' Then
+    If NOT FileExists ($userHome) Then
+      DirCreate ($userHome)
+    EndIf
+    If NOT EnvGet("VBOX_USER_HOME") = $userHome Then
+      EnvSet ("VBOX_USER_HOME", $userHome)
+    EndIf
+  ElseIf $action = 'unset' Then
+    EnvSet ("VBOX_USER_HOME")
+  EndIf
 EndFunc
