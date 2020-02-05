@@ -1,4 +1,14 @@
+source/app32/**
 source/app64/**
 source/data/.VirtualBox/**
 source/data/**
 **/settings.ini
+
+## Directory-based project format:
+.idea/
+
+# MacOS
+.DS_Store
+
+#ignore thumbnails created by windows
+Thumbs.db
