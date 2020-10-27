@@ -2,13 +2,13 @@
 ; Author         : Michael Meyer (michaelm_007) et al.
 ; e-Mail         : email.address@gmx.de
 ; License        : http://creativecommons.org/licenses/by-nc-sa/4.0/
-; Version        : 6.4.9.1
+; Version        : 6.4.9.2
 ; Download       : http://www.vbox.me
 ; Support        : http://www.win-lite.de/wbb/index.php?page=Board&boardID=153
 ; Updated        : jvolden, Zlocorp
 
-#AutoIt3Wrapper_Res_Fileversion=6.4.9.1
-#AutoIt3Wrapper_Res_ProductVersion=6.4.9.1
+#AutoIt3Wrapper_Res_Fileversion=6.4.9.2
+#AutoIt3Wrapper_Res_ProductVersion=6.4.9.2
 #AutoIt3Wrapper_Icon=VirtualBox.ico
 #AutoIt3Wrapper_Compression=4
 #AutoIt3Wrapper_Compile_both=Y
@@ -35,7 +35,7 @@ TraySetClick (16)
 TraySetState ()
 TraySetToolTip ("Portable-VirtualBox")
 
-Global $version = "6.4.9.1"
+Global $version = "6.4.9.2"
 Global $var1 = @ScriptDir&"\data\settings\settings.ini"
 Global $var2 = @ScriptDir&"\data\language\"
 Global $lng = IniRead ($var1, "language", "key", "NotFound")
@@ -760,7 +760,7 @@ EndIf
             RunWait ("cmd /c set VBOX_USER_HOME="& $UserHome &"& .\"& $arch &"\VirtualBox.exe", @ScriptDir, @SW_HIDE)
           EndIf
         Else
-          RunWait ("cmd /c set VBOX_USER_HOME=%CD%\data\.VirtualBox & .\"& $arch &"\VirtualBox.exe", @ScriptDir, @SW_HIDE)
+          RunWait ("cmd /c set VBOX_USER_HOME="& "%CD%\data\.VirtualBox" &"& .\"& $arch &"\VirtualBox.exe", @ScriptDir, @SW_HIDE)
         EndIf
 
         ProcessWaitClose ("VirtualBox.exe")
@@ -1883,11 +1883,12 @@ Func HybridMode()
 	EndIf
  EndFunc
 
- ; Set VBOX_USER_HOME to our portable directory.
-; Unset VBOX_USER_HOME when closed.
+; Set VBOX_USER_HOME to our portable directory. - 646
+; Unset VBOX_USER_HOME when closed. - 743
 ; Create it first if it doesn't exist or VirtualBox.exe will fail to load.
 Func SetHomeDir($action)
-  local $userHome = @ScriptDir & IniRead ($var1, "userhome", "key", "NotFound")
+  ;local $userHome = @ScriptDir & IniRead ($var1, "userhome", "key", "NotFound")
+  local $userHome = "data\.VirtualBox"
   If $action = 'set' Then
     If NOT FileExists ($userHome) Then
       DirCreate ($userHome)
