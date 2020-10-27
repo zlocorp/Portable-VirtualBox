@@ -1,4 +1,4 @@
-To build Portable-VirtualBox from source do the following:
+To build Portable-VirtualBox from the source do the following:
 
 ### Prerequisites
 
@@ -43,13 +43,13 @@ To make a release you also need to do the following:
 4. In the 7zip dialog select `Self extracting archive (SFX)` and click `OK` 
 5. This will make a new `.exe` file named `Portable-VirtualBox.exe`
 6. Open the newly created `Portable-VirtualBox.exe` with Resource Hacker find the Icon Group->1->1033
-7. Use the Replace resource function to replace it with the icon at `Portable-VirtualBox\source\VirtualBox.ico`
+7. Use the `Replace resource` function to replace it with the icon at `Portable-VirtualBox\source\VirtualBox.ico`
 8. Save & exit
 
 ### AutoIt version when distributing software
 
-Portable-VirtualBox uses a great and powerful scripting language known as AutoIt. Unfortunately some virus creators also use AutoIt with malicious intent. Each time a new version of AutoIt is released some virus is quickly written in it, and some anti-virus vendor then manages to marks sets of instructions found in all AutoIt made software as malicious. This causes many legitimate programs to be accidently flagged as viruses (this is what is known as a [false positive](https://en.wikipedia.org/wiki/Antivirus_software#Problems_caused_by_false_positives)).
+Portable-VirtualBox uses a great and powerful scripting language known as AutoIt. Unfortunately some virus creators also use AutoIt with malicious intent. Each time a new version of AutoIt is released some virus is quickly written in it, and some anti-virus vendor then manages to mark sets of instructions found in all AutoIt made software as malicious. This causes many legitimate programs to be accidently flagged as viruses (this is what is known as a [false positive](https://en.wikipedia.org/wiki/Antivirus_software#Problems_caused_by_false_positives)).
 
-Eventually software makers complain and the anti-virus maker realize there mistakes. AutoIt gets cleared again. However this vicious cycle means that if you do not want to get any falsely virus warnings when distributing software that you have built it is best to use an older version of AutoIt. We recommend version 3.3.14.5 that was released in 16 March, 2018. 
+Eventually software makers complain, and the anti-virus maker realize their mistakes. AutoIt gets cleared again. However, this vicious cycle means that if you do not want to get any falsely virus warnings when distributing software that you have built it is best to use an older version of AutoIt. We recommend version 3.3.14.5 that was released in 16 March 2018. 
 
-However if you for some reason want to use the newest version you can download it from http://www.autoitscript.com/site/autoit/downloads/ ( you need "AutoIt Full Installation" ).
+However, if you for some reason want to use the newest version you can download it from http://www.autoitscript.com/site/autoit/downloads/ (you need **"AutoIt Full Installation"**).
