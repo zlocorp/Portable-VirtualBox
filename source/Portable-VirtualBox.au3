@@ -1884,11 +1884,11 @@ Func HybridMode()
  EndFunc
 
 ; Set VBOX_USER_HOME to our portable directory. - 646
-; Unset VBOX_USER_HOME when closed. - 743
+; Unset VBOX_USER_HOME when closed. - 773
 ; Create it first if it doesn't exist or VirtualBox.exe will fail to load.
 Func SetHomeDir($action)
   ;local $userHome = @ScriptDir & IniRead ($var1, "userhome", "key", "NotFound")
-  local $userHome = "data\.VirtualBox"
+  local $userHome = @ScriptDir & "\data\.VirtualBox"
   If $action = 'set' Then
     If NOT FileExists ($userHome) Then
       DirCreate ($userHome)
