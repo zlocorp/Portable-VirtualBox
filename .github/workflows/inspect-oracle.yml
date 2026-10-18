@@ -1,0 +1,65 @@
+name: Oracle installer layout investigation (one-off, no drivers)
+
+on:
+  push:
+    branches:
+      - dev/modernization-2026
+    paths:
+      - .github/workflows/inspect-oracle.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Verified official Oracle download (no installation)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:RUNNER_TEMP 'VirtualBox-7.2.20-175154-Win.exe'
+          python scripts/oracle_release.py 7.2.20 --download "$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Checksum download verification failed' }
+          $expected = 'a81777d2b36380ce042a29e9c554cf032eb46a793f62e3cc82e7411e535c2c26'
+          $actual = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Oracle hash mismatch: $actual" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $exe
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Oracle') {
+            throw "Installer Authenticode invalid: $($signature.Status) $($signature.SignerCertificate.Subject)"
+          }
+          "VERIFIED_VBOX=$exe" >> $env:GITHUB_ENV
+          "Verified Oracle installer checksum and signature." >> $env:GITHUB_STEP_SUMMARY
+      - name: Bounded official -extract investigation; never msiexec or VBox driver
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $probe = Join-Path $env:RUNNER_TEMP 'Oracle-VBox-extract-test'
+          New-Item -Path $probe -ItemType Directory -Force | Out-Null
+          $serviceKey = 'HKLM:\SYSTEM\CurrentControlSet\Services'
+          $before = @(Get-ChildItem $serviceKey | Where-Object { $_.PSChildName -match '^VBox' } | ForEach-Object { $_.PSChildName } | Sort-Object)
+          # Oracle documents -extract as an extraction-only command. Bound execution
+          # and terminate ONLY the installer process we start if it hangs.
+          $process = Start-Process -FilePath $env:VERIFIED_VBOX -ArgumentList '-extract' -WorkingDirectory $probe -PassThru
+          if (-not $process.WaitForExit(120000)) {
+            $process.Kill()
+            throw 'Official -extract did not exit within 120 seconds'
+          }
+          if ($process.ExitCode -ne 0) { throw "Oracle -extract exited $($process.ExitCode)" }
+          $after = @(Get-ChildItem $serviceKey | Where-Object { $_.PSChildName -match '^VBox' } | ForEach-Object { $_.PSChildName } | Sort-Object)
+          if (Compare-Object -ReferenceObject $before -DifferenceObject $after) {
+            throw 'VirtualBox service registrations changed during extraction'
+          }
+          $msis = @(Get-ChildItem $env:RUNNER_TEMP, $env:TEMP, $probe -Filter '*.msi' -Recurse -File -ErrorAction SilentlyContinue | Sort-Object FullName -Unique)
+          if ($msis.Count -eq 0) { throw 'No extracted MSI found' }
+          '### Oracle 7.2.20 extracted MSI (metadata only)' >> $env:GITHUB_STEP_SUMMARY
+          foreach ($msi in $msis) {
+            $label = "$($msi.Name), $($msi.Length) bytes"
+            Write-Host $label
+            "- $label" >> $env:GITHUB_STEP_SUMMARY
+          }
+          Write-Host 'No registered VBox services were changed. No MSI installed.'
