@@ -13,7 +13,7 @@ Status: **experimental implementation, runtime locked**.
 
 ## Evidence from GitHub Actions
 
-Most recent successful full CI run at `a814170d6ac77a1d2d8110a29dd677f5650cc778`:
+Representative fully verified CI run at `a814170d6ac77a1d2d8110a29dd677f5650cc778`:
 [GitHub Actions #39150301475](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39150301475).
 
 - Python unittest: **13 tests passed**.
@@ -43,7 +43,7 @@ The branch also has later documentation-only commits excluded from CI through `p
 
 - Replacement runtime lifecycle implementation (driver creation, COM/VBoxSDS, cleanup ownership journal), safe extraction of 7.2, network/USB support, official release and migration.
 - Real Windows 11 x64 hardware/VM tests, VirtualBox 7.2 system service/driver tests and installed-VBox coexistence validation.
-- Oracle installer signature validation following a full verified binary download, and Extension Pack licensing/compatibility.
+- Oracle installer extraction/layout compatibility, and Extension Pack licensing/compatibility.
 - Deterministic binary compilation.
 
 **Do not remove the preview gate, use the build as a functioning portable hypervisor, merge into `master`, or publish a release until these gates have been completed.**
@@ -54,3 +54,10 @@ The branch also has later documentation-only commits excluded from CI through `p
 2. Implement safe, version-aware extraction and optional signature checks for Oracle VirtualBox 7.2 without running installers by default.
 3. Replace direct VM XML rewrites with planned operations and explicit backups; demonstrate no destructive behavior against fixture VM trees.
 4. Run isolated Windows 11 x64 acceptance tests, then consider real-PC tests and a merge/release.
+
+## Follow-up Oracle binary investigation
+
+- [GitHub Actions #39150686025](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39150686025): downloaded the exact official 7.2.20 Windows EXE, verified its SHA-256 against Oracle's live checksum manifest **and verified Authenticode publisher signature**. Oracle-documented `-extract` did not exit in 120 seconds in an unattended Windows Server 2022 runner; only that launched process was terminated. No MSI was installed and no driver/VM tests were attempted. This investigation was marked failed, as extraction was not confirmed.
+- [GitHub Actions #39150939847](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39150939847): repeat verified official download/signature; ran *passive* `7z l -slt` without executing the installer. 7-Zip inspected the wrapper but did not expose an MSI entry; **the package extraction layout is still unresolved**. The job succeeded as a bounded read-only investigation, *not* as proof of successful extraction.
+- [GitHub Actions #39150939834](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39150939834): latest normal CI green after the one-off investigation workflow was updated.
+- Future work must not treat `-extract` as headless-safe without additional investigation. Do not attempt to install Oracle drivers on GitHub Actions solely to force extraction.
