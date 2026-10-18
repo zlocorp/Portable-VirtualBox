@@ -10,11 +10,17 @@ Func _PortableInstalledVBoxDetected()
 EndFunc
 
 Func _PortableCountExistingServices()
-    Local $aServices[7] = ["VBoxDrv", "VBoxSUP", "VBoxUSBMon", "VBoxSDS", "VBoxNetAdp", "VBoxNetLwf", "VBoxNetFlt"]
+    Local $aServices[10] = ["VBoxDrv", "VBoxSUP", "VBoxUSB", "VBoxUSBMon", "VBoxSDS", "VBoxNetAdp", "VBoxNetAdp6", "VBoxNetLwf", "VBoxNetFlt", "VBoxNetNAT"]
     Local $iCount = 0
     For $i = 0 To UBound($aServices) - 1
-        RegRead("HKLM\SYSTEM\CurrentControlSet\Services\" & $aServices[$i], "ImagePath")
-        If Not @error Then $iCount += 1
+        Local $sKey = "HKLM\SYSTEM\CurrentControlSet\Services\" & $aServices[$i]
+        RegRead($sKey, "Type")
+        If Not @error Then
+            $iCount += 1
+        Else
+            RegRead($sKey, "ImagePath")
+            If Not @error Then $iCount += 1
+        EndIf
     Next
     Return $iCount
 EndFunc
