@@ -34,6 +34,8 @@ For a local developer workstation with the official AutoIt installation:
 python -m unittest discover -s tests -v
 python scripts/audit_source.py
 python scripts/oracle_release.py 7.2.20
+# Read-only VM registry inventory; UUIDs and paths hidden by default:
+python scripts/vm_inventory.py 'C:\\Portable-VirtualBox\\data\\.VirtualBox\\VirtualBox.xml'
 # Optional: download only, never execute:
 python scripts/oracle_release.py 7.2.20 --download .\VirtualBox-official.exe
 ```
