@@ -2,10 +2,18 @@ name: Commit-bound source snapshot
 on:
   push:
     branches: [dev/modernization-2026]
-    paths: [.github/workflows/source-snapshot.yml]
+    paths:
+      - .github/workflows/**
+      - scripts/**
+      - source/**
+      - tests/**
+      - docs/plans/**
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: source-snapshot-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   snapshot:
     runs-on: ubuntu-24.04
