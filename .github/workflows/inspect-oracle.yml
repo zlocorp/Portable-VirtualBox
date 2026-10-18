@@ -9,6 +9,13 @@ on:
       - scripts/pe_resources.py
       - scripts/oracle_release.py
       - scripts/safe_files.py
+  pull_request:
+    branches: [work/upstream-baseline-2026]
+    paths:
+      - .github/workflows/**
+      - scripts/**
+      - source/**
+      - tests/**
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,11 +32,6 @@ jobs:
         run: |
           python -X utf8 -m unittest discover -s tests -v
           if ($LASTEXITCODE -ne 0) { throw 'Python tests failed' }
-      - name: Diagnose official public manifest format
-        shell: pwsh
-        run: |
-          python -c "import urllib.request; d=urllib.request.urlopen('https://download.virtualbox.org/virtualbox/7.2.20/SHA256SUMS',timeout=30).read(131073); print(repr(d[:8000]))"
-          if ($LASTEXITCODE -ne 0) { throw 'Manifest format probe failed' }
       - name: Download, verify, passively extract and inspect MSI
         shell: pwsh
         run: ./scripts/inspect_oracle.ps1 -WorkDirectory (Join-Path $env:RUNNER_TEMP 'verified-oracle-inspection')

@@ -31,6 +31,8 @@ $packageReport = Get-Content (Join-Path $stage 'packages.json') -Raw | ConvertFr
 $entries = @($packageReport.packages | Where-Object { $_.name -match '\.msi$' -and $_.architecture -in @('all','amd64') })
 if ($entries.Count -ne 1) { throw 'Expected exactly one x64-compatible MSI' }
 $msi = Join-Path $stage $entries[0].name
+$msiHashBefore = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($msiHashBefore -ne $entries[0].sha256) { throw 'Extracted MSI differs from extraction manifest' }
 $installer = New-Object -ComObject WindowsInstaller.Installer
 $db = $null
 $info = $null
@@ -63,13 +65,14 @@ try {
         throw "Unexpected MSI identity: $product / $version / $manufacturer"
     }
     if ($template -notmatch '^x64;') { throw "MSI does not target x64: $template" }
+    if ((Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant() -ne $msiHashBefore) { throw 'Read-only MSI inspection modified its input' }
     if (($before | Out-String) -cne ((Get-VBoxServiceSnapshot) | Out-String)) { throw 'VBox service state changed' }
     $report = [ordered]@{
         sourceCommit=$env:GITHUB_SHA; installerSha256=$expected
         wrapperSignature=$signature.Status.ToString(); signer=$signature.SignerCertificate.Subject
         product=$product; productVersion=$version; manufacturer=$manufacturer; platform=$template
         packages=$packageReport.packages; installerExecuted=$false; msiInstalled=$false
-        vboxServiceStateUnchanged=$true
+        vboxServiceRegistryUnchanged=$true; msiDatabaseUnchanged=$true; databaseOpenMode='read-only'
     }
     $reports = Join-Path $repo '.reports'
     New-Item -ItemType Directory -Path $reports -Force | Out-Null
