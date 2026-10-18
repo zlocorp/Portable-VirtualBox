@@ -12,14 +12,14 @@ If $CmdLine[0] > 0 Then
             Exit 0
         Case "--selftest"
             Local $iFailure = 0
-            If Not _PortableSafeRelativePath("data\\.VirtualBox") Then $iFailure += 1
-            If _PortableSafeRelativePath("..\\Windows") Then $iFailure += 1
-            If _PortableSafeRelativePath("C:\\Windows") Then $iFailure += 1
-            If _PortableSafeRelativePath("\\\\server\\share") Then $iFailure += 1
-            If _PortableRelativeToRoot("C:\\Portable VirtualBox", "data\\VM") <> "C:\\Portable VirtualBox\\data\\VM" Then $iFailure += 1
-            If Not _PortableServiceOwned(True, False, "C:\\Owned\\driver.sys", "c:\\owned\\DRIVER.sys") Then $iFailure += 1
-            If _PortableServiceOwned(True, True, "C:\\Owned\\driver.sys", "C:\\Owned\\driver.sys") Then $iFailure += 1
-            If _PortableServiceOwned(False, False, "C:\\Owned\\driver.sys", "C:\\Owned\\driver.sys") Then $iFailure += 1
+            If Not _PortableSafeRelativePath("data\.VirtualBox") Then $iFailure += 1
+            If _PortableSafeRelativePath("..\Windows") Then $iFailure += 1
+            If _PortableSafeRelativePath("C:\Windows") Then $iFailure += 1
+            If _PortableSafeRelativePath("\\server\share") Then $iFailure += 1
+            If _PortableRelativeToRoot("C:\Portable VirtualBox", "data\VM") <> "C:\Portable VirtualBox\data\VM" Then $iFailure += 1
+            If Not _PortableServiceOwned(True, False, "C:\Owned\driver.sys", "c:\owned\DRIVER.sys") Then $iFailure += 1
+            If _PortableServiceOwned(True, True, "C:\Owned\driver.sys", "C:\Owned\driver.sys") Then $iFailure += 1
+            If _PortableServiceOwned(False, False, "C:\Owned\driver.sys", "C:\Owned\driver.sys") Then $iFailure += 1
             If Not _PortableProcessOwned(300, 300) Then $iFailure += 1
             If _PortableProcessOwned(300, 301) Then $iFailure += 1
             If Not _PortableVersionFamilyAccepted("7.2.20") Then $iFailure += 1
@@ -34,8 +34,8 @@ If $CmdLine[0] > 0 Then
             ConsoleWrite("Portable-VirtualBox: read-only diagnostics" & @CRLF)
             ConsoleWrite("OS: " & @OSVersion & @CRLF)
             ConsoleWrite("OS architecture: " & @OSArch & @CRLF)
-            ConsoleWrite("Portable app64 VirtualBox.exe present: " & FileExists(@ScriptDir & "\\app64\\VirtualBox.exe") & @CRLF)
-            Local $sInstalled = RegRead("HKLM64\\SOFTWARE\\Oracle\\VirtualBox", "InstallDir")
+            ConsoleWrite("Portable app64 VirtualBox.exe present: " & FileExists(@ScriptDir & "\app64\VirtualBox.exe") & @CRLF)
+            Local $sInstalled = RegRead("HKLM64\SOFTWARE\Oracle\VirtualBox", "InstallDir")
             If @error Then
                 ConsoleWrite("Installed VirtualBox path: not detected in HKLM64" & @CRLF)
             Else
