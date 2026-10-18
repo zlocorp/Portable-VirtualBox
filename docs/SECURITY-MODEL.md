@@ -37,6 +37,8 @@ A development gate is executed **before** inherited runtime statements. The orig
 
 ## What tests currently cover
 
+The read-only `scripts/vm_inventory.py` tool can flag missing/duplicate VM registry entries and external paths without displaying private names or UUIDs unless `--details` is explicitly requested. It performs no repair or migration.
+
 Automated CI covers (1) static risk pattern detection, (2) side-effect-free AutoIt helper checks, (3) developer gate execution, (4) read-only Windows inventory, (5) validated checksum selection and atomic non-overwriting downloads, (6) x64 compilation, compiler signature and PE output checks.
 
 Automated CI does **not** validate successful VM execution, kernel driver installation, service cleanup, Host-only/Bridged networking, USB, snapshots, VM migration, code signing of downloaded Oracle installations, or release readiness. Any claims about these features require separate evidence.
