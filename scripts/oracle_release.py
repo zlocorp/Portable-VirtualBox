@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
-"""Fetch official Oracle VirtualBox installer metadata; optionally download safely.
-
-Never executes an installer, never downloads Extension Packs and never touches
-Windows services. Pin the desired release explicitly, e.g. 7.2.20.
-"""
+"""Verify Oracle release metadata and optionally download, never execute it."""
 from __future__ import annotations
-
 import argparse
 import hashlib
 import os
@@ -14,12 +9,13 @@ import re
 import tempfile
 import time
 import urllib.parse
-from safe_files import windows_relative_parts, publish_new
-import sys
 import urllib.request
+import sys
+from safe_files import windows_relative_parts, publish_new
 
 VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+", re.ASCII)
-SHA256_RE = re.compile(r"^([0-9a-fA-F]{64})[ \t]+[*]?([A-Za-z0-9][A-Za-z0-9._+-]*)$")
+# Oracle's manifest also includes Debian/Ubuntu filenames containing '~'.
+SHA256_RE = re.compile(r"^([0-9a-fA-F]{64})[ \t]+[*]?([A-Za-z0-9][A-Za-z0-9._+~-]*)$")
 MAX_INSTALLER_BYTES = 1024 * 1024 * 1024
 
 
@@ -114,7 +110,6 @@ def download_verified(url: str, destination: Path, expected_sha256: str,
         raise ValueError("Destination directory does not exist")
     digest = hashlib.sha256()
     request = urllib.request.Request(url, headers={"User-Agent": "portable-vbox-build/1"})
-    # Cleanup owns only a private directory; publication never replaces a file.
     with tempfile.TemporaryDirectory(prefix=".vbox-download-", dir=destination.parent) as folder:
         temporary = Path(folder) / "payload"
         deadline = time.monotonic() + 1200
@@ -144,8 +139,7 @@ def download_verified(url: str, destination: Path, expected_sha256: str,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("version", help="Exact Oracle VirtualBox release, e.g. 7.2.20")
-    parser.add_argument("--download", type=Path,
-                        help="Write verified Windows installer here (never run it)")
+    parser.add_argument("--download", type=Path, help="Write verified installer here; never run it")
     args = parser.parse_args()
     try:
         root = release_root(args.version)
