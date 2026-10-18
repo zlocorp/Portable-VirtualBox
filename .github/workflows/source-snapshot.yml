@@ -1,0 +1,29 @@
+name: Commit-bound source snapshot
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths: [.github/workflows/source-snapshot.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Export committed files only
+        run: |
+          mkdir -p "$RUNNER_TEMP/source-snapshot"
+          git archive --format=zip HEAD -o "$RUNNER_TEMP/source-snapshot/source.zip"
+          git rev-parse HEAD > "$RUNNER_TEMP/source-snapshot/COMMIT.txt"
+          cd "$RUNNER_TEMP/source-snapshot"
+          sha256sum source.zip > SHA256SUMS.txt
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: source-snapshot-${{ github.sha }}
+          path: ${{ runner.temp }}/source-snapshot/
+          retention-days: 2
+          if-no-files-found: error
