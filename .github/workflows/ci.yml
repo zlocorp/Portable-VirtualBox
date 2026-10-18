@@ -44,13 +44,18 @@ jobs:
           $uri = 'https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.18.0.zip'
           Invoke-WebRequest -Uri $uri -OutFile "$env:RUNNER_TEMP\autoit.zip"
           Expand-Archive -LiteralPath "$env:RUNNER_TEMP\autoit.zip" -DestinationPath "$env:RUNNER_TEMP\autoit" -Force
-          $bin = Join-Path $env:RUNNER_TEMP 'autoit\Aut2Exe\Aut2exe_x64.exe'
-          if (-not (Test-Path $bin)) { throw 'Official AutoIt package missing Aut2exe_x64.exe' }
+          $compilers = @(Get-ChildItem -Path "$env:RUNNER_TEMP\autoit" -Recurse -File -Filter 'Aut2exe_x64.exe')
+          if ($compilers.Count -ne 1) {
+            Get-ChildItem -Path "$env:RUNNER_TEMP\autoit" -Directory | Select-Object -ExpandProperty FullName
+            throw "Expected one x64 Aut2Exe compiler, found $($compilers.Count)"
+          }
+          $bin = $compilers[0].FullName
+          $root = Split-Path (Split-Path $bin -Parent) -Parent
           $signature = Get-AuthenticodeSignature -LiteralPath $bin
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'AutoIt') {
             throw "Unsigned or unexpected AutoIt compiler: $($signature.Status) $($signature.SignerCertificate.Subject)"
           }
-          "AUTOIT_ROOT=$env:RUNNER_TEMP\autoit" >> $env:GITHUB_ENV
+          "AUTOIT_ROOT=$root" >> $env:GITHUB_ENV
       - name: Build x64
         shell: pwsh
         run: ./scripts/build.ps1 -AutoItRoot "$env:AUTOIT_ROOT"
