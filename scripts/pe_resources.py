@@ -1,4 +1,4 @@
-"""Bounds-checked PE32/PE32+ neutral RCDATA reader. Never loads executable code.
+"""Bounds-checked PE32/PE32+ Oracle-compatible RCDATA reader. Never loads executable code.
 
 Format reference: Microsoft PE/COFF specification. This deliberately supports
 only the three-level resource tree needed by the Oracle installer protocol.
@@ -100,7 +100,7 @@ def read_rcdata(data: bytes) -> dict[str, memoryview]:
             result.append((key, value))
         return result
 
-    output = {}
+    by_language = {0: {}, 0x0409: {}}
     for kind, child in entries(0):
         if kind != 10:
             continue
@@ -114,8 +114,18 @@ def read_rcdata(data: bytes) -> dict[str, memoryview]:
                     raise PEError('Resource nesting exceeds three levels')
                 rva, size, _, _ = struct.unpack('<IIII', relative(leaf, 16))
                 payload = take(resolve(rva, size), size)
-                if language == 0:
-                    output[name] = payload
+                if not isinstance(language, int) or not 0 <= language <= 0xffff:
+                    raise PEError('Invalid RCDATA language identifier')
+                if language in by_language:
+                    by_language[language][name] = payload
+    neutral, english = by_language[0], by_language[0x0409]
+    # Oracle VBoxStubBld writes all MANIFEST/HDR/BIN entries with en-US
+    # (0x0409). Keep neutral-only fixtures/older wrappers supported, but never
+    # combine package parts from different languages or silently prefer a
+    # conflicting second manifest. Identical complete copies are unambiguous.
+    if neutral and english and neutral != english:
+        raise PEError('Conflicting or mixed neutral/en-US RCDATA resources')
+    output = english or neutral
     if not output:
-        raise PEError('No neutral RCDATA resources')
+        raise PEError('No supported neutral/en-US RCDATA resources')
     return output

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Extract a hash-pinned Oracle installer without executing it or Windows Installer.
 
-Reads neutral PE RCDATA MANIFEST/HDR_nn/BIN_nn resources documented by Oracle's
+Reads coherent en-US or neutral PE RCDATA MANIFEST/HDR_nn/BIN_nn resources in Oracle's
 VBoxStubBld format. This is not a generic SFX extractor or an MSI installer.
 """
 from __future__ import annotations

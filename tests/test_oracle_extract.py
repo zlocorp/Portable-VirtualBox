@@ -20,6 +20,20 @@ class OracleExtractTests(unittest.TestCase):
             self.assertEqual(packages[0].name, 'VirtualBox-7.2.20-175154-Win.msi')
             self.assertEqual(bytes(packages[0].payload)[:8], bytes.fromhex('d0cf11e0a1b11ae1'))
 
+    def test_oracle_english_us_resources_are_supported(self):
+        for plus in (False, True):
+            with self.subTest(plus=plus):
+                packages = inspect_packages(make_pe(payload_resources(), plus=plus, language=0x0409))
+                self.assertEqual(len(packages), 1)
+                self.assertEqual(packages[0].architecture, 'amd64')
+
+    def test_mixed_or_unsupported_resource_languages_fail_closed(self):
+        resources = payload_resources()
+        for languages in ({'MANIFEST': 0x0409, 'HDR_00': 0, 'BIN_00': 0x0409},
+                          {'MANIFEST': 0, 'HDR_00': 0, 'BIN_00': 0x0409}, 0x0407):
+            with self.subTest(languages=languages), self.assertRaises(ValueError):
+                inspect_packages(make_pe(resources, language=languages))
+
     def test_bad_manifest_headers_and_payloads_fail_closed(self):
         good = payload_resources()
         variants = [dict(good, MANIFEST=b'x' * 16), dict(good, MANIFEST=good['MANIFEST'][:-1] + b'\0'),

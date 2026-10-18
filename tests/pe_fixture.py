@@ -2,7 +2,7 @@
 import struct
 
 
-def make_pe(resources, *, plus=False):
+def make_pe(resources, *, plus=False, language=0):
     names = list(resources)
     n = len(names)
     buf = bytearray(40 + 8 * n)
@@ -18,7 +18,8 @@ def make_pe(resources, *, plus=False):
             buf += b'\0'
         loff = len(buf)
         buf += b'\0' * 24
-        struct.pack_into('<HHII', buf, loff + 12, 0, 1, 0, loff + 24)
+        struct.pack_into('<HHII', buf, loff + 12, 0, 1,
+                         language[name] if isinstance(language, dict) else language, loff + 24)
         doff = len(buf)
         buf += b'\0' * 16
         struct.pack_into('<II', buf, 40 + 8 * i, noff | 0x80000000, loff | 0x80000000)
