@@ -62,10 +62,11 @@ jobs:
       - name: Run compiled safety selftest (no elevation or VBox drivers)
         shell: pwsh
         run: |
-          & .\build\Portable-VirtualBox_x64.exe --selftest
-          if ($LASTEXITCODE -ne 0) { throw "Compiled safety selftest failed with $LASTEXITCODE" }
-          & .\build\Portable-VirtualBox_x64.exe --diagnose
-          if ($LASTEXITCODE -ne 0) { throw "Read-only diagnostics failed with $LASTEXITCODE" }
+          $exe = (Resolve-Path '.\build\Portable-VirtualBox_x64.exe').Path
+          $selftest = Start-Process -FilePath $exe -ArgumentList '--selftest' -Wait -PassThru -NoNewWindow
+          if ($selftest.ExitCode -ne 0) { throw "Compiled safety selftest failed with $($selftest.ExitCode)" }
+          $diagnostic = Start-Process -FilePath $exe -ArgumentList '--diagnose' -Wait -PassThru -NoNewWindow
+          if ($diagnostic.ExitCode -ne 0) { throw "Read-only diagnostics failed with $($diagnostic.ExitCode)" }
       - name: Upload unsigned compiler output and checksum (not a release)
         uses: actions/upload-artifact@v4
         with:
