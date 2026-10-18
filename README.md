@@ -1,59 +1,55 @@
-Low speed network NAT problems in 7.1.0 rollback to version 7.0.20 anyone who wants can watch can change download url<br>
-On VirtualBox versions ver. 7 and above<br>
-Disable message center notifications and screen capture messages VirtualBoxVM.exe default settings directory:<br>
-Portable-VirtualBox\\.VirtualBox\VirtualBox.xml<br>
-Change or add before launch <ExtraDataItem name=\"GUI/SuppressMessages\" value=\"all\"/> sample:<br><br>
-<ExtraData\><br>
-<ExtraDataItem name=\"GUI/GuestControl/FileManagerVisiblePanel\" value=\"LogPanel\"/><br>
-<ExtraDataItem name=\"GUI/LastItemSelected\" value=\"m=2bd3571f-97f7-4297-b779-2b6f3d9c5ae0\"/><br>
-<ExtraDataItem name=\"GUI/LastWindowPosition\" value=\"121,139,848,438\"/><br>
-<ExtraDataItem name=\"GUI/SessionInformationDialogGeometry\" value=\"296,140,512,360\"/><br>
-<ExtraDataItem name=\"GUI/SuppressMessages\" value=\"all\"/><br>
-<ExtraDataItem name=\"GUI/Tools/LastItemsSelected\" value=\"Welcome,Details\"/><br>
-<\/ExtraData><br><br>
-Save the VirtualBox.xml file
+# Portable-VirtualBox (modernization branch)
 
-Portable-VirtualBox Change bug
-===================
+> **Development preview only.** This branch is NOT a functional replacement for VirtualBox and MUST NOT be distributed as a ready-to-use portable virtualization product.
 
-Portable-VirtualBox is a free and open source software tool that lets you run any operating system from a USB stick without separate installation.
+This code base starts from the original [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portable-VirtualBox) `master` snapshot at commit `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Historical personal modifications are **not merged**. The preserved old fork is available in the `archive/legacy-zlocorp-2020` branch.
 
-More info is available at http://www.vbox.me/
+## Current scope
 
-### Building ###
+- Build an x64 AutoIt executable with the official signed AutoIt 3.3.18.0 compiler on GitHub Actions.
+- Run a **read-only** host diagnostic and pure-policy self-tests without elevation.
+- Keep the inherited 2013–2024 runtime explicitly disabled while driver, service, VM and installer lifecycle code is reworked.
+- Provide an independent Oracle installer **metadata / checksum verifier**. It does not execute packages.
+- Target Windows 11 x64 and VirtualBox 7.2.x for future compatibility verification. **Neither runtime support nor driver compatibility has been established.**
 
-Please see here for information on how to build from source: [BUILDING](BUILDING.md).
+### Preview executable commands
 
-### Changelog for VirtualBox ###
+```text
+Portable-VirtualBox_x64.exe --version
+Portable-VirtualBox_x64.exe --selftest
+Portable-VirtualBox_x64.exe --diagnose
+Portable-VirtualBox_x64.exe --preflight
+```
 
-<strong>VirtualBox 7.1.0</strong> (released 11.09.2024)
+`--preflight` performs **read-only** checks of Windows build/architecture, portable VBox executable presence and version, existing Oracle installation, common VBox services and running processes. No preflight result authorizes unsafe execution. Running the preview without arguments shows a warning and exits; it never launches a VM.
 
-This is a major update. The following new features were added:
+### Build and tests
 
-<ul><li>GUI: Modernized look and feel, offering a selection between Basic and Experienced user level with reduced or full UI functionality
-</li><li>OCI Integration: Performance dashboard now shows resource usage for cloud VMs
-</li><li>OCI Integration: Clone compute instances
-</li><li>OCI Integration: Reset compute instances
-</li><li>Oracle VirtualBox Extension Pack: Update to the PUEL license, removing the evaluation option. For evaluation use of the Extension Pack, please download it from the Oracle Software Delivery Cloud
-</li><li>VRDE: If user does not set up TLS with custom certificates, enable it with self-signed certificate, including issuing a new one before the old one expires
-</li><li>NAT: New engine with IPv6 support
-</li><li>macOS/Arm host: Arm virtualization for Linux and BSD VMs
-</li><li>Linux host and guest: Added Wayland support for Clipboard sharing (bug <a class="new ticket" href="https://www.virtualbox.org/ticket/20808" title="#20808: defect: shared clipboard does not work with Wayland (new)">#20808</a>)
-</li><li>Shared Clipboard: Added initial support for transferring files on Linux and Windows hosts / guests. This requires the 7.1 Guest Additions to be installed. See User Guide for known limitations
-</li><li>Screen Recording: Significant performance improvements for the encoding pipeline, resulting in less CPU usage while recording is active. This requires 7.1 Guest Additions to be installed on Windows guests
-</li></ul><br>
-In addition, the following items were fixed and/or added:
+GitHub Actions workflow: [Portable-VirtualBox CI](.github/workflows/ci.yml). The `compile` job downloads the official portable AutoIt 3.3.18.0 toolkit, verifies the compiler's Authenticode signature, builds x64, checks the PE output and uploads an **unverified-runtime** artifact and SHA-256. No release is published and no VirtualBox drivers, services or installers are run.
 
-<ul><li>VMM: Fixed EFLAGS.TF handling for CPUID instructions when Hyper-V is being used (bug <a class="closed ticket" href="https://www.virtualbox.org/ticket/17961" title="#17961: defect: VMM missing rflags.TF handling when advance rip that abused by virtual ... (closed: fixed)">#17961</a>)
-</li><li>virtio-net: Follow up fixes for FreeBSD 12.3 and pfSense 2.6.0 (bug <a class="closed ticket" href="https://www.virtualbox.org/ticket/21201" title="#21201: defect: FreeBSD 12.3 and pfSense 2.6.0 networking no longer works with upgrade ... (closed: fixed)">#21201</a>)
-</li><li>EFI: Ability to add new Microsoft DB/KEX certificates to newly created VMs
-</li><li>Oracle Extension Pack: Fixed shipping the cryptographic support module for full VM encryption
-</li><li>GUI: Improved overall accessibility
-</li><li>GUI: Update the version of Qt used
-</li><li>Unattended Installation: Added support for subiquity- / cloud-init-based installers; this enables installing more modern Linux-based guest OSes in Unattended mode
-</li><li>Unattended Installation: Added support for specifying separate passwords for the user and admin / root accounts
-</li><li>VBoxManage: Added ability to show and (re-)attach to a (video) recording progress of a VM
-</li><li>VBoxManage: Added the ability to query the guest's mount points via a new "mount" Guest Control sub command. Requires at least 7.1 Guest Additions
-</li><li>Python: Our API bindings for Python 2.x is now marked as being deprecated and will be removed in a future version. Please upgrade your code to use Python 3
-</li><li>VBoxShell: Lots of smaller and bigger bugfixes + Python 3.x compatibility
-</li></ul>
+For a local developer workstation with the official AutoIt installation:
+
+```powershell
+./scripts/build.ps1 -AutoItRoot 'C:\Program Files (x86)\AutoIt3'
+python -m unittest discover -s tests -v
+python scripts/audit_source.py
+python scripts/oracle_release.py 7.2.20
+# Optional: download only, never execute:
+python scripts/oracle_release.py 7.2.20 --download .\VirtualBox-official.exe
+```
+
+The downloader requires an existing output directory, refuses to overwrite existing files and accepts only a specific version and a manifest-verified Windows installer filename.
+
+## Implementation plan and risks
+
+- [Modernization work packages](docs/MODERNIZATION-2026.md)
+- [Host and VM safety rules](docs/SECURITY-MODEL.md)
+- Original upstream build instructions (legacy, not applicable to the new development CI): [BUILDING.md](BUILDING.md)
+
+**Important:** This is a portable launcher project. It cannot make Oracle VirtualBox kernel drivers magically portable or remove all requirements for privileged operations on Windows. Never run experimental launchers against the only copy of valuable VM disks or snapshots.
+
+## Upstream, third-party forks, licensing
+
+The original launcher credits Michael Meyer and contributors. Preserve the original license and attribution; this branch does not silently relicense upstream. Any use of third-party fork code and the redistribution of Oracle VirtualBox binaries, Oracle Extension Packs or bundled tools require independent license and provenance review.
+
+The [Deac2](https://github.com/Deac2/Portable-VirtualBox) and [bitamind](https://github.com/bitamind/Portable-VirtualBox) projects are research references, not automatically imported code.
