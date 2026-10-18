@@ -1,3 +1,4 @@
+#include-once
 ; Portable-VirtualBox modernization: side-effect-free checks.
 ; This library intentionally contains no service, registry-write or process-stop calls.
 
@@ -34,11 +35,19 @@ Func _PortableServiceOwned($bCreatedThisRun, $bExistedAtStart, $sImageInRegistry
     Return StringLower($sImageInRegistry) == StringLower($sExpectedImage)
 EndFunc
 
+; Values must originate from a retained process handle, not a fresh PID lookup.
+; This pure comparison does not query, own or terminate a Windows process.
 Func _PortableProcessOwned($iPid, $iRecordedPid, $sObservedCreated = "", $sRecordedCreated = "", _
         $sObservedImage = "", $sRecordedImage = "", $bHandleBound = False)
-    If Not IsNumber($iPid) Or Not IsNumber($iRecordedPid) Then Return False
-    If $iPid < 1 Or $iRecordedPid < 1 Then Return False
-    Return $iPid = $iRecordedPid
+    If Not IsInt($iPid) Or Not IsInt($iRecordedPid) Then Return False
+    If $iPid < 1 Or $iPid <> $iRecordedPid Then Return False
+    If Not IsBool($bHandleBound) Or Not $bHandleBound Then Return False
+    If Not IsString($sObservedCreated) Or Not IsString($sRecordedCreated) Then Return False
+    If $sObservedCreated == "" Or Not ($sObservedCreated == $sRecordedCreated) Then Return False
+    If Not IsString($sObservedImage) Or Not IsString($sRecordedImage) Then Return False
+    If Not StringRegExp($sObservedImage, "^[A-Za-z]:\\") Then Return False
+    If Not _PortableSafeRelativePath(StringTrimLeft($sObservedImage, 3)) Then Return False
+    Return StringLower($sObservedImage) == StringLower($sRecordedImage)
 EndFunc
 
 ; Version policy: only 7.2.x. This is a release-family check,

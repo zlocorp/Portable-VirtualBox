@@ -17,6 +17,11 @@ class PreviewEntryPointTests(unittest.TestCase):
         self.assertNotIn("ProcessClose(", gate)
         self.assertNotIn("FileDelete(", gate)
 
+    def test_legacy_installer_is_not_in_the_compiled_entrypoint(self):
+        for command in ('taskkill /im', 'sc delete', 'Func UseSettings', 'Func UpdateYes', '#RequireAdmin'):
+            active = '\n'.join(line for line in SOURCE.splitlines() if not line.lstrip().startswith(';'))
+            self.assertFalse(command in active, "Legacy operation remains in entrypoint: " + command)
+
     def test_old_unscoped_privilege_is_inactive(self):
         uncommented = [line.strip() for line in SOURCE.splitlines() if not line.lstrip().startswith(";")]
         self.assertNotIn("#RequireAdmin", uncommented)
