@@ -36,7 +36,8 @@ $db = $null
 $info = $null
 try {
     Write-Host ('MSI inspection stage: OpenDatabase; path-type=' + $msi.GetType().FullName)
-    $db = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($msi, 0))
+    # Use PowerShell's COM adapter to marshal the path and numeric read-only mode.
+    $db = $installer.OpenDatabase([string]$msi, [int]0)
     function Read-MsiProperty([string]$Name) {
         Write-Host ('MSI inspection stage: property ' + $Name)
         $query = 'SELECT `Value` FROM `Property` WHERE `Property` = ''' + $Name + ''''

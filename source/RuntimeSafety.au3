@@ -34,7 +34,8 @@ Func _PortableServiceOwned($bCreatedThisRun, $bExistedAtStart, $sImageInRegistry
     Return StringLower($sImageInRegistry) == StringLower($sExpectedImage)
 EndFunc
 
-Func _PortableProcessOwned($iPid, $iRecordedPid)
+Func _PortableProcessOwned($iPid, $iRecordedPid, $sObservedCreated = "", $sRecordedCreated = "", _
+        $sObservedImage = "", $sRecordedImage = "", $bHandleBound = False)
     If Not IsNumber($iPid) Or Not IsNumber($iRecordedPid) Then Return False
     If $iPid < 1 Or $iRecordedPid < 1 Then Return False
     Return $iPid = $iRecordedPid
