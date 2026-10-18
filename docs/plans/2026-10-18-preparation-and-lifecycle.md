@@ -1,75 +1,59 @@
 # Package preparation and lifecycle hardening implementation plan
 
-> Execute inline, task by task, with failing regression tests before implementation. User authorized continuing development and hosted CI; no master merge or release is authorized.
+Execution: inline, with regression evidence and hosted Linux/Windows CI. User authorized continuing work without the real PC; no master merge, release, driver install or live VM mutation.
 
-**Goal:** Turn the preview into a tested development foundation for preparing Oracle packages and controlling future system changes, without using the user's PC.
+## Agreed scope and provenance
 
-**Architecture:** Keep AutoIt as the launcher and leave the inherited runtime quarantined. Python tools prepare verified files and exercise offline failure cases; native AutoIt tests cover reusable lifecycle policies. Package extraction must not install an MSI, start VirtualBox, or register drivers. Prefer passive extraction over GUI automation.
+Keep AutoIt as the launcher. Prepare verified Oracle packages without executing them, test lifecycle decisions against synthetic resources, and leave actual startup disabled. Do not import another fork wholesale or change licenses.
 
-**Tech stack:** AutoIt 3.3.18.0, Python standard library, PowerShell 7, isolated GitHub Actions Linux/Windows runners.
+The original iteration began at `3556db90e438c347e47857da9b1dba3db2164283`. On resuming after an interrupted turn, the branch already contained input/parser changes at `41f9ce0b5a22c3456e6665621e988bfd783cf94a`. Those changes were read and tested, not blindly repeated. A commit-bound source snapshot at `dd9c09224a1fc312fd7f5b8e1fdc46058111a492` enabled local tests when direct network clone was unavailable.
 
-**Spec:** `docs/MODERNIZATION-2026.md` and `docs/SECURITY-MODEL.md`.
+Preserve master and archive at `6b91c6d3f664535ab31a9038ada1db11c83bf5cc`; preserve clean upstream `work/upstream-baseline-2026` at `5b58dbbe701c3e2eb348942a9059708063b0cb96`. The broader roadmap is MODERNIZATION-2026.md. This iteration does not complete all M0-M5 work packages.
 
-## Global constraints
+## Task 1: input hardening and regression foundation
 
-- Resume `dev/modernization-2026` at `3556db90e438c347e47857da9b1dba3db2164283`, based on original upstream `5b58dbbe`.
-- Preserve `master`, `archive/legacy-zlocorp-2020`, and `work/upstream-baseline-2026`.
-- No wholesale fork imports, license changes, driver installation, live VM mutation, automatic merge, or release.
-- Target Oracle VirtualBox 7.2.x, not an implicit promise of 7.2 runtime compatibility.
-- Repository and verified CI artifacts are the evidence. Green investigation is not successful extraction unless actual output checks pass.
+- [x] Read current branch and run its existing tests unchanged: 32 Python tests at resumed baseline.
+- [x] Review existing destination-race, foreign partial-file, official redirect, bounded response and malformed-name cases. Preserve their tested fixes.
+- [x] Verify XML encoding/DTD, foreign namespaces, registry scope, Windows special names and path checks.
+- [x] Run the complete updated Python suite locally and on hosted Linux/Windows: 35 tests pass.
 
-## Review focus
+Most input hardening was already present after the interrupted turn. This resume verified it and added the en-US resource and quarantine regressions; it does not claim authorship of a new red/green cycle for every earlier test.
 
-1. A destination or partial file appears during a download: no overwrite or deletion of another operation's file.
-2. Untrusted manifest, redirect, malformed PE/resource or XML input: fail closed and preserve the original.
-3. Service or process identity changes between acquisition and cleanup: deny cleanup; PID equality alone is insufficient.
-4. Partial acquisition or interrupted journal: report incomplete/unknown state rather than blindly cleaning it.
-5. CI transport or compile success: do not mislabel as Windows 11, driver or VM acceptance.
+## Task 2: actual Oracle installer extraction and metadata
 
-## Task 1: Verify inputs and establish local regression evidence
+- [x] Establish Oracle's resource format from VBoxStubBld source, not guessed command-line switches.
+- [x] Reproduce rejection of valid en-US resources, implement coherent en-US/neutral selection, retain failure on mixed or unsupported language resources.
+- [x] Test PE32/PE32+ bounds, invalid manifests, filenames, duplicate entries, exact checksums and new-directory extraction.
+- [x] Retrieve the pinned Oracle 7.2.20 installer in hosted Windows, check checksum and publisher signature, and passively extract x64 MSI, ARM64 MSI and common.cab.
+- [x] Fix the PowerShell COM marshalling boundary at OpenDatabase, then inspect the x64 MSI in read-only mode.
+- [x] Verify product/version/platform, unchanged MSI bytes and unchanged VBox service registry entries; keep metadata only.
 
-Files: existing `scripts/oracle_release.py`, `scripts/vm_inventory.py`, tests, and CI configuration.
+Acceptance evidence: run [39170915618](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39170915618) and committed inspection JSON. This completes wrapper-to-MSI/CAB extraction, NOT MSI/CAB-to-app64 file staging or an installed runtime.
 
-- [ ] Read current branch files, run the existing suite unchanged, record baseline.
-- [ ] Add failing tests for download destination races, foreign partial files, redirect host changes and malformed input.
-- [ ] Implement bounded writes/publication, strict release URL/filename validation, and owner-scoped temporary cleanup.
-- [ ] Add XML encoding/DTD and Windows path regression cases; implement only required safety repairs.
-- [ ] Run the complete Python suite on Linux and Windows.
+## Task 3: native lifecycle policy and snapshots
 
-Interfaces remain `release_root`, `parse_sha256_manifest`, `find_windows_installer`, `read_manifest`, `download_verified`, `inventory`, `summary`. Optional limits may be introduced without breaking existing CLI usage.
+- [x] Specify and reproduce native lifecycle failures before implementation: 47 assertions, 19 failures against interface checkpoints in run 39169466443.
+- [x] Implement planned/owned/failed/releasing/released/uncertain states, ownership confirmation, reverse cleanup order and checked retry behavior.
+- [x] Refuse PID-only ownership, changed identities, foreign sessions, ambiguous outcomes and cleanup after loading a disk snapshot.
+- [x] Add exclusive UTF-8 snapshot writes, strict parse bounds and private-directory test fixtures, including Cyrillic paths.
+- [x] Execute the real compiled AutoIt policy: 56 lifecycle assertions and 11 runtime policy assertions pass in run [39170915558](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39170915558).
 
-## Task 2: Resolve Oracle package extraction
+Acceptance is a native policy implementation and file-snapshot primitive. Authoritative Windows resource probes, handle management and a durable privileged operation coordinator are separate, unfinished work.
 
-Files: new isolated extraction helper and tests; `.github/workflows/inspect-oracle.yml`.
+## Task 4: quarantine, CI and evidence handoff
 
-- [ ] Inspect Oracle's actual installer source to establish payload format and extraction behavior, rather than guessing command-line switches.
-- [ ] Write fixture tests for valid and malformed payloads, bounds, filename traversal, duplicate entries, exact hash and no-overwrite behavior.
-- [ ] Implement passive package extraction where the verified wrapper supports it, otherwise document and test a narrowly justified official extraction-only path.
-- [ ] Retrieve the pinned Oracle installer in hosted CI, verify checksum and Authenticode, extract to a new staging directory, inspect the MSI metadata without installing it.
-- [ ] Check expected output identity, version and architecture and unchanged VBox service state. Retain metadata, not Oracle redistributable payloads.
+- [x] Remove inherited runtime from the compiled entrypoint; archive the exact old blob as a .disabled reference.
+- [x] Enforce the active-entrypoint audit, retain a separate legacy inventory, set bounded jobs and read-only credential scope, and run native tests on the draft PR.
+- [x] Verify final executable-code commit `d83e6ffcf35f4c583b712d9729c8de21ffe9159f` with all three workflows passing.
+- [x] Record exact commit/tree/run identities, executed counts, real extracted package metadata and explicit remaining work in EXECUTION-2026-10-19.md.
 
-Acceptance is actual extracted output plus tests and logs; an empty result or timed-out GUI is failure, not success.
+The existing draft PR #7 remains the review vehicle. Its summary is updated as part of the evidence handoff; it must not be merged automatically.
 
-## Task 3: Implement a testable lifecycle journal/policy
+## Next bounded implementation packages
 
-Files: new AutoIt lifecycle module and native tests; existing safety helpers/preflight as required.
+1. **MSI/CAB to application staging:** inspect File/Component/Directory/Media metadata, validate destination paths, expand payload files without MSI execution, verify required x64 runtime/driver/COM files and preserve original package hashes. Acceptance: an inspected new app64 staging tree on disposable CI, no installer or service effects.
+2. **Read-only authoritative Windows adapter:** bind process identity to retained handles, query service configuration/status reliably, distinguish access errors from absence, and connect observations to the native policy. Acceptance: native fixtures plus read-only host probes; no delete/stop calls yet.
+3. **Privileged coordinator:** validated operation plans, intent durability, bounded command execution, ownership revalidation and rollback. Test against controlled disposable resources before VirtualBox integration. Keep preview startup off until this gate is proven.
+4. **Runtime integration and acceptance:** enable an isolated start/stop path only after the earlier gates; then Windows 11/VBox driver, networking/USB and disposable VM tests. The user's PC is not needed for the first three preparation/development packages.
 
-- [ ] Define explicit acquire/confirmed/cleanup/uncertain states; record only successful acquisitions as owned.
-- [ ] Write native failing tests for existing resource, failed creation, changed identity, duplicate acquisition, reverse-order cleanup and retry after failure.
-- [ ] Implement reusable lifecycle decisions without wiring unsafe legacy service commands back into the launcher.
-- [ ] Run the same AutoIt implementation in a nonprivileged compiled test executable on hosted Windows.
-
-Acceptance is the real policy implementation tested against synthetic resources. Windows service/driver adapters remain a separate gate and are not implied complete.
-
-## Task 4: Integrate evidence and update the existing draft PR
-
-- [ ] Strengthen CI timeouts, credentials scope and result checks; include native tests and source snapshots for review.
-- [ ] Verify final code tree, unit suite, x64 compilation and native checks on the final executable-code commit.
-- [ ] Record exact commits, run/job links, executed test counts, extraction outcome and remaining runtime work.
-- [ ] Update draft PR #7 without merging it. Keep preview protections active.
-
-## Execution ledger
-
-- Plan created before this iteration's implementation. Existing roadmap is the approved scope; no repeated approval request.
-- Local direct git clone could not resolve github.com. Use authenticated connector and a scoped CI source snapshot; this is an execution transport constraint, not a repository access failure.
-- Current state: tasks pending; no new test or extraction outcome is claimed by this plan.
+Do not treat this queue as already implemented. Any new spending, release publication or changes to the protected historical refs require separate authorization.

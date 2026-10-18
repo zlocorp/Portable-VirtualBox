@@ -1,18 +1,20 @@
 # Portable-VirtualBox (modernization branch)
 
-> **Development preview only.** This branch is NOT a functional replacement for VirtualBox and MUST NOT be distributed as a ready-to-use portable virtualization product.
+> **Development preview, not a functional portable hypervisor.** VM startup, driver installation and service cleanup remain disabled. Do not distribute this executable as a usable VirtualBox release.
 
-This code base starts from the original [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portable-VirtualBox) `master` snapshot at commit `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Historical personal modifications are **not merged**. The preserved old fork is available in the `archive/legacy-zlocorp-2020` branch.
+Based on the original `vboxme/Portable-VirtualBox` master snapshot `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Historical personal modifications are not merged; the old fork remains in `archive/legacy-zlocorp-2020`. Work is isolated in `dev/modernization-2026`; draft [PR #7](https://github.com/zlocorp/Portable-VirtualBox/pull/7) targets the clean upstream reference, not historical master.
 
-## Current scope
+## Verified development capabilities
 
-- Build an x64 AutoIt executable with the official signed AutoIt 3.3.18.0 compiler on GitHub Actions.
-- Run a **read-only** host diagnostic and pure-policy self-tests without elevation.
-- Keep the inherited 2013–2024 runtime explicitly disabled while driver, service, VM and installer lifecycle code is reworked.
-- Provide an independent Oracle installer **metadata / checksum verifier**. It does not execute packages.
-- Target Windows 11 x64 and VirtualBox 7.2.x for future compatibility verification. **Neither runtime support nor driver compatibility has been established.**
+- Windows x64 compilation with the official signed AutoIt 3.3.18.0 compiler, including checkout paths with spaces and Cyrillic characters.
+- Read-only host diagnostics and preflight. Existing VBox installation, services and processes are review blockers, not resources we may delete.
+- Exact-version Oracle download verification, passive PE resource extraction into MSI/CAB files, and read-only MSI metadata inspection. No Oracle installer, MSI installation or VBox driver is executed by this preparation workflow.
+- Native AutoIt lifecycle policy and exclusive journal snapshots. This is tested policy code, not a completed privileged Windows service adapter.
+- Read-only VM registry inventory and regression tests for download races, malformed input, XML encodings and Windows paths.
 
-### Preview executable commands
+The old runtime has been physically removed from the compiled entrypoint and preserved byte-for-byte as `source/legacy/Portable-VirtualBox.au3.disabled`. It is not included in the build. The preview entrypoint does not request administrator rights or start virtual machines.
+
+## Commands
 
 ```text
 Portable-VirtualBox_x64.exe --version
@@ -21,37 +23,29 @@ Portable-VirtualBox_x64.exe --diagnose
 Portable-VirtualBox_x64.exe --preflight
 ```
 
-`--preflight` performs **read-only** checks of Windows build/architecture, portable VBox executable presence and version, existing Oracle installation, common VBox services and running processes. No preflight result authorizes unsafe execution. Running the preview without arguments shows a warning and exits; it never launches a VM.
+A clear preflight is not authorization to run an unverified runtime. With no arguments the preview shows a warning and exits.
 
-### Build and tests
-
-GitHub Actions workflow: [Portable-VirtualBox CI](.github/workflows/ci.yml). The `compile` job downloads the official portable AutoIt 3.3.18.0 toolkit, verifies the compiler's Authenticode signature, builds x64, checks the PE output and uploads an **unverified-runtime** artifact and SHA-256. No release is published and no VirtualBox drivers, services or installers are run.
-
-For a local developer workstation with the official AutoIt installation:
+Developer tools:
 
 ```powershell
 ./scripts/build.ps1 -AutoItRoot 'C:\Program Files (x86)\AutoIt3'
-python -m unittest discover -s tests -v
-python scripts/audit_source.py
+./scripts/test-native.ps1 -AutoItRoot 'C:\Program Files (x86)\AutoIt3'
+python -X utf8 -m unittest discover -s tests -v
+python scripts/audit_source.py --enforce
 python scripts/oracle_release.py 7.2.20
-# Read-only VM registry inventory; UUIDs and paths hidden by default:
-python scripts/vm_inventory.py 'C:\\Portable-VirtualBox\\data\\.VirtualBox\\VirtualBox.xml'
-# Optional: download only, never execute:
-python scripts/oracle_release.py 7.2.20 --download .\VirtualBox-official.exe
+python scripts/vm_inventory.py 'C:\Portable-VirtualBox\data\.VirtualBox\VirtualBox.xml'
 ```
 
-The downloader requires an existing output directory, refuses to overwrite existing files and accepts only a specific version and a manifest-verified Windows installer filename.
+VM inventory hides UUIDs and paths unless `--details` is requested. It does not migrate data. Package extraction is a developer preparation step, not an unpacked `app64` tree or a working VM launcher.
 
-## Implementation plan and risks
+## Status and evidence
 
-- [Modernization work packages](docs/MODERNIZATION-2026.md)
-- [Host and VM safety rules](docs/SECURITY-MODEL.md)
-- Original upstream build instructions (legacy, not applicable to the new development CI): [BUILDING.md](BUILDING.md)
+See the [execution report](docs/EXECUTION-2026-10-19.md), [completed iteration and next tasks](docs/plans/2026-10-18-preparation-and-lifecycle.md), [broader roadmap](docs/MODERNIZATION-2026.md), and [security model](docs/SECURITY-MODEL.md).
 
-**Important:** This is a portable launcher project. It cannot make Oracle VirtualBox kernel drivers magically portable or remove all requirements for privileged operations on Windows. Never run experimental launchers against the only copy of valuable VM disks or snapshots.
+At executable-code commit `d83e6ff`, 35 Python tests and 67 native AutoIt assertions passed; hosted Windows preparation verified the actual Oracle 7.2.20 wrapper and extracted packages. These checks do not establish Windows 11 driver/VM compatibility or bit-for-bit reproducible binaries.
 
-## Upstream, third-party forks, licensing
+## Attribution and release boundaries
 
-The original launcher credits Michael Meyer and contributors. Preserve the original license and attribution; this branch does not silently relicense upstream. Any use of third-party fork code and the redistribution of Oracle VirtualBox binaries, Oracle Extension Packs or bundled tools require independent license and provenance review.
+Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. Existing upstream BUILDING.md describes historical packaging and is not the current CI procedure.
 
-The [Deac2](https://github.com/Deac2/Portable-VirtualBox) and [bitamind](https://github.com/bitamind/Portable-VirtualBox) projects are research references, not automatically imported code.
+Further work requires MSI/CAB file staging, real Windows service/process adapters, explicit migration and isolated VM acceptance. Neither a master merge nor a release has been performed.
