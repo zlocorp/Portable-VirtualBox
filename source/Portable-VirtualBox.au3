@@ -25,6 +25,12 @@ If $CmdLine[0] > 0 Then
             If _PortableProcessOwned(300, 301) Then $iFailure += 1
             If Not _PortableVersionFamilyAccepted("7.2.20") Then $iFailure += 1
             If _PortableVersionFamilyAccepted("7.0.20") Then $iFailure += 1
+            If _PortableVersionFamilyAccepted("8.0.0") Then $iFailure += 1
+            If _PortableVersionFamilyAccepted("7.3.0") Then $iFailure += 1
+            If _PortableSafeRelativePath("CON") Then $iFailure += 1
+            If _PortableSafeRelativePath("VM\\AUX.txt") Then $iFailure += 1
+            If _PortableSafeRelativePath("VM\\bad. ") Then $iFailure += 1
+
             If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", False, 0, 0) <> "" Then $iFailure += 1
             If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", True, 0, 0) = "" Then $iFailure += 1
             If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", False, 1, 0) = "" Then $iFailure += 1
