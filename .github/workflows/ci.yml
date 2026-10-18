@@ -24,6 +24,9 @@ jobs:
           persist-credentials: false
       - name: Unit tests for audit
         run: python3 -m unittest discover -s tests -v
+      - name: Check official Oracle manifest (metadata only; no executable download)
+        continue-on-error: true
+        run: python3 scripts/oracle_release.py 7.2.20
       - name: Record legacy safety inventory
         run: |
           python3 scripts/audit_source.py --output .reports/source-audit.md
@@ -73,6 +76,19 @@ jobs:
           if ($diagnostic.ExitCode -ne 0) { throw "Read-only diagnostics failed with $($diagnostic.ExitCode)" }
           $preflight = Start-Process -FilePath $exe -ArgumentList '--preflight' -Wait -PassThru -NoNewWindow
           if ($preflight.ExitCode -ne 3) { throw "Unsafe preflight policy: expected blocked exit 3, got $($preflight.ExitCode)" }
+      - name: Verify build from path with spaces and Cyrillic
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $probe = Join-Path $env:RUNNER_TEMP 'Portable VBox Тест'
+          New-Item -ItemType Directory -Force -Path (Join-Path $probe 'source') | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $probe 'scripts') | Out-Null
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'source\*') -Destination (Join-Path $probe 'source') -Recurse -Force
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'scripts\build.ps1') -Destination (Join-Path $probe 'scripts')
+          & (Join-Path $probe 'scripts\build.ps1') -AutoItRoot "$env:AUTOIT_ROOT"
+          if (-not (Test-Path (Join-Path $probe 'build\Portable-VirtualBox_x64.exe'))) {
+            throw 'Unicode-path build artifact missing'
+          }
       - name: Upload unsigned compiler output and checksum (not a release)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
