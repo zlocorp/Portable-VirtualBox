@@ -5,7 +5,13 @@ Func _PortableSafeRelativePath($sPath)
     If Not IsString($sPath) Or $sPath = "" Then Return False
     If StringLeft($sPath, 1) = "\" Or StringLeft($sPath, 1) = "/" Then Return False
     If StringInStr($sPath, ":") Then Return False
-    If StringRegExp($sPath, "[<>|?*]") Then Return False
+    If StringRegExp($sPath, "[<>|?*\x00-\x1F]") Or StringInStr($sPath, Chr(34)) Then Return False
+    Local $aParts = StringSplit(StringReplace($sPath, "/", "\"), "\", 2)
+    For $i = 0 To UBound($aParts) - 1
+        If $aParts[$i] = "" Then Return False
+        If StringRight($aParts[$i], 1) = "." Or StringRight($aParts[$i], 1) = " " Then Return False
+        If StringRegExp($aParts[$i], "(?i)^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$") Then Return False
+    Next
     If StringRegExp($sPath, "(^|[\\/])\.{1,2}($|[\\/])") Then Return False
     Return True
 EndFunc
@@ -34,7 +40,7 @@ Func _PortableProcessOwned($iPid, $iRecordedPid)
     Return $iPid = $iRecordedPid
 EndFunc
 
-; Version policy: 7.2 or higher. This is a release-family check,
+; Version policy: only 7.2.x. This is a release-family check,
 ; NOT a guarantee of driver, COM, USB or network compatibility.
 Func _PortableVersionFamilyAccepted($sVersion)
     If Not IsString($sVersion) Then Return False
@@ -42,5 +48,5 @@ Func _PortableVersionFamilyAccepted($sVersion)
     If Not IsArray($aMatch) Then Return False
     Local $iMajor = Number($aMatch[0])
     Local $iMinor = Number($aMatch[1])
-    Return ($iMajor > 7 Or ($iMajor = 7 And $iMinor >= 2))
+    Return ($iMajor = 7 And $iMinor = 2)
 EndFunc
