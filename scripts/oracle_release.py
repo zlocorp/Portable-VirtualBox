@@ -11,34 +11,67 @@ import hashlib
 import os
 from pathlib import Path
 import re
-import ssl
+import tempfile
+import time
+import urllib.parse
+from safe_files import windows_relative_parts, publish_new
 import sys
 import urllib.request
 
 VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+", re.ASCII)
-SHA256_RE = re.compile(r"^([0-9a-fA-F]{64})[ \t]+[*]?([^/\x5c\r\n]+)$")
+SHA256_RE = re.compile(r"^([0-9a-fA-F]{64})[ \t]+[*]?([A-Za-z0-9][A-Za-z0-9._+-]*)$")
+MAX_INSTALLER_BYTES = 1024 * 1024 * 1024
 
 
 def release_root(version: str) -> str:
-    if not VERSION_RE.fullmatch(version):
-        raise ValueError("Release must be an explicit numeric X.Y.Z, not a URL or a moving alias")
+    if not isinstance(version, str) or not VERSION_RE.fullmatch(version):
+        raise ValueError("Release must be an explicit numeric X.Y.Z")
     return "https://download.virtualbox.org/virtualbox/{}/".format(version)
+
+
+def validate_official_url(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    if (parsed.scheme != "https" or parsed.netloc != "download.virtualbox.org"
+            or parsed.query or parsed.fragment
+            or not re.fullmatch(r"/virtualbox/[0-9]+\.[0-9]+\.[0-9]+/[A-Za-z0-9._+-]+", parsed.path)):
+        raise ValueError("Only exact official HTTPS release URLs are accepted")
+    return url
+
+
+class OfficialRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        validate_official_url(newurl)
+        if urllib.parse.urlsplit(newurl).path != urllib.parse.urlsplit(req.full_url).path:
+            raise ValueError("Release identity changed during redirect")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def official_open(request, *, timeout):
+    validate_official_url(request.full_url)
+    return urllib.request.build_opener(OfficialRedirect()).open(request, timeout=timeout)
+
+
+def _validate_response(response, requested: str) -> None:
+    final = validate_official_url(getattr(response, "url", requested))
+    if final != requested:
+        raise ValueError("Unexpected response URL")
 
 
 def parse_sha256_manifest(data: str) -> dict[str, str]:
     entries: dict[str, str] = {}
+    folded = set()
     for line in data.splitlines():
-        line = line.strip()
-        if not line:
+        if not line.strip():
             continue
         match = SHA256_RE.fullmatch(line)
         if match is None:
             raise ValueError("Malformed Oracle checksum manifest line")
         checksum, filename = match.groups()
-        if filename in entries:
-            raise ValueError("Duplicate checksum entry: " + filename)
-        if filename in (".", "..") or filename.startswith("."):
+        if len(windows_relative_parts(filename)) != 1:
             raise ValueError("Unsafe filename")
+        if filename.casefold() in folded:
+            raise ValueError("Duplicate checksum entry")
+        folded.add(filename.casefold())
         entries[filename] = checksum.lower()
     if not entries:
         raise ValueError("Empty manifest")
@@ -46,22 +79,19 @@ def parse_sha256_manifest(data: str) -> dict[str, str]:
 
 
 def find_windows_installer(entries: dict[str, str], version: str) -> tuple[str, str]:
-    matches = [
-        name for name in entries
-        if name.startswith("VirtualBox-" + version + "-") and name.endswith("-Win.exe")
-    ]
+    release_root(version)
+    pattern = re.compile(r"VirtualBox-" + re.escape(version) + r"-[0-9]+-Win\.exe")
+    matches = [name for name in entries if pattern.fullmatch(name)]
     if len(matches) != 1:
-        raise ValueError("Expected one official Windows installer, found {}".format(len(matches)))
-    name = matches[0]
-    return name, entries[name]
+        raise ValueError("Expected exactly one Windows installer")
+    return matches[0], entries[matches[0]]
 
 
-def read_manifest(version: str, opener=urllib.request.urlopen) -> dict[str, str]:
+def read_manifest(version: str, opener=official_open) -> dict[str, str]:
     url = release_root(version) + "SHA256SUMS"
     request = urllib.request.Request(url, headers={"User-Agent": "portable-vbox-build/1"})
     with opener(request, timeout=30) as response:
-        if getattr(response, "url", url).split(":", 1)[0].lower() != "https":
-            raise ValueError("Non-HTTPS checksum redirect")
+        _validate_response(response, url)
         data = response.read(128 * 1024 + 1)
         if len(data) > 128 * 1024:
             raise ValueError("Unexpectedly large checksum manifest")
@@ -69,38 +99,46 @@ def read_manifest(version: str, opener=urllib.request.urlopen) -> dict[str, str]
 
 
 def download_verified(url: str, destination: Path, expected_sha256: str,
-                      opener=urllib.request.urlopen) -> str:
-    if not url.startswith("https://download.virtualbox.org/virtualbox/"):
-        raise ValueError("Only official HTTPS release links may be downloaded")
+                      opener=official_open, *, max_bytes: int = MAX_INSTALLER_BYTES) -> str:
+    validate_official_url(url)
+    version, filename = urllib.parse.urlsplit(url).path.split("/")[-2:]
+    find_windows_installer({filename: expected_sha256}, version)
     if not re.fullmatch(r"[a-f0-9]{64}", expected_sha256):
         raise ValueError("Invalid expected SHA-256")
-    if destination.exists():
-        raise FileExistsError("Refusing to overwrite: " + str(destination))
+    if type(max_bytes) is not int or max_bytes <= 0:
+        raise ValueError("Invalid download size limit")
+    destination = Path(destination)
+    if os.path.lexists(destination):
+        raise FileExistsError("Refusing to overwrite destination")
     if not destination.parent.is_dir():
         raise ValueError("Destination directory does not exist")
-    temporary = destination.with_name(destination.name + ".partial")
-    if temporary.exists():
-        raise FileExistsError("Refusing to overwrite partial file")
     digest = hashlib.sha256()
     request = urllib.request.Request(url, headers={"User-Agent": "portable-vbox-build/1"})
-    try:
+    # Cleanup owns only a private directory; publication never replaces a file.
+    with tempfile.TemporaryDirectory(prefix=".vbox-download-", dir=destination.parent) as folder:
+        temporary = Path(folder) / "payload"
+        deadline = time.monotonic() + 1200
+        total = 0
         with opener(request, timeout=60) as response, temporary.open("xb") as handle:
-            if getattr(response, "url", url).split(":", 1)[0].lower() != "https":
-                raise ValueError("Non-HTTPS installer redirect")
+            _validate_response(response, url)
             while True:
-                chunk = response.read(1024 * 1024)
+                if time.monotonic() > deadline:
+                    raise TimeoutError("Download deadline exceeded")
+                chunk = response.read(min(1024 * 1024, max_bytes - total + 1))
                 if not chunk:
                     break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ValueError("Installer exceeds size limit")
                 digest.update(chunk)
                 handle.write(chunk)
+            handle.flush()
+            os.fsync(handle.fileno())
         actual = digest.hexdigest()
         if actual != expected_sha256:
             raise ValueError("SHA-256 mismatch: expected {}, got {}".format(expected_sha256, actual))
-        os.replace(temporary, destination)
-        return actual
-    finally:
-        if temporary.exists():
-            temporary.unlink()
+        publish_new(temporary, destination)
+    return actual
 
 
 def main() -> int:

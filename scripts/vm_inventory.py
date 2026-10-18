@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from pathlib import Path, PureWindowsPath
-import re
+from pathlib import Path
+from safe_files import windows_relative_parts
 import sys
 import xml.etree.ElementTree as ET
 
@@ -28,42 +28,41 @@ def _tag_name(tag: str) -> str:
 
 
 def _safe_machine_path(profile: Path, value: str) -> Path | None:
-    if not value or "\x00" in value:
-        return None
-    windows = PureWindowsPath(value)
-    if windows.is_absolute() or windows.drive or windows.root:
-        return None
-    parts = value.replace("\\", "/").split("/")
-    if any(p in ("", ".", "..") for p in parts):
+    try:
+        parts = windows_relative_parts(value)
+    except ValueError:
         return None
     base = profile.resolve()
     candidate = base.joinpath(*parts).resolve()
     if not candidate.is_relative_to(base):
-        return None  # junction/symlink escapes also rejected on current OS
+        return None
     return candidate
+
+
+class NoDoctype(ET.TreeBuilder):
+    def doctype(self, name, pubid, system):
+        raise ValueError("DTD/entity declarations are not accepted")
 
 
 def inventory(xml: Path) -> list[Machine]:
     if not xml.is_file():
         raise ValueError("VirtualBox.xml was not found")
-    if xml.stat().st_size > 4 * 1024 * 1024:
+    with xml.open("rb") as stream:
+        data = stream.read(4 * 1024 * 1024 + 1)
+    if len(data) > 4 * 1024 * 1024:
         raise ValueError("Unusually large VirtualBox.xml: refusing to parse")
-    data = xml.read_bytes()
-    if re.search(rb"<!\s*(?:DOCTYPE|ENTITY)\b", data, re.IGNORECASE):
-        raise ValueError("DTD/entity declarations are not accepted")
     try:
-        root = ET.fromstring(data)
+        root = ET.fromstring(data, parser=ET.XMLParser(target=NoDoctype()))
     except ET.ParseError as exc:
         raise ValueError("Invalid VirtualBox.xml") from exc
-    if _tag_name(root.tag) != "VirtualBox":
+    if root.tag not in ("VirtualBox", "{http://www.virtualbox.org/}VirtualBox"):
         raise ValueError("Not a VirtualBox registry")
+    namespace = root.tag.removesuffix("VirtualBox")
     rows: list[Machine] = []
     seen: set[str] = set()
-    for element in root.iter():
-        if _tag_name(element.tag) != "MachineEntry":
-            continue
+    for element in root.findall(f"{namespace}Global/{namespace}MachineRegistry/{namespace}MachineEntry"):
         uuid = element.get("uuid", "").strip()
-        src = element.get("src", "").strip()
+        src = element.get("src", "")
         duplicate = not uuid or uuid.casefold() in seen
         if uuid:
             seen.add(uuid.casefold())
@@ -96,7 +95,7 @@ def main() -> int:
     try:
         rows = inventory(args.xml)
     except (OSError, ValueError) as exc:
-        print("Inventory failed: " + str(exc), file=sys.stderr)
+        print("Inventory failed: " + (str(exc) if args.details or isinstance(exc, ValueError) else "filesystem access error"), file=sys.stderr)
         return 2
     for key, value in summary(rows).items():
         print("{}: {}".format(key, value))
