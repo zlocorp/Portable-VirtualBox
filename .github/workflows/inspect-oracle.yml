@@ -34,32 +34,32 @@ jobs:
           }
           "VERIFIED_VBOX=$exe" >> $env:GITHUB_ENV
           "Verified Oracle installer checksum and signature." >> $env:GITHUB_STEP_SUMMARY
-      - name: Bounded official -extract investigation; never msiexec or VBox driver
+      - name: Passive archive inspection with 7-Zip (no Oracle execution)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $probe = Join-Path $env:RUNNER_TEMP 'Oracle-VBox-extract-test'
+          $probe = Join-Path $env:RUNNER_TEMP 'Oracle-VBox-archive-test'
           New-Item -Path $probe -ItemType Directory -Force | Out-Null
-          $serviceKey = 'HKLM:\SYSTEM\CurrentControlSet\Services'
-          $before = @(Get-ChildItem $serviceKey | Where-Object { $_.PSChildName -match '^VBox' } | ForEach-Object { $_.PSChildName } | Sort-Object)
-          # Oracle documents -extract as an extraction-only command. Bound execution
-          # and terminate ONLY the installer process we start if it hangs.
-          $process = Start-Process -FilePath $env:VERIFIED_VBOX -ArgumentList '-extract' -WorkingDirectory $probe -PassThru
-          if (-not $process.WaitForExit(120000)) {
-            $process.Kill()
-            throw 'Official -extract did not exit within 120 seconds'
+          $sevenzip = 'C:\Program Files\7-Zip\7z.exe'
+          if (-not (Test-Path -LiteralPath $sevenzip)) { throw 'Runner has no 7-Zip binary' }
+          $listing = @(& $sevenzip l -slt "$env:VERIFIED_VBOX" 2>&1)
+          if ($LASTEXITCODE -ne 0) {
+            'The signed Oracle wrapper cannot be inspected using this 7-Zip runner.' >> $env:GITHUB_STEP_SUMMARY
+            Write-Host '7-Zip did not recognize executable archive layout. No installer executed.'
+            exit 0
           }
-          if ($process.ExitCode -ne 0) { throw "Oracle -extract exited $($process.ExitCode)" }
-          $after = @(Get-ChildItem $serviceKey | Where-Object { $_.PSChildName -match '^VBox' } | ForEach-Object { $_.PSChildName } | Sort-Object)
-          if (Compare-Object -ReferenceObject $before -DifferenceObject $after) {
-            throw 'VirtualBox service registrations changed during extraction'
+          $found = @($listing | Select-String '(?i)Path\s*=\s*.*\.msi$')
+          if ($found.Count -eq 0) {
+            '7-Zip recognized the wrapper, but did not expose MSI entries.' >> $env:GITHUB_STEP_SUMMARY
+            Write-Host 'No MSI entries exposed. Do not infer a working extraction path.'
+            exit 0
           }
-          $msis = @(Get-ChildItem $env:RUNNER_TEMP, $env:TEMP, $probe -Filter '*.msi' -Recurse -File -ErrorAction SilentlyContinue | Sort-Object FullName -Unique)
-          if ($msis.Count -eq 0) { throw 'No extracted MSI found' }
-          '### Oracle 7.2.20 extracted MSI (metadata only)' >> $env:GITHUB_STEP_SUMMARY
-          foreach ($msi in $msis) {
-            $label = "$($msi.Name), $($msi.Length) bytes"
-            Write-Host $label
-            "- $label" >> $env:GITHUB_STEP_SUMMARY
-          }
-          Write-Host 'No registered VBox services were changed. No MSI installed.'
+          $found | Select-Object -First 20 | ForEach-Object { Write-Host $_.Line }
+          '### MSI entries in Oracle 7.2.20 wrapper' >> $env:GITHUB_STEP_SUMMARY
+          $found | Select-Object -First 20 | ForEach-Object { "- " + $_.Line } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          # Extract using the archive tool only. Never execute Oracle's launcher or msiexec.
+          & $sevenzip x -y "-o$probe" "$env:VERIFIED_VBOX" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw '7-Zip extraction failed' }
+          $msis = @(Get-ChildItem -LiteralPath $probe -Recurse -File -Filter '*.msi')
+          if ($msis.Count -eq 0) { throw 'MSI entries listed but no MSI output materialized' }
+          Write-Host "Archive-only extraction yielded $($msis.Count) MSI file(s); none executed."
