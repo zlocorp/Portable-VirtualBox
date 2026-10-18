@@ -1,15 +1,17 @@
-name: Oracle installer layout investigation (one-off, no drivers)
-
+name: Verified Oracle package preparation (no installation)
 on:
   push:
-    branches:
-      - dev/modernization-2026
+    branches: [dev/modernization-2026]
     paths:
       - .github/workflows/inspect-oracle.yml
-
+      - scripts/inspect_oracle.ps1
+      - scripts/oracle_extract.py
+      - scripts/pe_resources.py
+      - scripts/oracle_release.py
+      - scripts/safe_files.py
+  workflow_dispatch:
 permissions:
   contents: read
-
 jobs:
   inspect:
     runs-on: windows-2022
@@ -18,48 +20,19 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Verified official Oracle download (no installation)
+      - name: Python regression suite on Windows
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $exe = Join-Path $env:RUNNER_TEMP 'VirtualBox-7.2.20-175154-Win.exe'
-          python scripts/oracle_release.py 7.2.20 --download "$exe"
-          if ($LASTEXITCODE -ne 0) { throw 'Checksum download verification failed' }
-          $expected = 'a81777d2b36380ce042a29e9c554cf032eb46a793f62e3cc82e7411e535c2c26'
-          $actual = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) { throw "Oracle hash mismatch: $actual" }
-          $signature = Get-AuthenticodeSignature -LiteralPath $exe
-          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Oracle') {
-            throw "Installer Authenticode invalid: $($signature.Status) $($signature.SignerCertificate.Subject)"
-          }
-          "VERIFIED_VBOX=$exe" >> $env:GITHUB_ENV
-          "Verified Oracle installer checksum and signature." >> $env:GITHUB_STEP_SUMMARY
-      - name: Passive archive inspection with 7-Zip (no Oracle execution)
+          python -X utf8 -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Python tests failed' }
+      - name: Download, verify, passively extract and inspect MSI
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $probe = Join-Path $env:RUNNER_TEMP 'Oracle-VBox-archive-test'
-          New-Item -Path $probe -ItemType Directory -Force | Out-Null
-          $sevenzip = 'C:\Program Files\7-Zip\7z.exe'
-          if (-not (Test-Path -LiteralPath $sevenzip)) { throw 'Runner has no 7-Zip binary' }
-          $listing = @(& $sevenzip l -slt "$env:VERIFIED_VBOX" 2>&1)
-          if ($LASTEXITCODE -ne 0) {
-            'The signed Oracle wrapper cannot be inspected using this 7-Zip runner.' >> $env:GITHUB_STEP_SUMMARY
-            Write-Host '7-Zip did not recognize executable archive layout. No installer executed.'
-            exit 0
-          }
-          $found = @($listing | Select-String '(?i)Path\s*=\s*.*\.msi$')
-          if ($found.Count -eq 0) {
-            '7-Zip recognized the wrapper, but did not expose MSI entries.' >> $env:GITHUB_STEP_SUMMARY
-            Write-Host 'No MSI entries exposed. Do not infer a working extraction path.'
-            exit 0
-          }
-          $found | Select-Object -First 20 | ForEach-Object { Write-Host $_.Line }
-          '### MSI entries in Oracle 7.2.20 wrapper' >> $env:GITHUB_STEP_SUMMARY
-          $found | Select-Object -First 20 | ForEach-Object { "- " + $_.Line } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          # Extract using the archive tool only. Never execute Oracle's launcher or msiexec.
-          & $sevenzip x -y "-o$probe" "$env:VERIFIED_VBOX" | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw '7-Zip extraction failed' }
-          $msis = @(Get-ChildItem -LiteralPath $probe -Recurse -File -Filter '*.msi')
-          if ($msis.Count -eq 0) { throw 'MSI entries listed but no MSI output materialized' }
-          Write-Host "Archive-only extraction yielded $($msis.Count) MSI file(s); none executed."
+        run: ./scripts/inspect_oracle.ps1 -WorkDirectory (Join-Path $env:RUNNER_TEMP 'verified-oracle-inspection')
+      - name: Retain metadata only, not Oracle payloads
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: oracle-package-inspection
+          path: .reports/oracle-inspection.json
+          if-no-files-found: warn
+          retention-days: 7
