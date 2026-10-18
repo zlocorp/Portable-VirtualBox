@@ -66,6 +66,9 @@ Acceptance: mock/service-owner tests for pre-existing resources, partial failure
 
 ### M2: profile and VM data safety
 
+Implemented preparatory tooling: `scripts/vm_inventory.py` audits existing `VirtualBox.xml` machine entries, duplicate/missing UUIDs, missing files and paths outside the profile without modifying data. Fixture tests run on CI. **No VM migrations have been implemented or validated.**
+
+
 - Define a canonical portable data layout and `VBOX_USER_HOME` policy, support relocation and path changes.
 - Prefer supported VBoxManage/configuration operations to ad hoc VirtualBox XML string replacement.
 - Prevent silent overwrites or implicit migration of existing VM registries, disks and snapshots.
