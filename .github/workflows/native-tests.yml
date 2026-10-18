@@ -7,6 +7,8 @@ on:
       - 'tests/native/**'
       - scripts/test-native.ps1
       - .github/workflows/native-tests.yml
+  pull_request:
+    branches: [work/upstream-baseline-2026]
   workflow_dispatch:
 permissions:
   contents: read

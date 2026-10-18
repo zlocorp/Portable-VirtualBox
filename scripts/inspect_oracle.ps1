@@ -35,8 +35,10 @@ $installer = New-Object -ComObject WindowsInstaller.Installer
 $db = $null
 $info = $null
 try {
+    Write-Host ('MSI inspection stage: OpenDatabase; path-type=' + $msi.GetType().FullName)
     $db = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($msi, 0))
     function Read-MsiProperty([string]$Name) {
+        Write-Host ('MSI inspection stage: property ' + $Name)
         $query = 'SELECT `Value` FROM `Property` WHERE `Property` = ''' + $Name + ''''
         $view = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db, @($query))
         $record = $null
@@ -53,6 +55,7 @@ try {
     $product = Read-MsiProperty 'ProductName'
     $version = Read-MsiProperty 'ProductVersion'
     $manufacturer = Read-MsiProperty 'Manufacturer'
+    Write-Host 'MSI inspection stage: SummaryInformation'
     $info = $db.GetType().InvokeMember('SummaryInformation', 'GetProperty', $null, $db, @(0))
     $template = $info.GetType().InvokeMember('Property', 'GetProperty', $null, $info, @(7))
     if ($product -notmatch 'VirtualBox' -or $version -notmatch '^7\.2\.20(?:\.|$)' -or $manufacturer -notmatch 'Oracle') {
@@ -71,6 +74,9 @@ try {
     New-Item -ItemType Directory -Path $reports -Force | Out-Null
     $report | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $reports 'oracle-inspection.json') -Encoding utf8
     Write-Host "PASS: $product; $version; $template. No Oracle installer or MSI executed."
+} catch {
+    Write-Host ('MSI inspection failure location: ' + $_.ScriptStackTrace)
+    throw
 } finally {
     if ($null -ne $info) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($info) }
     if ($null -ne $db) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) }
