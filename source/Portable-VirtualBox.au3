@@ -3,6 +3,7 @@
 ; This experimental branch may be compiled and run with --version, --diagnose,
 ; or --selftest without administrator privileges or any service changes.
 #include "RuntimeSafety.au3"
+#include "HostPreflight.au3"
 #NoTrayIcon
 
 If $CmdLine[0] > 0 Then
@@ -24,11 +25,25 @@ If $CmdLine[0] > 0 Then
             If _PortableProcessOwned(300, 301) Then $iFailure += 1
             If Not _PortableVersionFamilyAccepted("7.2.20") Then $iFailure += 1
             If _PortableVersionFamilyAccepted("7.0.20") Then $iFailure += 1
+            If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", False, 0, 0) <> "" Then $iFailure += 1
+            If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", True, 0, 0) = "" Then $iFailure += 1
+            If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", False, 1, 0) = "" Then $iFailure += 1
+            If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", False, 0, 1) = "" Then $iFailure += 1
+            If _PortablePreflightBlocker(20348, "X64", True, "7.2.20", False, 0, 0) = "" Then $iFailure += 1
+
             If $iFailure <> 0 Then
                 ConsoleWriteError("Safety helper selftest FAIL: " & $iFailure & @CRLF)
                 Exit 1
             EndIf
             ConsoleWrite("Safety helper selftest PASS" & @CRLF)
+            Exit 0
+        Case "--preflight"
+            Local $sBlocker = _PortableReadOnlyPreflight()
+            If $sBlocker <> "" Then
+                ConsoleWrite("Preflight BLOCKED: " & $sBlocker & @CRLF)
+                Exit 3
+            EndIf
+            ConsoleWrite("Preflight: no detected blocker (runtime still disabled)" & @CRLF)
             Exit 0
         Case "--diagnose"
             ConsoleWrite("Portable-VirtualBox: read-only diagnostics" & @CRLF)
@@ -44,7 +59,7 @@ If $CmdLine[0] > 0 Then
             ConsoleWrite("Runtime status: disabled pending service/driver safety validation" & @CRLF)
             Exit 0
         Case Else
-            ConsoleWriteError("Unknown option: only --version, --diagnose, --selftest" & @CRLF)
+            ConsoleWriteError("Unknown option: use --version, --diagnose, --preflight, --selftest" & @CRLF)
             Exit 64
     EndSwitch
 EndIf
