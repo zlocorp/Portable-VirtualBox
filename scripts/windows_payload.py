@@ -8,7 +8,7 @@ from contextlib import contextmanager
 import ctypes as C
 import os
 from pathlib import Path
-from msi_staging import identifier, regular_file, validate_members
+from msi_staging import identifier, regular_file
 
 U32=C.c_uint32
 U16=C.c_uint16
@@ -24,7 +24,7 @@ TABLES={
 
 def _dll(name):
     if os.name!='nt': raise OSError('Native Windows payload APIs required')
-    return C.WinDLL(name,use_last_error=True,winmode=0x800)  # System32 only
+    return C.WinDLL(name,use_last_error=True,winmode=0x800)
 
 
 def _bind(dll,name,args,result=U32):
@@ -76,7 +76,6 @@ class MsiReader:
         _check(result,'MsiViewFetch'); return record
 
     def _string(self,record,column):
-        # MSI requires a non-NULL one-character buffer for the size query.
         size=U32(0); empty=C.create_unicode_buffer(1)
         result=self.dll.MsiRecordGetStringW(record,column,empty,C.byref(size))
         if result not in (0,234): _check(result,'MsiRecordGetString size')
@@ -133,55 +132,9 @@ class MsiReader:
             finally: self.dll.MsiCloseHandle(record)
 
 
-class _FileInCabinet(C.Structure):
-    _fields_=[('NameInCabinet',C.c_wchar_p),('FileSize',U32),('Win32Error',U32),
-              ('DosDate',U16),('DosTime',U16),('DosAttribs',U16),('FullTargetName',C.c_wchar*260)]
-
-
-class _FilePaths(C.Structure):
-    _fields_=[('Target',C.c_wchar_p),('Source',C.c_wchar_p),('Win32Error',U32),('Flags',U32)]
-
-
 def _iterate(cabinet,target=None,selected=None):
-    api=_dll('setupapi.dll')
-    callback_type=C.WINFUNCTYPE(U32,C.c_void_p,U32,C.c_size_t,C.c_size_t)
-    function=_bind(api,'SetupIterateCabinetW',[C.c_wchar_p,U32,callback_type,C.c_void_p],C.c_int)
-    entries=[]; errors=[]; names=set(); total=0
-    @callback_type
-    def callback(context,notification,param1,param2):
-        nonlocal total
-        try:
-            if errors: return 0 if notification==0x11 else 13
-            if notification==0x10: return 0  # CABINETINFO
-            if notification==0x12: raise ValueError('Spanning cabinets are not supported')
-            if notification==0x13:
-                detail=C.cast(param1,C.POINTER(_FilePaths)).contents
-                if detail.Win32Error: raise OSError(detail.Win32Error,'Cabinet file extraction failed')
-                return 0
-            if notification!=0x11: raise ValueError('Unexpected cabinet notification')
-            detail=C.cast(param1,C.POINTER(_FileInCabinet)).contents
-            name=identifier(detail.NameInCabinet); size=int(detail.FileSize)
-            if name.casefold() in names: raise ValueError('Duplicate cabinet entry')
-            names.add(name.casefold()); total+=size; entries.append((name,size))
-            if len(entries)>10000 or size>512*1024*1024 or total>4*1024*1024*1024:
-                raise ValueError('Cabinet exceeds limits')
-            if selected is None or name not in selected: return 2  # FILEOP_SKIP
-            if selected[name]!=size: raise ValueError('Cabinet size changed')
-            destination=Path(target)/name
-            if os.path.lexists(destination): raise FileExistsError('Cabinet target exists')
-            path=str(destination.resolve())
-            if len(path)>=260: raise ValueError('Cabinet target exceeds supported path length')
-            detail.FullTargetName=path
-            return 1  # FILEOP_DOIT; only the assigned private path is written.
-        except Exception as error:
-            errors.append(error)
-            return 0 if notification==0x11 else 13
-    regular_file(cabinet)
-    if not function(str(Path(cabinet).resolve()),0,callback,None):
-        if errors: raise errors[0]
-        raise C.WinError(C.get_last_error())
-    if errors: raise errors[0]
-    return entries
+    from cabinet_io import iterate
+    return iterate(cabinet,target,selected)
 
 
 def cabinet_members(path):
