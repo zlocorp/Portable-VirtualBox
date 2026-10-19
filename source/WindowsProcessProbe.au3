@@ -43,7 +43,11 @@ Func _WinObsProcessFromHandle($h)
 EndFunc
 
 Func _WinObsProcessOpen($pid)
-    If Not IsInt($pid) Or $pid < 1 Or $pid > 0xFFFFFFFF Then Return SetError(1, 87, 0)
+    ; AutoIt @AutoItPID/Run can supply integral Doubles. DWORD range is exact
+    ; in Double, but AutoIt's 0xFFFFFFFF literal is signed -1: use decimal here.
+    If Not IsNumber($pid) Then Return SetError(1, 87, 0)
+    If Not ($pid >= 1 And $pid <= 4294967295 And Int($pid) = $pid) Then Return SetError(1, 87, 0)
+    $pid = Int($pid)
     If UBound(MapKeys($g_WinObsProcesses)) >= 128 Or $g_WinObsNextToken >= 0x7FFFFFFF Then Return SetError(1, 4, 0)
     ; SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION. No inheritance or mutation.
     Local $a = DllCall("kernel32.dll", "handle", "OpenProcess", "dword", 0x00101000, "bool", False, "dword", $pid)

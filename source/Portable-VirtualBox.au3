@@ -9,6 +9,7 @@
 ; or --selftest without administrator privileges or any service changes.
 #include "RuntimeSafety.au3"
 #include "HostPreflight.au3"
+#include "HostDiagnostics.au3"
 #NoTrayIcon
 
 If $CmdLine[0] > 0 Then
@@ -57,18 +58,7 @@ If $CmdLine[0] > 0 Then
             ConsoleWrite("Preflight: no detected blocker (runtime still disabled)" & @CRLF)
             Exit 0
         Case "--diagnose"
-            ConsoleWrite("Portable-VirtualBox: read-only diagnostics" & @CRLF)
-            ConsoleWrite("OS: " & @OSVersion & @CRLF)
-            ConsoleWrite("OS architecture: " & @OSArch & @CRLF)
-            ConsoleWrite("Portable app64 VirtualBox.exe present: " & FileExists(@ScriptDir & "\app64\VirtualBox.exe") & @CRLF)
-            Local $sInstalled = RegRead("HKLM64\SOFTWARE\Oracle\VirtualBox", "InstallDir")
-            If @error Then
-                ConsoleWrite("Installed VirtualBox path: not detected in HKLM64" & @CRLF)
-            Else
-                ConsoleWrite("Installed VirtualBox: detected (path withheld)" & @CRLF)
-            EndIf
-            ConsoleWrite("Runtime status: disabled pending service/driver safety validation" & @CRLF)
-            Exit 0
+            Exit _PortableDiagnosticWrite()
         Case Else
             ConsoleWriteError("Unknown option: use --version, --diagnose, --preflight, --selftest" & @CRLF)
             Exit 64
