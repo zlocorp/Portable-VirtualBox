@@ -45,7 +45,7 @@ jobs:
           $inputsBefore = @(Get-ChildItem (Join-Path $work 'extracted') -File | Get-FileHash -Algorithm SHA256 | Sort-Object Path | Select-Object Path,Hash | ConvertTo-Json -Compress)
           $parent = New-Item -ItemType Directory -Path (Join-Path $work 'portable Тест')
           $app = Join-Path $parent.FullName 'app64'
-          python -X utf8 scripts/trace_app64.py $exe $app $expected
+          python -X utf8 scripts/prepare_app64.py $exe $app --sha256 $expected --version 7.2.20
           if ($LASTEXITCODE -ne 0) { throw 'Application staging failed' }
           $report = Get-Content -LiteralPath (Join-Path $app '.prepared.json') -Raw | ConvertFrom-Json
           # Counts were independently read from the pinned MSI using COM in c417037.
