@@ -94,7 +94,7 @@ jobs:
           $probe = Join-Path $env:RUNNER_TEMP 'Portable VBox Тест'
           New-Item -ItemType Directory -Force -Path (Join-Path $probe 'source') | Out-Null
           New-Item -ItemType Directory -Force -Path (Join-Path $probe 'scripts') | Out-Null
-          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'source\*') -DestinationPath (Join-Path $probe 'source') -Recurse -Force
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'source\*') -Destination (Join-Path $probe 'source') -Recurse -Force
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'scripts\build.ps1') -Destination (Join-Path $probe 'scripts')
           & (Join-Path $probe 'scripts\build.ps1') -AutoItRoot "$env:AUTOIT_ROOT"
           if (-not (Test-Path (Join-Path $probe 'build\Portable-VirtualBox_x64.exe'))) {
