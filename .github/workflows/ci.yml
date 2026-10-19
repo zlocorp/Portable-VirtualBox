@@ -33,12 +33,17 @@ jobs:
         run: |
           python3 scripts/audit_source.py --enforce --output .reports/source-audit.md
           python3 scripts/audit_source.py --source source/legacy/Portable-VirtualBox.au3.disabled --output .reports/legacy-audit.md
+          test -s .reports/source-audit.md
+          test -s .reports/legacy-audit.md
           cat .reports/source-audit.md >> "$GITHUB_STEP_SUMMARY"
       - name: Store audit
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: static-audit
-          path: .reports/*audit.md
+          path: |
+            .reports/source-audit.md
+            .reports/legacy-audit.md
+          if-no-files-found: error
           retention-days: 7
 
   compile:
@@ -89,7 +94,7 @@ jobs:
           $probe = Join-Path $env:RUNNER_TEMP 'Portable VBox Тест'
           New-Item -ItemType Directory -Force -Path (Join-Path $probe 'source') | Out-Null
           New-Item -ItemType Directory -Force -Path (Join-Path $probe 'scripts') | Out-Null
-          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'source\*') -Destination (Join-Path $probe 'source') -Recurse -Force
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'source\*') -DestinationPath (Join-Path $probe 'source') -Recurse -Force
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'scripts\build.ps1') -Destination (Join-Path $probe 'scripts')
           & (Join-Path $probe 'scripts\build.ps1') -AutoItRoot "$env:AUTOIT_ROOT"
           if (-not (Test-Path (Join-Path $probe 'build\Portable-VirtualBox_x64.exe'))) {
