@@ -35,11 +35,56 @@ jobs:
       - name: Download, verify, passively extract and inspect MSI
         shell: pwsh
         run: ./scripts/inspect_oracle.ps1 -WorkDirectory (Join-Path $env:RUNNER_TEMP 'verified-oracle-inspection')
+      - name: Read actual MSI layout tables (metadata only)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = @(Get-ChildItem (Join-Path $env:RUNNER_TEMP 'verified-oracle-inspection/extracted') -Filter '*_amd64.msi')
+          if ($msi.Count -ne 1) { throw 'Expected one previously verified x64 MSI' }
+          $before = (Get-FileHash $msi[0].FullName -Algorithm SHA256).Hash
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $db = $installer.OpenDatabase([string]$msi[0].FullName, [int]0)
+          try {
+            $tables = [ordered]@{
+              Directory = @('Directory','Directory_Parent','DefaultDir')
+              Component = @('Component','Directory_','Attributes','Condition')
+              File = @('File','Component_','FileName','FileSize','Version','Attributes','Sequence')
+              Media = @('DiskId','LastSequence','Cabinet')
+            }
+            $result = [ordered]@{}
+            foreach ($table in $tables.Keys) {
+              $columns = $tables[$table]
+              $sql = 'SELECT ' + (($columns | ForEach-Object { '`' + $_ + '`' }) -join ',') + ' FROM `' + $table + '`'
+              $view = $db.GetType().InvokeMember('OpenView','InvokeMethod',$null,$db,@($sql))
+              $rows = [Collections.Generic.List[object]]::new()
+              try {
+                $null = $view.GetType().InvokeMember('Execute','InvokeMethod',$null,$view,$null)
+                while ($null -ne ($record = $view.GetType().InvokeMember('Fetch','InvokeMethod',$null,$view,$null))) {
+                  try {
+                    $row = [ordered]@{}
+                    for ($i=0; $i -lt $columns.Count; $i++) {
+                      $row[$columns[$i]] = $record.GetType().InvokeMember('StringData','GetProperty',$null,$record,@([int]($i+1)))
+                    }
+                    $rows.Add($row)
+                  } finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($record) }
+                }
+              } finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) }
+              $result[$table] = $rows.ToArray()
+              Write-Host "$table rows: $($rows.Count)"
+            }
+            $result | ConvertTo-Json -Depth 8 | Set-Content '.reports/msi-layout.json' -Encoding utf8
+          } finally {
+            [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($db)
+            [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
+          }
+          if ((Get-FileHash $msi[0].FullName -Algorithm SHA256).Hash -ne $before) { throw 'MSI changed during metadata query' }
       - name: Retain metadata only, not Oracle payloads
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: oracle-package-inspection
-          path: .reports/oracle-inspection.json
+          path: |
+            .reports/oracle-inspection.json
+            .reports/msi-layout.json
           if-no-files-found: warn
           retention-days: 7
