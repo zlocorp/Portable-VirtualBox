@@ -6,10 +6,12 @@ on:
     paths:
       - .github/workflows/native-vm-session.yml
       - source/PortableCIVM.au3
+      - source/PortableCIIntegrated.au3
       - source/PortableCommand.au3
       - source/Portable-VirtualBox.au3
       - scripts/check_native_vm_boot.ps1
       - scripts/native_vm_smoke.ps1
+      - scripts/integrated_native_vm_smoke.ps1
       - tests/native/test_ci_vm_policy.au3
       - tests/native/test_portable_command.au3
       - tests/test_native_boot_receipt.py
@@ -36,7 +38,7 @@ jobs:
         run: |
           python -X utf8 -m unittest tests.test_native_boot_receipt -v
           if ($LASTEXITCODE -ne 0) { throw 'Native guest boot contract failed' }
-          foreach ($file in @('scripts\check_native_vm_boot.ps1','scripts\native_vm_smoke.ps1')) {
+          foreach ($file in @('scripts\check_native_vm_boot.ps1','scripts\native_vm_smoke.ps1','scripts\integrated_native_vm_smoke.ps1')) {
             $tokens = $null
             $errors = $null
             [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $file), [ref]$tokens, [ref]$errors) | Out-Null
@@ -69,9 +71,9 @@ jobs:
           $compilerRoot = Split-Path (Split-Path $bins[0].FullName -Parent) -Parent
           ./scripts/build.ps1 -AutoItRoot $compilerRoot
           Copy-Item -LiteralPath 'build/Portable-VirtualBox_x64.exe' -Destination (Join-Path $env:NATIVE_VM_ROOT 'Portable-VirtualBox_x64.exe') -ErrorAction Stop
-      - name: Native AutoIt boots/powers off its VM then cleanup exact signed resources
+      - name: Compiled AutoIt orders driver, native VM, independent check and exact cleanup
         shell: pwsh
-        run: ./scripts/native_vm_smoke.ps1 -PortableRoot $env:NATIVE_VM_ROOT -RuntimeTimeoutSeconds 240
+        run: ./scripts/integrated_native_vm_smoke.ps1 -PortableRoot $env:NATIVE_VM_ROOT -RuntimeTimeoutSeconds 600
       - name: Collect only bounded logs and metadata (never Oracle binaries, VM data, drivers)
         if: always()
         shell: pwsh

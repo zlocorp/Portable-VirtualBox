@@ -110,6 +110,8 @@ jobs:
           # binary cannot enable the VM fixture mode from the normal build.
           $vm = Start-Process -FilePath $exe -ArgumentList '--ci-vm-session' -Wait -PassThru -NoNewWindow
           if ($vm.ExitCode -ne 9) { throw "CI VM mode unexpectedly enabled from standard build: $($vm.ExitCode)" }
+          $integrated = Start-Process -FilePath $exe -ArgumentList '--ci-integrated-session' -Wait -PassThru -NoNewWindow
+          if ($integrated.ExitCode -ne 9) { throw "Integrated test mode unexpectedly enabled from standard build: $($integrated.ExitCode)" }
       - name: Real compiled first-run data setup, repeat and collision refusal
         shell: pwsh
         run: |

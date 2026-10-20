@@ -17,6 +17,7 @@
 #include "PortableProfile.au3"
 #include "PortableCISession.au3"
 #include "PortableCIVM.au3"
+#include "PortableCIIntegrated.au3"
 #NoTrayIcon
 
 ; UI defaults to the host's language. Explicit CLI selection never persists
@@ -57,6 +58,9 @@ If $CmdLine[0] >= $iFirst Then
             ; Genuine VM boot from compiled native AutoIt; disposable runner only.
             ; NOT exposed through the user GUI or regular CLI help.
             Exit _PCVM_Execute(@ScriptDir)
+        Case "--ci-integrated-session"
+            ; Only a disposable CI runner may drive privileged experiments.
+            Exit _PCI_Execute(@ScriptDir)
         Case "--profile-status"
             Local $profile = _PP_Inspect(@ScriptDir)
             Switch $profile["status"]

@@ -59,7 +59,20 @@ Func _PCVM_Succeeded($result)
     Return IsMap($result) And $result["status"] == "EXITED" And $result["exit_code"] = 0
 EndFunc
 
-Func _PCVM_Execute($root)
+; Write a tiny native success witness only AFTER UUID/poweroff were verified.
+; The separate host observer still checks the live state and exact UUID.
+; This CI witness file is not production ownership or cleanup authority.
+Func _PCVM_SaveReceipt($path, $uuid)
+    If Not _PP_RootSafe($path) Or FileExists($path) Then Return False
+    If Not StringRegExp($uuid, "(?i)^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$") Then Return False
+    Local $h = FileOpen($path, 258) ; WRITE(2) + UTF8-no-BOM(256)
+    If $h = -1 Then Return False
+    Local $ok = FileWrite($h, "Native VM: VERIFIED_OWN_BOOT_AND_POWEROFF, uuid=" & $uuid & @CRLF)
+    Local $closed = FileClose($h)
+    Return $ok <> 0 And $closed <> 0
+EndFunc
+
+Func _PCVM_Execute($root, $receiptPath = "")
     If Not _PCVM_Allowed(EnvGet("GITHUB_ACTIONS"), EnvGet("RUNNER_ENVIRONMENT"), _
             EnvGet("RUNNER_OS"), EnvGet("GITHUB_REPOSITORY"), $root, EnvGet("RUNNER_TEMP")) Then Return 9
     If Not _PP_ParentsSafe($root) Then Return 9
@@ -118,6 +131,9 @@ Func _PCVM_Execute($root)
         EnvSet("VBOX_USER_HOME")
     Else
         EnvSet("VBOX_USER_HOME", $oldHome)
+    EndIf
+    If $status = 0 And $receiptPath <> "" Then
+        If Not _PCVM_SaveReceipt($receiptPath, $uuid) Then $status = 6
     EndIf
     If $status <> 0 Then
         ConsoleWriteError("Native VM: INCOMPLETE; created=" & $created & ", started=" & $started & _
