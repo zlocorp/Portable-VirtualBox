@@ -13,6 +13,7 @@
 #include "LauncherI18n.au3"
 #include "LauncherGui.au3"
 #include "PortableProfile.au3"
+#include "PortableCISession.au3"
 #NoTrayIcon
 
 ; UI defaults to the host's language. Explicit CLI selection never persists
@@ -46,6 +47,9 @@ If $CmdLine[0] >= $iFirst Then
                 "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
+        Case "--ci-service-smoke"
+            ; Explicitly gated disposable-host experiment only: not in help/GUI.
+            Exit _PVS_Execute(@ScriptDir)
         Case "--profile-status"
             Local $profile = _PP_Inspect(@ScriptDir)
             Switch $profile["status"]
