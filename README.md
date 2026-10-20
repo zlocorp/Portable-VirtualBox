@@ -1,6 +1,6 @@
 # Portable-VirtualBox (modernization branch)
 
-> **Development preview, not a functional portable hypervisor.** VM startup, driver installation and service cleanup remain disabled. Do not distribute this executable as a usable VirtualBox release.
+> **Development preview, not a release-ready portable hypervisor.** Normal GUI/CLI cannot start VMs or install drivers. A hidden CI-only mode can now boot and power off a disposable empty VM from the compiled AutoIt executable; signed driver installation/cleanup are still performed by separate hosted-Windows research scripts. Do not distribute this EXE as a usable VirtualBox release.
 
 Based on the original `vboxme/Portable-VirtualBox` master snapshot `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Historical personal modifications are not merged; the old fork remains in `archive/legacy-zlocorp-2020`. Work is isolated in `dev/modernization-2026`; draft [PR #7](https://github.com/zlocorp/Portable-VirtualBox/pull/7) targets the clean upstream reference, not historical master.
 
@@ -78,14 +78,23 @@ A controlled separate MSI reference installation with only `VBoxApplication` ins
 
 CI packages `Portable-VirtualBox-diagnostic-preview.zip` with precisely four contents: `Portable-VirtualBox.exe`, `README.md`, `LICENSE.md`, and `PREVIEW-NOT-A-HYPERVISOR.txt`. It also publishes a SHA-256 sidecar. The ZIP deliberately **does not contain** Oracle VirtualBox, its driver files, legacy 7-Zip, DevCon, SnetCfg, or a VM. Unpacking it in a new Unicode directory and executing the built EXE's profile setup are checked in Windows CI. This is a testable *diagnostic-only* preview, NOT a functional hypervisor release.
 
+## Native compiled AutoIt VM boot: new experimental milestone
+
+[Hosted Windows run 39450334031](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39450334031) proves the **compiled launcher executable itself** now created, started, inspected and powered off one freshly created **empty** VM in a private `VBOX_USER_HOME`. Each native command has bounded execution and a real Windows process exit code (not merely a PID). An independent host-side `showvminfo` confirmed the exact same UUID and `poweroff`; `VirtualBoxVM` process count was zero. The existing signed-driver test scripts then removed the new `VBoxSDS` and `VBoxSup` resources, leaving no VBox services or driver package behind. CI artifact contents were read back and validated.
+
+**This path is available only through hidden `--ci-vm-session` experimental mode** with strict disposable GitHub runner checks. It is deliberately not exposed from the normal GUI, needs no real user's VM, does not boot a guest OS, and cannot be called a safe Windows 11 production launcher. Its driver installation/cleanup has NOT yet been integrated into a reviewed elevated frontend/backend pair.
+
+- [Full native execution report](docs/EXECUTION-2026-10-20-native-autoit-boot.md)
+- [Native VM workflow](.github/workflows/native-vm-session.yml)
+
 ## Status and evidence
 
 See the [latest coordinator report](docs/EXECUTION-2026-10-20-coordinator.md), [completed coordinator plan](docs/plans/2026-10-20-lifecycle-coordinator.md), [Windows observation report](docs/EXECUTION-2026-10-19-observation.md), [app64 preparation report](docs/EXECUTION-2026-10-19-app64.md), [broader roadmap](docs/MODERNIZATION-2026.md), and [security model](docs/SECURITY-MODEL.md).
 
-At this large-batch development checkpoint, 105 Python tests and 487 native AutoIt assertions (12 harnesses) are discovered; the exact pass/skip counts and fresh run IDs are recorded in [the large-batch execution report](docs/EXECUTION-2026-10-20-P1-LARGE-BATCH.md). Inherited privileged startup remains quarantined. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
+At executable-code checkpoint `539a754`, **107 Python tests** are discovered (Linux: 102 pass, 5 platform skips; Windows: 106 pass, 1 privilege skip). The native suite passes **516 assertions in 14 compiled AutoIt harnesses**; the complete app64 preparation and x64 build pass. Exact evidence is in [the native VM report](docs/EXECUTION-2026-10-20-native-autoit-boot.md). Inherited privileged startup remains quarantined. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
 
 ## Attribution and release boundaries
 
 Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. Existing upstream BUILDING.md describes historical packaging and is not the current CI procedure.
 
-Next major package is reviewed per-session **real driver-assisted Start/Stop from the AutoIt GUI** on a disposable Windows host, followed by Windows 11/user/coexistence acceptance. First-run profile creation, localized UI, native VBoxSDS proof and a diagnostic ZIP are now implemented; a production hypervisor launcher is not yet enabled. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
+Next major package is reviewed per-session **real driver-assisted Start/Stop from the AutoIt GUI**, where privileged actions are isolated and can never touch a pre-existing VirtualBox installation, followed by Windows 11/user/coexistence acceptance. First-run profile creation, localized UI, native CLI VM boot and guarded clean-host driver teardown have been demonstrated; a production hypervisor launcher is not yet enabled. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
