@@ -7,7 +7,7 @@ Working branch: `dev/modernization-2026`; [Draft PR #7](https://github.com/zloco
 
 Users need a small trusted launcher with **Start**, **Stop**, **Settings**, **Update**, **Diagnostics**, native Russian/English, and portable `app64` plus VM data. The existing backend experiments are not a usable product. Stop adding generic orchestration unless a real production operation demonstrably requires it.
 
-### Already verified independently (not yet integrated)
+### Verified research (native integration remains CI-only)
 
 - Signed Oracle 7.2.20 wrapper -> MSI/CAB -> 185 complete app64 files, version/hashes/signatures.
 - VBoxManage CLI, isolated VBOX_USER_HOME, machinefolder, registration of a new test VM.
@@ -31,21 +31,21 @@ Users need a small trusted launcher with **Start**, **Stop**, **Settings**, **Up
 
 ## Larger implementation batches, not individual helper releases
 
-### Batch A: portable first-run + native session plumbing + inspectable package
+**Authoritative scope:** [large-batch delivery plan](plans/2026-10-20-large-batch-delivery.md). Earlier diagnostic-only A / production B labels are superseded: **Batch A includes the complete functional Start/Stop launcher.**
 
-**Implemented and CI-verified on 2026-10-20 (diagnostic-only):**
-- Compiled EXE offers `--profile-status` and `--prepare-profile`, preserving files, refusing path collisions, invalid roots and reparse-point folders. GUI has a real **Prepare portable folders** action.
-- A separate hosted-Windows-only AutoIt command actually runs Oracle VBoxManage against its own profile, validates the auto-created VBoxSDS image, waits for idle and unregisters exactly that service. This tests real EXE-to-Oracle integration with no VBoxSup installed or VM boot. It is not user-enabled or production-elevation logic.
-- ZIP packaging with exactly four allowlisted files: launcher EXE, LICENSE, README and a conspicuous diagnostic-only warning, plus SHA-256 sidecar; no Oracle binaries/drivers/legacy tools. The extracted ZIP is executed under a new Cyrillic path in CI.
-- Native failure-first tests for preparation and CI-only gating; all prior test suites remain enforced.
+### Batch A: safe actual Start/Stop and Manager lifecycle (IN PROGRESS)
 
-### Batch B: production Start/Stop + driver lifecycle + user-selected settings
+Foundations: RU/EN profile/readiness GUI, signed Oracle 7.2.20 app64 and compiled AutoIt blank-VM engine. As of [CI 39494324031](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494324031), the **compiled EXE** orchestrates driver stage/start, native VM boot/poweroff, independent host verification and exact-owned VBoxSDS/VBoxSup teardown. All privileged effects still execute through CI-only research PowerShell scripts on an already-elevated disposable Windows Server 2022 runner. [Execution details](EXECUTION-2026-10-20-integrated-native-lifecycle.md).
 
-**Next substantive feature bundle; not complete:** adapt the proven signed VBoxSup/conditional VBoxSDS Windows flows to actual reviewed native privileged adapters, with a per-session ownership ledger and clear error/cancellation handling. Only then enable **Start VirtualBox Manager** in the regular GUI. Include configurable machine/profile paths, UAC handling, existing-installation coexistence refusal and two-session boot + cleanup on a dedicated isolated Windows 11 machine. No fake Start button or hidden blanket elevation.
+Remaining **Batch A** exit gates: narrowly scoped privilege-separated helper/UAC, exact session ownership and failure recovery, normal RU/EN GUI start/stop of Oracle Manager, coexistence refusal and a two-cycle same-UUID test on **isolated Windows 11 x64** as a standard user. Regular UI correctly remains `RUNTIME_DISABLED`.
 
-### Batch C: updater + localization polish + ZIP release candidate
+### Batch B: practical portable-profile UX (NOT STARTED)
 
-Manual signed Oracle updates with staged side-by-side `app64` and rollback, user-facing settings, Oracle Manager RU preference, diagnostics export, exact dependency/license inventory, and a release *candidate* ZIP only after Batch B acceptance. Optional networking/USB drivers remain deferred.
+User-configurable paths, safe data migration and backup, snapshot/differencing-media awareness, complete RU/EN user settings/diagnostics, and interactive GUI accessibility/Unicode-path acceptance.
+
+### Batch C: trusted updater and release candidate (NOT STARTED)
+
+Signed Oracle/launcher update staging and rollback, allowlisted ZIP with provenance/licensing, and manual prerelease approval after functional Windows 11 testing. Optional USB/bridged networking deferred.
 
 ## P1: minimum usable launcher (first *functional* development milestone)
 
@@ -87,7 +87,7 @@ Manual signed Oracle updates with staged side-by-side `app64` and rollback, user
 
 ## Order of next concrete work
 
-1. Batch A is completed as a **diagnostic-only pre-release foundation**, not a hypervisor: native profile initialization, RU/EN GUI, verified signed Oracle CLI session on disposable Windows and allowlisted ZIP.
-2. Batch B is the priority: production gated, signed-driver Start/Stop path from actual AutoIt GUI with explicit per-run ownership, graceful exit, isolated Windows 11 and coexistence/failure testing.
-3. Batch C: user-facing signed update staging, robust rollback, language UX and fully documented packaging. Do not publish a functional release until Batch B acceptance.
-4. Promote vetted modules into **small clean integration PRs** against the original upstream reference, keeping the historical 2020 master and archive untouched.
+1. Finish **Batch A**, replacing runner-only system-effect adapters with a reviewed minimal elevated helper and real RU/EN GUI Oracle Manager Start/Stop. Never use environment markers as a security boundary.
+2. Test standard-user/UAC and coexistence/refusal on an isolated Windows 11 x64 host. Windows Server 2022 CI is not Windows 11 acceptance.
+3. Complete **Batch B** portable-data UX and **Batch C** verified update/release only after functional acceptance.
+4. Preserve Draft PR #7 and the historical master; prepare smaller reviewable integration PRs before any merge.

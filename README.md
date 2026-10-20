@@ -1,6 +1,6 @@
 # Portable-VirtualBox (modernization branch)
 
-> **Development preview, not a release-ready portable hypervisor.** Normal GUI/CLI cannot start VMs or install drivers. A hidden CI-only mode can now boot and power off a disposable empty VM from the compiled AutoIt executable; signed driver installation/cleanup are still performed by separate hosted-Windows research scripts. Do not distribute this EXE as a usable VirtualBox release.
+> **Development preview, not a release-ready portable hypervisor.** Normal GUI/CLI cannot start VMs or install drivers. A hidden disposable-runner-only compiled AutoIt mode now orders signed VBoxSup staging/start, real empty-VM boot/poweroff, independent verification and exact-owned VBoxSDS/VBoxSup cleanup using CI-only PowerShell effect adapters. These adapters are NOT a production privileged helper. Do not distribute this EXE as a usable VirtualBox release.
 
 Based on the original `vboxme/Portable-VirtualBox` master snapshot `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Historical personal modifications are not merged; the old fork remains in `archive/legacy-zlocorp-2020`. Work is isolated in `dev/modernization-2026`; draft [PR #7](https://github.com/zlocorp/Portable-VirtualBox/pull/7) targets the clean upstream reference, not historical master.
 
@@ -36,6 +36,8 @@ Diagnostics print status/counts without private image paths or service account n
 **First-run setup:** With no arguments the localized preview opens a read-only diagnostics GUI with a real "Prepare portable folders" button. The explicit CLI command `--prepare-profile` creates only `data/.VirtualBox`, `data/Machines`, and `logs` alongside the EXE; existing files are never overwritten, and unsafe roots/reparse points/collisions are blocked. `--profile-status` reports READY (exit 0), MISSING (exit 2) or BLOCKED (exit 3). An `app64` with Oracle binaries is NOT automatically downloaded or installed by these commands.
 
 **Developer-only native proof:** a hidden `--ci-service-smoke` is limited to the disposable GitHub-hosted Windows runner configuration; it executes the prepared signed Oracle `VBoxManage setproperty machinefolder`, verifies the exact newly registered `VBoxSDS`, waits for an idle service, then unregisters it using Oracle's supported command. This is **not** a production Start/Stop feature or a security boundary that should be exposed on an ordinary Windows PC. [Proof run](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39438429411).
+
+**Integrated native checkpoint (CI only):** `--ci-integrated-session` is omitted from public help and GUI. The compiled AutoIt executable now **orchestrates** signed driver staging/start, VM boot/poweroff, independent host verification and exact-owned cleanup on a single-use Windows Server 2022 runner. [Successful integrated run](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494324031) / [execution evidence](docs/EXECUTION-2026-10-20-integrated-native-lifecycle.md). Native regression: 16 harnesses, zero failures. Still not implemented: production privilege-separated helper and UAC, real Manager GUI Start/Stop, Windows 11 standard-user acceptance, coexistence and crash recovery.
 
 Developer tools:
 

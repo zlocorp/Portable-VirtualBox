@@ -17,6 +17,12 @@ At code/test commit `539a7542787ca24195d6f1921ec9ffe3a1728a20`, the compiled Aut
 
 **Still open for Batch A:** production-safe elevated driver helper, Start/Stop controls for the Oracle Manager GUI, ordinary-user Windows 11 approval, existing-VBox coexistence/refusal and robust failure/reboot/owner recovery. CI-only environment markers are **not** a security boundary and do not authorize distribution or local execution. Do not mark Batch A complete merely because the experimental headless VM starts.
 
+## Batch A checkpoint: integrated compiled executable (2026-10-20)
+
+[Commit 79a5991b](https://github.com/zlocorp/Portable-VirtualBox/commit/79a5991b091e0b76b308a85486d67a8d313791d9) moved the ordering of signed driver staging/start, real AutoIt native blank-VM boot/poweroff, independent host verification and exact-owned SDS/SUP cleanup **into the compiled AutoIt entrypoint**. [Windows integrated CI 39494324031](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494324031) passed; [native CI 39494330200](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494330200) passed 16 harnesses, zero failures; [core x64 CI 39494330205](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494330205) passed. [Evidence](../EXECUTION-2026-10-20-integrated-native-lifecycle.md).
+
+The signed-driver *effects* are still research PowerShell scripts running as an elevated disposable CI runner. They are **not** a reviewed production helper. Normal RU/EN UI/Manager Start/Stop, UAC/standard-user Windows 11 tests, safe recovery and coexistence remain blocked. **Batch A is not complete.**
+
 ## Batch A: usable launcher core, one substantial change set
 
 Deliver, together:
