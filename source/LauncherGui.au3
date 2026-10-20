@@ -68,7 +68,7 @@ Func _LG_Show()
     Local $idCopy = GUICtrlCreateButton("", 218, 584, 184, 35)
     Local $idClose = GUICtrlCreateButton("", 414, 584, 192, 35)
     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare)
+        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult)
     GUISetState(@SW_SHOW, $hGui)
     While 1
         Switch GUIGetMsg()
@@ -77,11 +77,11 @@ Func _LG_Show()
             Case $idRu
                 _LI_Set("ru")
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare)
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult)
             Case $idEn
                 _LI_Set("en")
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare)
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult)
             Case $idPrepare
                 Local $result = _PP_Ensure(@ScriptDir)
                 GUICtrlSetData($idProfile, _LG_ProfileText($result["status"]))
