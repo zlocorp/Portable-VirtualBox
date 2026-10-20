@@ -40,12 +40,12 @@ class PortableRelocationContract(unittest.TestCase):
 
     def test_drive_letter_alias_reassignment_is_explicit_and_disposable(self):
         s=SCRIPT.read_text(encoding='utf-8')
-        for expected in ('SimulateDriveLetterChange','subst.exe','P:','Q:',
+        for expected in ('VhdDriveLetterChange','vbox_vhd_volume.ps1','P:','Q:',
                          'drive_letters_changed','visible_old_root','visible_new_root'):
             self.assertIn(expected,s)
         workflow=WORKFLOW.read_text(encoding='utf-8')
         self.assertIn('relocation_mode',workflow)
-        self.assertIn('drive-alias',workflow)
+        self.assertIn('vhd-letter',workflow)
 
     def test_workflow_only_artifacts_metadata(self):
         text=WORKFLOW.read_text(encoding='utf-8')
