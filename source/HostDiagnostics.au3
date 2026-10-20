@@ -35,6 +35,6 @@ EndFunc
 
 Func _PortableDiagnosticWrite()
     Local $report = _PortableDiagnosticCollect()
-    ConsoleWrite($report["text"])
+    _LI_Write($report["text"])
     Return $report["exit_code"]
 EndFunc
