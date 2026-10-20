@@ -51,7 +51,10 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $out = Join-Path $env:RUNNER_TEMP 'vbox-cli-observation'
-          ./scripts/vbox_cli_probe.ps1 -AppDir $env:PREPARED_APP64 -OutputDirectory $out -TimeoutSeconds 25
+          ./scripts/vbox_cli_probe.ps1 -AppDir $env:PREPARED_APP64 -OutputDirectory $out -TimeoutSeconds 25 -ExpectPortableSds
+          $receipt = Get-Content -LiteralPath (Join-Path $out 'probe-results.json') -Raw | ConvertFrom-Json
+          if (-not $receipt.expected_portable_sds_verified) { throw 'Expected signed VBoxSDS registration was not verified' }
+          Write-Host 'PASS: signed 7.2.22 VBoxManage CLI and exact expected VBoxSDS side effect on disposable runner'
       - name: Collect only diagnostic logs (never Oracle binaries or VM data)
         if: always()
         shell: pwsh

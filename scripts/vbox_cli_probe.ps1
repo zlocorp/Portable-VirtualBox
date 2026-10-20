@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory)][string]$AppDir,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [ValidateRange(5,120)][int]$TimeoutSeconds = 30,
-    [switch]$OfficialInstallReference
+    [switch]$OfficialInstallReference,
+    [switch]$ExpectPortableSds
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -14,7 +15,20 @@ $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:GITHUB_REPOSITORY -ne 'zlocorp/Portable-VirtualBox') {
     throw 'Disposable GitHub Actions runner required: VBoxManage may auto-register VBoxSDS'
 }
+if ($ExpectPortableSds) {
+    if ($OfficialInstallReference -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
+        $env:RUNNER_OS -ne 'Windows' -or -not $env:RUNNER_TEMP) {
+        throw 'Expected portable VBoxSDS side-effect mode is disposable hosted-Windows-only'
+    }
+}
 $app = (Resolve-Path -LiteralPath $AppDir -ErrorAction Stop).Path
+if ($ExpectPortableSds) {
+    $runner = (Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path.TrimEnd('\') + '\'
+    if (-not ($app + '\').StartsWith($runner, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Expected portable VBoxSDS experiment must remain beneath RUNNER_TEMP'
+    }
+}
+
 $binary = Join-Path $app 'VBoxManage.exe'
 if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) { throw 'Prepared VBoxManage.exe is missing' }
 if (Test-Path -LiteralPath $OutputDirectory) { throw 'Refusing to overwrite existing probe output' }
@@ -105,6 +119,74 @@ $servicesAfter = @(Get-VBoxServiceNames)
 $processesAfter = @(Get-VBoxProcessNames)
 $serviceDetailsAfter = @(Get-VBoxServiceDetails -Names $servicesAfter)
 $changedServices = @((Compare-Object -ReferenceObject $servicesBefore -DifferenceObject $servicesAfter))
+
+# Oracle auto-registration is a known system side effect of bare VBoxManage.
+# Accept it ONLY when the explicit one-shot hosted test asks for that exact
+# service, with a clean baseline and a verified Oracle-signed expected image.
+# This does not grant ownership or permission to clean the service on a user PC.
+$verifiedPortableSds = $false
+if ($ExpectPortableSds) {
+    $sdsExe = Join-Path $app 'VBoxSDS.exe'
+    $signature = Get-AuthenticodeSignature -LiteralPath $sdsExe
+    $probeSuccess = ($results.Count -eq 3 -and
+        @($results | Where-Object { $_.status -ne 'EXITED' -or $_.exit_code -ne 0 }).Count -eq 0)
+    $foreignProcess = @($processesAfter | Where-Object {
+        $_ -notmatch '^[0-9]+:(VBoxSVC|VBoxSDS)
+$report = [ordered]@{
+    experiment=$(if ($OfficialInstallReference) { 'official-installed-reference-cli' } else { 'prepared-app64-vboxmanage-cli-only' })
+    source_commit=$env:GITHUB_SHA
+    os=[Environment]::OSVersion.VersionString
+    profile_location='isolated-new-profile-in-output-directory'
+    timeout_seconds=$TimeoutSeconds
+    services_before=$servicesBefore
+    services_after=$servicesAfter
+    service_details_before=$serviceDetailsBefore
+    service_details_after=$serviceDetailsAfter
+    service_registrations_changed=($changedServices.Count -gt 0)
+    expected_portable_sds_verified=[bool]$verifiedPortableSds
+    processes_before=$processesBefore
+    processes_after=$processesAfter
+    probes=$results
+    vms_started=$false; installer_executed=$false; driver_install_requested=$false
+}
+$report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $folder 'probe-results.json') -Encoding utf8
+$summary = 'VBoxManage CLI: ' + (($results | ForEach-Object {
+    $_.name + '=' + $_.status + '/' + $_.exit_code
+}) -join ', ')
+Write-Host $summary
+if ($env:GITHUB_STEP_SUMMARY) {
+    '### Prepared portable app64 (experimental)' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    "- $summary" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    "- VBox service registrations changed: $($report.service_registrations_changed)" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    '- A completed experiment is not evidence that a VM can start.' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+}
+if ($ExpectPortableSds -and -not $verifiedPortableSds) {
+    throw 'Unexpected VBox service/process state: not the exact Oracle signed portable VBoxSDS auto-registration'
+}
+if ($report.service_registrations_changed -and -not $OfficialInstallReference -and -not $ExpectPortableSds) {
+    throw 'Read-only CLI probe changed VBox service registrations; investigate before proceeding'
+}
+# VBoxManage nonzero exits are evidence and intentionally do not fail the harness.
+
+    }).Count -gt 0
+    $systemVBox = (Test-Path -LiteralPath 'HKLM:\SOFTWARE\Oracle\VirtualBox') -or
+        (Test-Path -LiteralPath 'HKLM:\SOFTWARE\WOW6432Node\Oracle\VirtualBox')
+    $detail = if ($serviceDetailsAfter.Count -eq 1) { $serviceDetailsAfter[0] } else { $null }
+    $verifiedPortableSds = (
+        $servicesBefore.Count -eq 0 -and $processesBefore.Count -eq 0 -and
+        $servicesAfter.Count -eq 1 -and $servicesAfter[0] -eq 'VBoxSDS' -and
+        $changedServices.Count -eq 1 -and $probeSuccess -and
+        $null -ne $detail -and
+        ([string]$detail.image_path).Trim().Trim('"') -ieq $sdsExe -and
+        [int]$detail.type -eq 16 -and [int]$detail.start -eq 3 -and
+        [string]$detail.object_name -eq 'LocalSystem' -and
+        $signature.Status -eq 'Valid' -and
+        $null -ne $signature.SignerCertificate -and
+        $signature.SignerCertificate.Subject -match 'Oracle' -and
+        -not $foreignProcess -and -not $systemVBox
+    )
+}
+
 $report = [ordered]@{
     experiment=$(if ($OfficialInstallReference) { 'official-installed-reference-cli' } else { 'prepared-app64-vboxmanage-cli-only' })
     source_commit=$env:GITHUB_SHA

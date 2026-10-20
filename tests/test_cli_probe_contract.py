@@ -23,6 +23,17 @@ class VBoxCliProbeContract(unittest.TestCase):
         self.assertIn("Kill()", s)
         self.assertIn("probe-results.json", s)
 
+    def test_explicit_hosted_only_exact_sds_registration_contract(self):
+        s = SCRIPT.read_text(encoding="utf-8")
+        for marker in ("ExpectPortableSds", "RUNNER_ENVIRONMENT", "RUNNER_TEMP",
+                       "service_details_after", "expected_portable_sds_verified",
+                       "VBoxSDS.exe", "LocalSystem", "Get-AuthenticodeSignature",
+                       "Oracle", "verifiedPortableSds", "servicesBefore.Count -eq 0",
+                       "servicesAfter.Count -eq 1", "changedServices.Count -eq 1",
+                       "probeSuccess", "foreignProcess", "systemVBox"):
+            self.assertIn(marker, s)
+        self.assertIn("-not $ExpectPortableSds", s)
+
     def test_no_host_service_or_installer_mutation_in_smoke_script(self):
         s = SCRIPT.read_text(encoding="utf-8")
         self.assertNotRegex(s, re.compile(r"\b(?:sc|net)\s+(?:delete|stop|create|start)\b",re.I))
