@@ -21,7 +21,7 @@ $old=[Environment]::GetEnvironmentVariable('VBOX_USER_HOME','Process')
 $steps=@(
     @{name='set_machine_folder';arguments=@('setproperty','machinefolder',$machine)},
     @{name='get_properties';arguments=@('list','systemproperties')},
-    @{name='create_definition';arguments=@('createvm','--name='+$fixture,'--platform-architecture=x86','--register')},
+    @{name='create_definition';arguments=@('createvm','--name',$fixture,'--platform-architecture','x86','--register')},
     @{name='list_definitions';arguments=@('list','vms')}
 )
 function Invoke-VBoxStep {
@@ -48,7 +48,7 @@ try {
     foreach ($step in $steps) {
         $r=Invoke-VBoxStep -Name $step.name -Arguments $step.arguments
         $results+= $r
-        Write-Host "$($r.name): $($r.status) / $($r.exit_code)"
+        Write-Host "$($r.name): $($r.status) / $($r.exit_code); argv count=$($step.arguments.Count)"
         if ($r.status -ne 'EXITED' -or $r.exit_code -ne 0) { break }
     }
 } finally {
