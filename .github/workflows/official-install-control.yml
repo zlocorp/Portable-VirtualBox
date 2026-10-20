@@ -7,6 +7,8 @@ on:
       - .github/workflows/official-install-control.yml
       - scripts/official_install_control.ps1
       - scripts/vbox_cli_probe.ps1
+      - scripts/vbox_sup_probe.ps1
+      - tests/test_sup_probe_contract.py
       - tests/test_installer_control_contract.py
   workflow_dispatch:
 
@@ -29,7 +31,7 @@ jobs:
       - name: Check minimal installation contract
         shell: pwsh
         run: |
-          python -X utf8 -m unittest tests.test_installer_control_contract -v
+          python -X utf8 -m unittest tests.test_installer_control_contract tests.test_sup_probe_contract -v
           if ($LASTEXITCODE -ne 0) { throw 'Installation research contract failed' }
       - name: Download signed Oracle wrapper and extract MSI/CAB without execution
         shell: pwsh
@@ -47,6 +49,13 @@ jobs:
           $app = Split-Path $env:OFFICIAL_CLI -Parent
           $target = Join-Path $env:RUNNER_TEMP 'official-installed-cli'
           ./scripts/vbox_cli_probe.ps1 -AppDir $app -OutputDirectory $target -TimeoutSeconds 25 -OfficialInstallReference
+      - name: Inspect official VBoxSup service and driver without changes
+        if: env.OFFICIAL_CLI != ''
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'oracle-official-control\install-results.json'
+          $output = Join-Path $env:RUNNER_TEMP 'sup-driver-observation'
+          ./scripts/vbox_sup_probe.ps1 -AppDir (Split-Path $env:OFFICIAL_CLI -Parent) -InstallReport $report -OutputDirectory $output
       - name: Collect diagnostic metadata only
         if: always()
         shell: pwsh
@@ -58,6 +67,8 @@ jobs:
             $file = Join-Path $folder $name
             if (Test-Path -LiteralPath $file) { Copy-Item -LiteralPath $file -Destination $target }
           }
+          $supFile = Join-Path $env:RUNNER_TEMP 'sup-driver-observation\sup-results.json'
+          if (Test-Path -LiteralPath $supFile) { Copy-Item -LiteralPath $supFile -Destination $target }
           $cli = Join-Path $env:RUNNER_TEMP 'official-installed-cli'
           if (Test-Path -LiteralPath $cli) {
             Get-ChildItem -LiteralPath $cli -File |
