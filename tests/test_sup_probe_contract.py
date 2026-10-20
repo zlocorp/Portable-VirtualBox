@@ -6,7 +6,7 @@ S=Path(__file__).resolve().parents[1]/"scripts/vbox_sup_probe.ps1"
 class VBoxSupContracts(unittest.TestCase):
     def test_works_on_exact_disposable_reference_only(self):
         s=S.read_text(encoding="utf-8")
-        for key in ("GITHUB_ACTIONS","GITHUB_REPOSITORY","RUNNER_ENVIRONMENT","VBoxSup","install-results.json","Get-AuthenticodeSignature","Get-FileHash","sup-results.json"):
+        for key in ("GITHUB_ACTIONS","GITHUB_REPOSITORY","RUNNER_ENVIRONMENT","VBoxSup","InstallReport","Get-AuthenticodeSignature","Get-FileHash","sup-results.json"):
             self.assertIn(key,s)
     def test_cannot_mutate_driver(self):
         s="\n".join(line for line in S.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#"))
