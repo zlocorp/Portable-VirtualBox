@@ -40,13 +40,20 @@ foreach ($name in $pinned.Keys) {
         throw "Unexpected VBoxSup package SHA-256: $name"
     }
 }
-foreach ($file in @($sys,$cat)) {
-    $signature = Get-AuthenticodeSignature -LiteralPath $file
-    if ($signature.Status -ne 'Valid' -or
-        $null -eq $signature.SignerCertificate -or
-        $signature.SignerCertificate.Subject -notmatch 'Microsoft') {
-        throw "Untrusted signed VBoxSup payload: $(Split-Path $file -Leaf)"
-    }
+$sysSignature = Get-AuthenticodeSignature -LiteralPath $sys
+$catalogSignature = Get-AuthenticodeSignature -LiteralPath $cat
+Write-Host "Packaged VBoxSup.sys embedded signature: $($sysSignature.Status)"
+Write-Host "Packaged VBoxSup.cat embedded signature: $($catalogSignature.Status)"
+# Kernel drivers may be catalog-signed rather than individually embedded-signed.
+# The exact SYS/CAT/INF bytes were hash-pinned from the authenticated Oracle
+# wrapper. Require the Microsoft-signed catalog; do not fake SYS validation.
+if ($catalogSignature.Status -ne 'Valid' -or
+    $null -eq $catalogSignature.SignerCertificate -or
+    $catalogSignature.SignerCertificate.Subject -notmatch 'Microsoft') {
+    throw 'VBoxSup catalog has no valid Microsoft publisher signature'
+}
+if ($sysSignature.Status -notin @('Valid','NotSigned')) {
+    throw "Unexpected packaged SYS signature status: $($sysSignature.Status)"
 }
 function Get-VBoxServiceKeys {
     return @(Get-ChildItem -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop |
