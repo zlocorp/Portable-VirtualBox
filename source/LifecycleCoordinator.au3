@@ -82,6 +82,16 @@ Func _PC_Request($token, $op, $index, $verb)
     Return $q
 EndFunc
 
+; Resolve only an already validated compiled function reference. Call reports
+; missing/incorrect parameters through @error instead of a modal runtime error.
+; Copy the request at this boundary so a ByRef callback cannot rewrite context.
+Func _PC_Invoke($fn, $request)
+    If IsFunc($fn) <> 1 Then Return SetError(1, 0, 0)
+    Local $result = Call(FuncName($fn), $request)
+    Local $error = @error, $extended = @extended
+    Return SetError($error, $extended, $result)
+EndFunc
+
 Func _PC_Save($token, ByRef $j, $phase)
     _PC_Set($token, "journal", $j)
     Local $c = $g_PC_Contexts[$token]
@@ -102,7 +112,7 @@ Func _PC_Save($token, ByRef $j, $phase)
     EndIf
     _PC_Set($token, "sequence", $q["sequence"])
     Local $fn = $c["store"]
-    Local $ok = $fn($q)
+    Local $ok = _PC_Invoke($fn, $q)
     Local $error = @error
     If $error Or Not IsBool($ok) Or Not $ok Then
         _PC_Freeze($token, "persistence-" & $phase)
@@ -119,7 +129,7 @@ Func _PC_Probe($token, $q)
     $unknown["identity"] = ""
     $unknown["ticket"] = ""
     Local $c = $g_PC_Contexts[$token], $fn = $c["probe"]
-    Local $r = $fn($q)
+    Local $r = _PC_Invoke($fn, $q)
     Local $error = @error
     If $error Or Not IsMap($r) Then Return $unknown
     Local $keys = StringSplit("kind,name,status,identity,ticket", ",", 2)
@@ -220,7 +230,7 @@ Func _PC_AcquireLocked($token, $kind, $name, $identity)
         Return "CANCELLED"
     EndIf
     Local $fn = $c["effect"]
-    Local $receipt = $fn($q)
+    Local $receipt = _PC_Invoke($fn, $q)
     Local $error = @error
     Local $valid = Not $error And _PC_ReceiptValid($receipt, $q, True)
     If $valid Then $q["ticket"] = $receipt["ticket"]
@@ -279,7 +289,7 @@ Func _PC_ReleaseLocked($token)
     $fresh = _PC_Probe($token, $q)
     If Not _PC_Matches($fresh, $q) Then Return _PC_Uncertain($token, $j, $index, "release-recheck")
     Local $fn = $c["effect"]
-    Local $receipt = $fn($q)
+    Local $receipt = _PC_Invoke($fn, $q)
     Local $error = @error
     Local $valid = Not $error And _PC_ReceiptValid($receipt, $q, False)
     Local $after = _PC_Probe($token, $q)
