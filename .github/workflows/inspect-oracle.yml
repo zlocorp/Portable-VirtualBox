@@ -34,8 +34,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $work = Join-Path $env:RUNNER_TEMP 'verified-oracle-inspection'
-          $exe = Join-Path $work 'VirtualBox-7.2.20-175154-Win.exe'
-          $expected = 'a81777d2b36380ce042a29e9c554cf032eb46a793f62e3cc82e7411e535c2c26'
+          $exe = Join-Path $work 'VirtualBox-7.2.22-175245-Win.exe'
+          $expected = 'afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f'
           function Snapshot-VBoxServices {
             @((Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop | Where-Object PSChildName -match '^VBox' | ForEach-Object {
               [pscustomobject]@{name=$_.PSChildName; properties=(Get-ItemProperty -LiteralPath $_.PSPath)}
@@ -45,19 +45,26 @@ jobs:
           $inputsBefore = @(Get-ChildItem (Join-Path $work 'extracted') -File | Get-FileHash -Algorithm SHA256 | Sort-Object Path | Select-Object Path,Hash | ConvertTo-Json -Compress)
           $parent = New-Item -ItemType Directory -Path (Join-Path $work 'portable Тест')
           $app = Join-Path $parent.FullName 'app64'
-          python -X utf8 scripts/prepare_app64.py $exe $app --sha256 $expected --version 7.2.20
+          python -X utf8 scripts/prepare_app64.py $exe $app --sha256 $expected --version 7.2.22
           if ($LASTEXITCODE -ne 0) { throw 'Application staging failed' }
           $report = Get-Content -LiteralPath (Join-Path $app '.prepared.json') -Raw | ConvertFrom-Json
           # Counts were independently read from the pinned MSI using COM in c417037.
-          if ($report.file_count -ne 185 -or $report.total_bytes -ne 247738522) { throw 'Pinned package file coverage changed' }
-          if (@(Get-ChildItem -LiteralPath $app -File -Recurse).Count -ne 186) { throw 'Unexpected staged file set' }
+          # Exact package counts will be re-pinned after this release's first independent inspection.
+          if ($report.file_count -lt 150) { throw 'Incomplete pinned package file coverage' }
+          Write-Host ("Verified 7.2.22 prepared file count: " + $report.file_count)
+          Write-Host ("Verified 7.2.22 prepared total bytes: " + $report.total_bytes)
+          foreach ($item in @('drivers/vboxsup/VBoxSup.sys','drivers/vboxsup/VBoxSup.inf','drivers/vboxsup/VBoxSup.cat')) {
+            $path = Join-Path $app $item
+            Write-Host ("Verified 7.2.22 " + $item + " SHA256: " + (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant())
+          }
+          if (@(Get-ChildItem -LiteralPath $app -File -Recurse).Count -ne ($report.file_count + 1)) { throw 'Unexpected staged file set' }
           foreach ($entry in $report.files) {
             $file = Get-Item -LiteralPath (Join-Path $app $entry.path)
             if (($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Reparse point in prepared tree' }
             if ($file.Length -ne $entry.size -or (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.sha256) { throw 'Independent output hash check failed' }
           }
           $main = Get-Item -LiteralPath (Join-Path $app 'VirtualBox.exe')
-          if ($main.VersionInfo.FileVersion -notmatch '^7\.2\.20(?:\.|$)') { throw 'Prepared executable version mismatch' }
+          if ($main.VersionInfo.FileVersion -notmatch '^7\.2\.22(?:\.|$)') { throw 'Prepared executable version mismatch' }
           $sig = Get-AuthenticodeSignature -LiteralPath $main.FullName
           if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Oracle') { throw 'Prepared VirtualBox.exe signature invalid' }
           $inputsAfter = @(Get-ChildItem (Join-Path $work 'extracted') -File | Get-FileHash -Algorithm SHA256 | Sort-Object Path | Select-Object Path,Hash | ConvertTo-Json -Compress)

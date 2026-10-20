@@ -5,8 +5,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $work = New-Item -ItemType Directory -Path $WorkDirectory -ErrorAction Stop
-$exe = Join-Path $work.FullName 'VirtualBox-7.2.20-175154-Win.exe'
-$expected = 'a81777d2b36380ce042a29e9c554cf032eb46a793f62e3cc82e7411e535c2c26'
+$exe = Join-Path $work.FullName 'VirtualBox-7.2.22-175245-Win.exe'
+$expected = 'afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f'
 function Get-VBoxServiceSnapshot {
     @((Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop |
         Where-Object PSChildName -match '^VBox' | ForEach-Object {
@@ -15,7 +15,7 @@ function Get-VBoxServiceSnapshot {
         }) | ConvertTo-Json -Depth 5 -Compress)
 }
 $before = Get-VBoxServiceSnapshot
-python (Join-Path $repo 'scripts/oracle_release.py') 7.2.20 --download $exe
+python (Join-Path $repo 'scripts/oracle_release.py') 7.2.22 --download $exe
 if ($LASTEXITCODE -ne 0) { throw 'Verified Oracle download failed' }
 if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
     throw 'Oracle wrapper checksum does not match pinned input'
@@ -61,7 +61,7 @@ try {
     Write-Host 'MSI inspection stage: SummaryInformation'
     $info = $db.GetType().InvokeMember('SummaryInformation', 'GetProperty', $null, $db, @(0))
     $template = $info.GetType().InvokeMember('Property', 'GetProperty', $null, $info, @(7))
-    if ($product -notmatch 'VirtualBox' -or $version -notmatch '^7\.2\.20(?:\.|$)' -or $manufacturer -notmatch 'Oracle') {
+    if ($product -notmatch 'VirtualBox' -or $version -notmatch '^7\.2\.22(?:\.|$)' -or $manufacturer -notmatch 'Oracle') {
         throw "Unexpected MSI identity: $product / $version / $manufacturer"
     }
     if ($template -notmatch '^x64;') { throw "MSI does not target x64: $template" }
