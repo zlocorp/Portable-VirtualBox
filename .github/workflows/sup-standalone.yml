@@ -11,6 +11,8 @@ on:
       - tests/test_sup_start_contract.py
       - scripts/vbox_vm_boot_probe.ps1
       - tests/test_vm_boot_standalone_contract.py
+      - scripts/vbox_sup_cleanup.ps1
+      - tests/test_sup_cleanup_contract.py
   workflow_dispatch:
 
 permissions:
@@ -70,6 +72,24 @@ jobs:
             exit 0
           }
           ./scripts/vbox_vm_boot_probe.ps1 -AppDir $env:STANDALONE_APP64 -StandaloneDriverReport $sup -OutputDirectory (Join-Path $env:RUNNER_TEMP 'standalone-vm-boot') -TimeoutSeconds 35
+      - name: Release only owned VBoxSDS and VBoxSup after confirmed private VM poweroff
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'standalone-sup-report\sup-standalone.json'
+          $started = Join-Path $env:RUNNER_TEMP 'owned-sup-start-result\sup-start-results.json'
+          $boot = Join-Path $env:RUNNER_TEMP 'standalone-vm-boot\vm-boot-results.json'
+          if (-not (Test-Path -LiteralPath $stage) -or -not (Test-Path -LiteralPath $started) -or -not (Test-Path -LiteralPath $boot)) {
+            Write-Host 'No complete standalone-driver VM boot experiment: teardown remains untested on this runner'
+            exit 0
+          }
+          $source = Get-Content -LiteralPath $stage -Raw | ConvertFrom-Json
+          $state = Get-Content -LiteralPath $started -Raw | ConvertFrom-Json
+          $vm = Get-Content -LiteralPath $boot -Raw | ConvertFrom-Json
+          if (-not $source.service_registered -or -not $state.driver_running -or -not $vm.startvm_returned_zero -or -not $vm.poweroff_succeeded) {
+            Write-Host 'Signed driver boot was not fully confirmed: no speculative cleanup is attempted'
+            exit 0
+          }
+          ./scripts/vbox_sup_cleanup.ps1 -AppDir $env:STANDALONE_APP64 -StandaloneReport $stage -DriverStartReport $started -BootReport $boot -OutputDirectory (Join-Path $env:RUNNER_TEMP 'owned-sup-cleanup') -TimeoutSeconds 45
       - name: Collect probe evidence only
         if: always()
         shell: pwsh
@@ -96,6 +116,14 @@ jobs:
             New-Item -ItemType Directory -Force -Path $dest | Out-Null
             Get-ChildItem -LiteralPath $boot -File |
               Where-Object { $_.Name -in @('vm-boot-results.json','hardening-tail.txt') -or $_.Name -match '^(set_machine_folder|create_fixture|configure_fixture|list_fixture|inspect_fixture|start_headless|show_state|poweroff_fixture)\.(stdout|stderr)\.txt$' } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+          }
+          $cleanup = Join-Path $env:RUNNER_TEMP 'owned-sup-cleanup'
+          if (Test-Path -LiteralPath $cleanup) {
+            $dest = 'results/standalone-sup'
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Get-ChildItem -LiteralPath $cleanup -File |
+              Where-Object { $_.Name -in @('cleanup-results.json','sds-unregister.stdout.txt','sds-unregister.stderr.txt','sup-stop.stdout.txt','sup-stop.stderr.txt','sup-package-remove.stdout.txt','sup-package-remove.stderr.txt') } |
               ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
           }
       - name: Publish metadata only (no Oracle binaries/drivers)
