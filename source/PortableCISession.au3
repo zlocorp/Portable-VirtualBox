@@ -64,7 +64,7 @@ Func _PVS_Execute($root)
     Local $old = EnvGet("VBOX_USER_HOME")
     EnvSet("VBOX_USER_HOME", $profile["profile"])
     ConsoleWrite("CI native session: start (no VM, no VBoxSup)" & @CRLF)
-    Local $ok = _PVS_RunBounded($manager, "list vms", $app, 25)
+    Local $ok = _PVS_RunBounded($manager, 'setproperty machinefolder "' & $profile["machines"] & '"', $app, 25)
     If $old == "" Then
         EnvSet("VBOX_USER_HOME")
     Else
