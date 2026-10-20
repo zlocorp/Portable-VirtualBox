@@ -58,7 +58,7 @@ jobs:
             $dest = 'results/portable-config'
             New-Item -Path $dest -ItemType Directory -Force | Out-Null
             Get-ChildItem -LiteralPath $origin -File |
-              Where-Object { $_.Name -eq 'config-results.json' -or $_.Name -match '^(set_machine_folder|get_properties|create_definition|list_definitions)\.(stdout|stderr)\.txt$' } |
+              Where-Object { $_.Name -eq 'config-results.json' -or $_.Name -match '^(set_machine_folder|set_oracle_language_ru|get_properties|create_definition|list_definitions)\.(stdout|stderr)\.txt$' } |
               ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
           }
       - name: Publish report, not VM files or Oracle binaries
