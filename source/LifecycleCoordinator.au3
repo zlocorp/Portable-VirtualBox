@@ -296,7 +296,27 @@ Func _PC_ReleaseLocked($token)
     Return _PC_Uncertain($token, $j, $index, "release-outcome")
 EndFunc
 
-; File-store integration remains disabled until its dedicated native tests land.
+; The caller owns an existing private directory. Check its leaf attributes,
+; create a fresh sequenced file exclusively, and flush before acknowledging.
+; Parent topology against a same-account/admin attacker is outside this contract.
 Func _PC_SaveFile($request)
-    Return False
+    If Not IsMap($request) Then Return False
+    Local $keys = StringSplit("session,sequence,directory,journal,snapshot", ",", 2)
+    For $i = 0 To UBound($keys) - 1
+        If Not MapExists($request, $keys[$i]) Then Return False
+    Next
+    If Not _PJ_Token($request["session"]) Or Not IsInt($request["sequence"]) Then Return False
+    If $request["sequence"] < 1 Or $request["sequence"] > 4096 Then Return False
+    Local $j = $request["journal"], $directory = $request["directory"]
+    If Not _PJ_Valid($j) Or Not IsString($request["snapshot"]) Then Return False
+    If Not ($j[0][1] == $request["session"]) Then Return False
+    If Not (_PJ_Snapshot($j) == $request["snapshot"]) Then Return False
+    If Not IsString($directory) Or Not StringRegExp($directory, "^[A-Za-z]:\\") Then Return False
+    If Not _PortableSafeRelativePath(StringTrimLeft($directory, 3)) Then Return False
+    Local $a = DllCall("kernel32.dll", "dword", "GetFileAttributesW", "wstr", $directory)
+    If @error Then Return False
+    If $a[0] = 4294967295 Or $a[0] = -1 Then Return False
+    If BitAND($a[0], 0x10) = 0 Or BitAND($a[0], 0x400) <> 0 Then Return False
+    Local $path = $directory & "\" & $request["session"] & "-" & StringFormat("%06d", $request["sequence"]) & ".tsv"
+    Return _PJ_SaveNew($j, $path)
 EndFunc
