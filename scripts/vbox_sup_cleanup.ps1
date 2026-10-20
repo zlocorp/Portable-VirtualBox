@@ -91,7 +91,9 @@ $report=[ordered]@{
     sds_cleanup='NOT_ATTEMPTED'
     service_stop='NOT_ATTEMPTED'
     driver_package_removal='NOT_ATTEMPTED'
+    service_delete='NOT_ATTEMPTED'
     final_vbox_services=@()
+    cleanup_verified=$false
     driver_package_removed=$false
     errors=@()
 }
@@ -196,8 +198,41 @@ try {
     $report.system_driver_file_present=(Test-Path -LiteralPath $sys)
     $driverSvc=Get-Service -Name VBoxSup -ErrorAction SilentlyContinue
     $report.service_state_after=$(if ($null -eq $driverSvc) { 'ABSENT' } else { [string]$driverSvc.Status })
-    $report.driver_package_removed=(-not $report.published_inf_present -and $afterServices.Count -eq 0)
-    if (-not $report.driver_package_removed) { throw 'Driver package removed by PnPUtil, but VBoxSup service or published INF still present' }
+    # DriverStore cleanup and kernel service deletion are distinct operations.
+    # The Oracle primitive driver can leave a STOPPED VBoxSup service entry even
+    # after PnPUtil removes both the published INF and VBoxSup.sys.
+    $report.driver_package_removed=(-not $report.published_inf_present -and -not $report.system_driver_file_present)
+    if (-not $report.driver_package_removed) {
+        throw 'Driver package or system driver remains: never manually remove its service'
+    }
+    if ($afterServices.Count -eq 1 -and $afterServices[0] -eq 'VBoxSup') {
+        $remaining=Get-Service -Name VBoxSup -ErrorAction Stop
+        $config=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSup' -ErrorAction Stop
+        if ($remaining.Status -ne 'Stopped' -or [int]$config.Type -ne 1 -or
+            ([string]$config.ImagePath -ine '\SystemRoot\System32\drivers\VBoxSup.sys') -or
+            @(Get-VBoxProcesses).Count -ne 0 -or
+            (Test-Path -LiteralPath $installedInf) -or (Test-Path -LiteralPath $sys)) {
+            throw 'Residual VBoxSup service does not meet exact exclusive-removal conditions'
+        }
+        # Only on our fresh disposable host after its own exact driver package
+        # was removed and only the expected stopped service key remains.
+        # This is not an unscoped wildcard deletion or production routine.
+        $deleteExit=Run-Bounded $sc 'delete VBoxSup' 'sup-service-delete'
+        $report.service_delete="EXIT_$deleteExit"
+        if ($deleteExit -ne 0) { throw 'Exact stopped VBoxSup service delete failed' }
+        for($i=0;$i -lt 25;$i++) {
+            if (-not (Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSup')) { break }
+            Start-Sleep -Seconds 1
+        }
+    }
+    $report.final_vbox_services=@(Get-VBoxNames)
+    $report.cleanup_verified=($report.final_vbox_services.Count -eq 0 -and
+        @(Get-VBoxProcesses).Count -eq 0 -and
+        -not (Test-Path -LiteralPath $sys) -and
+        -not (Test-Path -LiteralPath $installedInf))
+    if (-not $report.cleanup_verified) {
+        throw 'Driver package removal returned success, but system is not verified clean'
+    }
 } catch {
     $report.errors+= $_.Exception.Message
 } finally {
