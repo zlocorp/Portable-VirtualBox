@@ -83,6 +83,12 @@ jobs:
       - name: Build x64
         shell: pwsh
         run: ./scripts/build.ps1 -AutoItRoot "$env:AUTOIT_ROOT"
+      - name: Verify root build.bat delegates to official external AutoIt
+        shell: cmd
+        run: |
+          call build.bat -AutoItRoot "%AUTOIT_ROOT%"
+          if errorlevel 1 exit /b 1
+          if not exist build\Portable-VirtualBox_x64.exe exit /b 1
       - name: Run compiled safety selftest (no elevation or VBox drivers)
         shell: pwsh
         run: |
