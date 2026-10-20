@@ -82,6 +82,13 @@ jobs:
             $source = Join-Path $env:RUNNER_TEMP $file
             if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $dest }
           }
+          $independent = Join-Path $env:RUNNER_TEMP 'native-vm-independent-receipt'
+          if (Test-Path -LiteralPath $independent) {
+            foreach ($name in @('independent-vminfo.stdout.txt','independent-vminfo.stderr.txt')) {
+              $src = Join-Path $independent $name
+              if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $dest }
+            }
+          }
           foreach ($set in @(
             @{name='driver-stage';dir='native-vm-sup-stage';file='sup-standalone.json'},
             @{name='driver-start';dir='native-vm-sup-start';file='sup-start-results.json'},
