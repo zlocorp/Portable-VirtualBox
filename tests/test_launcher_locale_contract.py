@@ -16,7 +16,7 @@ PREFLIGHT = (SOURCE / "HostPreflight.au3").read_text(encoding="utf-8-sig")
 
 
 def function_body(text: str, name: str) -> str:
-    pattern = r"(?ms)^Func " + re.escape(name) + r"\([^\n]*\)\n(.*?)^EndFunc\s*$"
+    pattern = r"(?ms)^Func " + re.escape(name) + r"\(.*?\)\r?\n(.*?)^EndFunc\s*$"
     match = re.search(pattern, text)
     if match is None:
         raise AssertionError(f"Missing function {name}")
@@ -39,7 +39,7 @@ class LauncherLocalizations(unittest.TestCase):
     def test_all_used_keys_exist_and_are_tested_in_both_languages(self):
         cases = case_segments(function_body(I18N, "_LI"))
         native = (ROOT / "tests/native/test_launcher_i18n.au3").read_text(encoding="utf-8")
-        match = re.search(r'Local \$keys = StringSplit\("([^"]+)", "\\|", 2\)', native)
+        match = re.search(r'Local \$keys = StringSplit\("([^"]+)", "\|", 2\)', native)
         self.assertIsNotNone(match, "Missing native exhaustive key list")
         listed = match.group(1).split("|")
         self.assertEqual(len(listed), len(set(listed)), "Duplicate native catalog key")
