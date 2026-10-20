@@ -1,7 +1,9 @@
 ; Portable-VirtualBox development preview, based on vboxme snapshot 5b58dbbe.
 ; Upstream author: Michael Meyer (michaelm_007) and contributors.
 ; Preserve upstream license: CC BY-NC-SA 3.0; see ../LICENSE.md.
-; No service, driver, installer, updater or VM mutation is compiled into this entrypoint.
+; Normal user GUI/CLI cannot install drivers or start VMs. A separate,
+; explicitly gated CI-only test mode DOES run a disposable empty VM; it is
+; compiled for research but is not an approved end-user startup feature.
 
 ; BEGIN MODERNIZATION DEVELOPMENT SAFETY GATE (remove only after runtime acceptance)
 ; Historical runtime is archived in legacy/Portable-VirtualBox.au3.disabled, not compiled.
