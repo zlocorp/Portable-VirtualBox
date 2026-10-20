@@ -55,6 +55,16 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+      - name: Inventory historical executables (never execute them)
+        shell: pwsh
+        run: ./scripts/audit_bundled_tools.ps1
+      - name: Upload inherited-tool metadata
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: inherited-tool-audit
+          path: .reports/bundled-tools.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Download official AutoIt 3.3.18.0 portable toolkit
         shell: pwsh
         run: |
@@ -85,6 +95,10 @@ jobs:
           if ($selftest.ExitCode -ne 0) { throw "Compiled safety selftest failed with $($selftest.ExitCode)" }
           $diagnostic = Start-Process -FilePath $exe -ArgumentList '--diagnose' -Wait -PassThru -NoNewWindow
           if ($diagnostic.ExitCode -ne 0) { throw "Read-only diagnostics failed with $($diagnostic.ExitCode)" }
+          $help = Start-Process -FilePath $exe -ArgumentList '--lang ru --help' -Wait -PassThru -NoNewWindow -RedirectStandardOutput 'build/help-ru.txt'
+          if ($help.ExitCode -ne 0) { throw "Localized Russian help failed with $($help.ExitCode)" }
+          $diagnosticRu = Start-Process -FilePath $exe -ArgumentList '--lang ru --diagnose' -Wait -PassThru -NoNewWindow -RedirectStandardOutput 'build/diagnostic-ru.txt'
+          if ($diagnosticRu.ExitCode -ne 0) { throw "Localized Russian diagnostic failed with $($diagnosticRu.ExitCode)" }
           $preflight = Start-Process -FilePath $exe -ArgumentList '--preflight' -Wait -PassThru -NoNewWindow
           if ($preflight.ExitCode -ne 3) { throw "Unsafe preflight policy: expected blocked exit 3, got $($preflight.ExitCode)" }
       - name: Verify build from path with spaces and Cyrillic
