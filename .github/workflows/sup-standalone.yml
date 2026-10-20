@@ -7,6 +7,8 @@ on:
       - .github/workflows/sup-standalone.yml
       - scripts/vbox_sup_standalone.ps1
       - tests/test_sup_standalone_contract.py
+      - scripts/vbox_sup_start_owned.ps1
+      - tests/test_sup_start_contract.py
       - scripts/vbox_vm_boot_probe.ps1
       - tests/test_vm_boot_standalone_contract.py
   workflow_dispatch:
@@ -50,13 +52,21 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/vbox_sup_standalone.ps1 -AppDir $env:STANDALONE_APP64 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'standalone-sup-report') -TimeoutSeconds 75
+      - name: Start only signed owned VBoxSup on disposable runner
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:RUNNER_TEMP 'standalone-sup-report\sup-standalone.json'
+          $destination = Join-Path $env:RUNNER_TEMP 'owned-sup-start-result'
+          ./scripts/vbox_sup_start_owned.ps1 -StandaloneReport $source -OutputDirectory $destination -TimeoutSeconds 30
       - name: Attempt blank VM start from portable app64 and standalone VBoxSup
         shell: pwsh
         run: |
           $sup = Join-Path $env:RUNNER_TEMP 'standalone-sup-report\sup-standalone.json'
           $report = Get-Content -LiteralPath $sup -Raw | ConvertFrom-Json
-          if ($report.pnputil_exit_code -ne 0 -or -not $report.service_registered -or -not $report.system_driver_matches_package) {
-            Write-Host 'Standalone VBoxSup is not verified; VM start skipped with recorded INF evidence.'
+          $started = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'owned-sup-start-result\sup-start-results.json') -Raw | ConvertFrom-Json
+          if ($report.pnputil_exit_code -ne 0 -or -not $report.service_registered -or -not $report.system_driver_matches_package -or
+              -not $started.driver_running) {
+            Write-Host 'Standalone VBoxSup is not running; VM start skipped with recorded installation/start evidence.'
             exit 0
           }
           ./scripts/vbox_vm_boot_probe.ps1 -AppDir $env:STANDALONE_APP64 -StandaloneDriverReport $sup -OutputDirectory (Join-Path $env:RUNNER_TEMP 'standalone-vm-boot') -TimeoutSeconds 35
@@ -70,6 +80,14 @@ jobs:
             New-Item -ItemType Directory -Force -Path $dest | Out-Null
             Get-ChildItem -LiteralPath $src -File |
               Where-Object { $_.Name -in @('sup-standalone.json','pnputil.stdout.txt','pnputil.stderr.txt') } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+          }
+          $start = Join-Path $env:RUNNER_TEMP 'owned-sup-start-result'
+          if (Test-Path -LiteralPath $start) {
+            $dest = 'results/standalone-sup'
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Get-ChildItem -LiteralPath $start -File |
+              Where-Object { $_.Name -in @('sup-start-results.json','driver-start.stdout.txt','driver-start.stderr.txt') } |
               ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
           }
           $boot = Join-Path $env:RUNNER_TEMP 'standalone-vm-boot'
