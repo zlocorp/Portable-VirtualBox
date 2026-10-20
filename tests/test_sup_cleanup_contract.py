@@ -32,6 +32,14 @@ class VBoxSupCleanupContract(unittest.TestCase):
         self.assertRegex(active, r"(?i)/delete-driver")
         self.assertRegex(active, r"(?i)/uninstall")
 
+    def test_stale_service_cleanup_requires_removed_driver_and_exact_service(self):
+        text = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("Run-Bounded $sc 'delete VBoxSup'", text)
+        self.assertIn("service_delete", text)
+        self.assertIn("system_driver_file_present", text)
+        self.assertIn("published_inf_present", text)
+        self.assertIn("final_vbox_services", text)
+
     def test_published_inf_name_requires_restrictive_pattern(self):
         text = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("Published Name:", text)
