@@ -10,6 +10,14 @@ class VMBootContracts(unittest.TestCase):
                     "VBOX_USER_HOME","machinefolder","createvm","startvm","headless",
                     "controlvm","poweroff","WaitForExit","vm-boot-results.json"):
             self.assertIn(key,s)
+    def test_arguments_and_semantic_vm_checks_are_not_silently_ignored(self):
+        s=SCRIPT.read_text(encoding="utf-8")
+        self.assertNotIn("param([string]$Name,[string[]]$Args)",s)
+        self.assertIn("list_fixture",s)
+        self.assertIn("inspect_fixture",s)
+        self.assertEqual(s.count("function Require-Step"),1)
+        self.assertEqual(s.count("guest_os_booted=$false"),1)
+
     def test_no_unscoped_mutation_or_guest_media(self):
         s="\n".join(x for x in SCRIPT.read_text(encoding="utf-8").splitlines() if not x.lstrip().startswith("#"))
         for expr in [r"(?i)\btaskkill\b",r"(?i)\b(?:Stop-Service|Remove-Service|New-Service|sc\s+delete)\b",
