@@ -9,7 +9,7 @@ Based on the original `vboxme/Portable-VirtualBox` master snapshot `5b58dbbe701c
 - Windows x64 compilation with the official signed AutoIt 3.3.18.0 compiler, including checkout paths with spaces and Cyrillic characters.
 - **Native read-only Windows observations:** SCM service configuration/status, process identity through retained query handles, installation keys in both registry views, and workstation/server product type. Unknown/denied observations block preflight instead of becoming false absence. Querying a resource never grants ownership or permission to mutate it.
 - Exact-version Oracle download verification and passive PE resource extraction into MSI/CAB files.
-- **MSI/CAB to new app64 file preparation:** the pinned Oracle 7.2.20 package produces 185 application files / 247738522 bytes without running its installer, MSI actions or any payload. Read-only MSI tables determine placement; cabinet callbacks use Unicode-aware file I/O. Per-file hashes, key AMD64 headers, signatures and unchanged inputs are checked in CI.
+- **MSI/CAB to new app64 file preparation:** the pinned Oracle 7.2.22 package produces 185 application files / 247834716 bytes without running its installer, MSI actions or any payload. Read-only MSI tables determine placement; cabinet callbacks use Unicode-aware file I/O. Per-file hashes, key AMD64 headers, signatures and unchanged inputs are checked in CI.
 - **Journaled lifecycle coordination:** persist intent, recheck identity, validate acquisition receipts, confirm results and clean up in reverse order. Cancellation, partial failures, storage failures and changed resources are tested with synthetic effects. Real exclusive UTF-8 snapshots are used in native tests. This is not a completed privileged service/process effect adapter and is not wired into the preview launcher.
 - Read-only VM registry inventory and regression tests for malformed input, download races, staging publication, XML encodings and Windows paths.
 
@@ -37,6 +37,8 @@ Diagnostics print status/counts without private image paths or service account n
 
 **Developer-only native proof:** a hidden `--ci-service-smoke` is limited to the disposable GitHub-hosted Windows runner configuration; it executes the prepared signed Oracle `VBoxManage setproperty machinefolder`, verifies the exact newly registered `VBoxSDS`, waits for an idle service, then unregisters it using Oracle's supported command. This is **not** a production Start/Stop feature or a security boundary that should be exposed on an ordinary Windows PC. [Proof run](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39438429411).
 
+**Current dependencies and localization (2026-10-20):** Oracle **VirtualBox 7.2.22** is the signed pinned runtime. [Official 7.2.22 package verified](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497891196); [real compiled AutoIt native VM + signed VBoxSup lifecycle verified](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39498269366) on disposable Windows Server 2022. **AutoIt 3.3.18.0** remains current. Obsolete 7za/DevCon/SnetCfg are excluded, not replaced. RU/EN observation texts and stale language-switch readiness messages were corrected: [17 native harnesses passed](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497271846), including 157 bilingual assertions and 10 GUI text assertions. [Dependency inventory](docs/DEPENDENCIES-2026-10-20.md). Normal GUI still cannot start VMs.
+
 **Integrated native checkpoint (CI only):** `--ci-integrated-session` is omitted from public help and GUI. The compiled AutoIt executable now **orchestrates** signed driver staging/start, VM boot/poweroff, independent host verification and exact-owned cleanup on a single-use Windows Server 2022 runner. [Successful integrated run](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494324031) / [execution evidence](docs/EXECUTION-2026-10-20-integrated-native-lifecycle.md). Native regression: 16 harnesses, zero failures. Still not implemented: production privilege-separated helper and UAC, real Manager GUI Start/Stop, Windows 11 standard-user acceptance, coexistence and crash recovery.
 
 Developer tools:
@@ -46,7 +48,7 @@ Developer tools:
 ./scripts/test-native.ps1 -AutoItRoot 'C:\Program Files (x86)\AutoIt3'
 python -X utf8 -m unittest discover -s tests -v
 python scripts/audit_source.py --enforce
-python scripts/oracle_release.py 7.2.20
+python scripts/oracle_release.py 7.2.22
 python scripts/vm_inventory.py 'C:\Portable-VirtualBox\data\.VirtualBox\VirtualBox.xml'
 ```
 
@@ -56,7 +58,7 @@ VM inventory hides UUIDs and paths unless `--details` is requested. It does not 
 
 ## Functional CLI and portable configuration smoke (2026-10-20)
 
-Disposable Windows Server 2022 CI now confirms that the prepared Oracle VirtualBox 7.2.20 app64 can execute `VBoxManage --version`, `list vms`, and `list systemproperties` without installing Oracle. A second test set `VBOX_USER_HOME` and `machinefolder` to separate private directories, then created/registered a test VM with a `.vbox` file stored in that portable directory. **No guest VM was started.**
+Earlier disposable Windows Server 2022 CI confirmed that the then-current Oracle VirtualBox 7.2.20 app64 could execute `VBoxManage --version`, `list vms`, and `list systemproperties` without installing Oracle. A second test set `VBOX_USER_HOME` and `machinefolder` to separate private directories, then created/registered a test VM with a `.vbox` file stored in that portable directory. **No guest VM was started.**
 
 A controlled separate MSI reference installation with only `VBoxApplication` installed both `VBoxSDS` and `VBoxSup`. Importantly, the uninstalled portable CLI **automatically registered `VBoxSDS`** with a persistent service path pointing to its temporary app64 location. This is an unresolved portability/safety issue, not a release-ready feature.
 
@@ -67,7 +69,7 @@ A controlled separate MSI reference installation with only `VBoxApplication` ins
 
 ## Two real blank-VM sessions on one disposable Windows host (2026-10-20)
 
-[GitHub Actions run 39416531988](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39416531988) proved a complete **clean-host two-cycle** with the prepared Oracle 7.2.20 app64 and separately installed signed VBoxSup. First boot/poweroff, VBoxSDS unregistration, VBoxSup stop/driver-store removal, and guarded deletion of the leftover stopped VBoxSup service were verified; the runner was left with zero VBox services and no published INF or system driver file. The same original VM configuration and UUID were reused for a second headless start/poweroff, followed by the same verified cleanup. **No guest OS or disk was booted.** The process remains an isolated research workflow, not an implemented production launcher; installed-VBox coexistence and drive-letter relocation still need testing.
+[GitHub Actions run 39416531988](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39416531988) historically proved a complete **clean-host two-cycle** with the earlier Oracle 7.2.20 app64 and separately installed signed VBoxSup. First boot/poweroff, VBoxSDS unregistration, VBoxSup stop/driver-store removal, and guarded deletion of the leftover stopped VBoxSup service were verified; the runner was left with zero VBox services and no published INF or system driver file. The same original VM configuration and UUID were reused for a second headless start/poweroff, followed by the same verified cleanup. **No guest OS or disk was booted.** The process remains an isolated research workflow, not an implemented production launcher; installed-VBox coexistence and drive-letter relocation still need testing.
 
 [Full two-cycle evidence](docs/EXECUTION-2026-10-20-two-cycle.md).
 

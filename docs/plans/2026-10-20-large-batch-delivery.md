@@ -4,7 +4,7 @@ Date: 2026-10-20. User explicitly requests **large integrated functional package
 
 ## Current evidence to preserve
 
-- Signed Oracle VirtualBox 7.2.20 MSI/CAB → prepared 185-file app64.
+- Signed Oracle VirtualBox **7.2.22** MSI/CAB → signed/hashes-verified 185-file app64 (247834716 bytes); earlier 7.2.20 proofs remain historical.
 - One complete disposable-host blank VM boot/poweroff + signed VBoxSup/VBoxSDS teardown; two consecutive cycles preserved original VM UUID.
 - Complete-root Unicode relocation and same-VHD P:→Q: letter reassignment both verified.
 - Compiled AutoIt 3.3.18.0 preview with RU/EN diagnostics GUI, profile creation/inspection.
@@ -22,6 +22,13 @@ At code/test commit `539a7542787ca24195d6f1921ec9ffe3a1728a20`, the compiled Aut
 [Commit 79a5991b](https://github.com/zlocorp/Portable-VirtualBox/commit/79a5991b091e0b76b308a85486d67a8d313791d9) moved the ordering of signed driver staging/start, real AutoIt native blank-VM boot/poweroff, independent host verification and exact-owned SDS/SUP cleanup **into the compiled AutoIt entrypoint**. [Windows integrated CI 39494324031](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494324031) passed; [native CI 39494330200](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494330200) passed 16 harnesses, zero failures; [core x64 CI 39494330205](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494330205) passed. [Evidence](../EXECUTION-2026-10-20-integrated-native-lifecycle.md).
 
 The signed-driver *effects* are still research PowerShell scripts running as an elevated disposable CI runner. They are **not** a reviewed production helper. Normal RU/EN UI/Manager Start/Stop, UAC/standard-user Windows 11 tests, safe recovery and coexistence remain blocked. **Batch A is not complete.**
+
+## RU/EN + Oracle 7.2.22 refresh (2026-10-20)
+
+- GUI switches both language and the previously requested readiness result; refreshed diagnostics and Windows observation/product types display in RU/EN. Long paths and missing app64 status no longer silently mislead.
+- [Native test run](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497271846): 17 AutoIt harnesses, no errors; i18n has 157 assertions, GUI text has 10.
+- Current pinned Oracle **7.2.22** official distribution and new exact VBoxSup SYS/INF/CAT hashes: [passive 185-file package verification](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497891196), [compiled AutoIt native boot/teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39498269366), both verified on disposable Windows Server 2022. No claim of standard-user Windows 11.
+- AutoIt **3.3.18.0** remains current. Legacy 7za/DevCon/SnetCfg stay quarantined and outside the runtime.
 
 ## Batch A: usable launcher core, one substantial change set
 

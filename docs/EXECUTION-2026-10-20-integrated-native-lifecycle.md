@@ -25,3 +25,7 @@ This result tests a real kernel-driver/empty-VM session on **Windows Server 2022
 - CI abandons any uncertain system state to destruction of its disposable host; a user's PC cannot use that recovery strategy.
 
 **No release, master merge or end-user execution is authorized by this research result.** Next: minimal reviewed elevated helper, normal GUI Manager lifecycle and isolated Windows 11 x64 acceptance with existing-install refusal and repeated same-UUID VM sessions.
+
+## Verified Oracle 7.2.22 follow-up (2026-10-20)
+
+Version refreshed from 7.2.20 to **7.2.22-r175245** with the official Oracle SHA256SUMS manifest and fresh exact VBoxSup SYS/INF/CAT hashes. [Package CI 39497891196](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497891196) verified 185 app64 files (247834716 bytes), signed x64 package and unchanged Windows services. [Compiled native blank VM boot and owned driver teardown CI 39498269366](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39498269366) passed with independent verification on disposable Windows Server 2022. Neither test verifies Windows 11 GUI/UAC or a real guest OS with disk.

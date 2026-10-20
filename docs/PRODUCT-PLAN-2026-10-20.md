@@ -9,7 +9,7 @@ Users need a small trusted launcher with **Start**, **Stop**, **Settings**, **Up
 
 ### Verified research (native integration remains CI-only)
 
-- Signed Oracle 7.2.20 wrapper -> MSI/CAB -> 185 complete app64 files, version/hashes/signatures.
+- Signed Oracle 7.2.22 wrapper -> MSI/CAB -> 185 complete app64 files (247834716 bytes), version/hashes/signatures; earlier 7.2.20 evidence remains historical.
 - VBoxManage CLI, isolated VBOX_USER_HOME, machinefolder, registration of a new test VM.
 - Signed VBoxSup staging/activation, empty VM boot/poweroff, exact-owned VBoxSDS/VBoxSup cleanup.
 - Two successive VM sessions with same UUID/VM config and clean service teardown.
@@ -20,7 +20,7 @@ Users need a small trusted launcher with **Start**, **Stop**, **Settings**, **Up
 
 ## P0: useful product-facing changes in development now
 
-- [x] Confirm official VirtualBox 7.2.20 and AutoIt 3.3.18.0 are latest as of this date.
+- [x] Confirm official VirtualBox 7.2.22 (20 October 2026) and AutoIt 3.3.18.0 are the current stable versions as of this date.
 - [x] Audit inherited 7za/DevCon/SnetCfg/compiler EXEs by version, SHA-256 and Authenticode without execution. Keep them quarantined. Never ship them merely because they were in upstream.
 - [x] Introduce an RU/EN catalog for the **launcher**, with automatic Russian host locale, explicit locale switch, native key coverage, and documented CLI help.
 - [x] Add a real *read-only* GUI: status panel, RU/EN language radio buttons, refresh, copy diagnostic report, close. No fake Start button.
@@ -35,7 +35,7 @@ Users need a small trusted launcher with **Start**, **Stop**, **Settings**, **Up
 
 ### Batch A: safe actual Start/Stop and Manager lifecycle (IN PROGRESS)
 
-Foundations: RU/EN profile/readiness GUI, signed Oracle 7.2.20 app64 and compiled AutoIt blank-VM engine. As of [CI 39494324031](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494324031), the **compiled EXE** orchestrates driver stage/start, native VM boot/poweroff, independent host verification and exact-owned VBoxSDS/VBoxSup teardown. All privileged effects still execute through CI-only research PowerShell scripts on an already-elevated disposable Windows Server 2022 runner. [Execution details](EXECUTION-2026-10-20-integrated-native-lifecycle.md).
+Foundations: corrected RU/EN profile/readiness GUI, signed Oracle 7.2.22 app64 and compiled AutoIt blank-VM engine. The earlier CI 39494324031 used 7.2.20; [new 7.2.22 native boot-and-teardown CI 39498269366](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39498269366) passed. As of [CI 39494324031](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494324031), the **compiled EXE** orchestrates driver stage/start, native VM boot/poweroff, independent host verification and exact-owned VBoxSDS/VBoxSup teardown. All privileged effects still execute through CI-only research PowerShell scripts on an already-elevated disposable Windows Server 2022 runner. [Execution details](EXECUTION-2026-10-20-integrated-native-lifecycle.md).
 
 Remaining **Batch A** exit gates: narrowly scoped privilege-separated helper/UAC, exact session ownership and failure recovery, normal RU/EN GUI start/stop of Oracle Manager, coexistence refusal and a two-cycle same-UUID test on **isolated Windows 11 x64** as a standard user. Regular UI correctly remains `RUNTIME_DISABLED`.
 
