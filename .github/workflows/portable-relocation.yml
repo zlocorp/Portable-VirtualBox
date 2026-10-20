@@ -7,6 +7,8 @@ on:
       - .github/workflows/portable-relocation.yml
       - scripts/vbox_root_relocation_probe.ps1
       - tests/test_relocation_contract.py
+      - scripts/vbox_vhd_volume.ps1
+      - tests/test_vhd_volume_contract.py
   workflow_dispatch:
 
 permissions:
@@ -24,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        relocation_mode: [directory, drive-alias]
+        relocation_mode: [directory, vhd-letter]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -46,7 +48,13 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $source = Join-Path $env:RUNNER_TEMP 'Portable USB Исходник Тест'
+          if ('${{ matrix.relocation_mode }}' -eq 'vhd-letter') {
+            $vhd = Join-Path $env:RUNNER_TEMP 'portable-only-test.vhdx'
+            ./scripts/vbox_vhd_volume.ps1 -Action Create -BackingFile $vhd
+            $source = 'P:\Portable USB Тест'
+          } else {
+            $source = Join-Path $env:RUNNER_TEMP 'Portable USB Исходник Тест'
+          }
           New-Item -ItemType Directory -Path $source -ErrorAction Stop | Out-Null
           $installer = Join-Path $env:RUNNER_TEMP 'portable-relocation-oracle\VirtualBox-7.2.20-175154-Win.exe'
           $app = Join-Path $source 'app64'
@@ -58,8 +66,14 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $switches = @{}
-          if ('${{ matrix.relocation_mode }}' -eq 'drive-alias') { $switches['SimulateDriveLetterChange'] = $true }
-          ./scripts/vbox_root_relocation_probe.ps1 -PortableRoot $env:ORIGINAL_PORTABLE_ROOT -DestinationRoot (Join-Path $env:RUNNER_TEMP 'Portable USB Перенесено Тест') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'portable-relocation-evidence') -TimeoutSeconds 30 @switches
+          if ('${{ matrix.relocation_mode }}' -eq 'vhd-letter') {
+            $switches['VhdDriveLetterChange'] = $true
+            $switches['VhdBackingFile'] = Join-Path $env:RUNNER_TEMP 'portable-only-test.vhdx'
+            $destination = 'Q:\Portable USB Тест'
+          } else {
+            $destination = Join-Path $env:RUNNER_TEMP 'Portable USB Перенесено Тест'
+          }
+          ./scripts/vbox_root_relocation_probe.ps1 -PortableRoot $env:ORIGINAL_PORTABLE_ROOT -DestinationRoot $destination -OutputDirectory (Join-Path $env:RUNNER_TEMP 'portable-relocation-evidence') -TimeoutSeconds 30 @switches
       - name: Publish only bounded diagnostic report and CLI logs
         if: always()
         shell: pwsh
