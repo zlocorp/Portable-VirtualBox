@@ -8,11 +8,16 @@ Func _PortableDiagnosticCollect()
     Local $services = _PortableCountExistingServices(), $processes = _PortableCountVirtualBoxProcesses()
     Local $report[]
     Local $s = _LI("diag.header") & @CRLF
-    $s &= _LI("diag.windows") & $os["status"] & @CRLF
-    $s &= _LI("diag.build") & $os["build"] & @CRLF
-    $s &= _LI("diag.product_type") & $os["product_type"] & @CRLF
+    $s &= _LI("diag.windows") & _LI_Observation("os", $os["status"]) & @CRLF
+    If $os["status"] == "PRESENT" Then
+        $s &= _LI("diag.build") & $os["build"] & @CRLF
+        $s &= _LI("diag.product_type") & _LI_ProductType($os["product_type"]) & @CRLF
+    Else
+        $s &= _LI("diag.build") & _LI("diag.unknown") & @CRLF
+        $s &= _LI("diag.product_type") & _LI("diag.unknown") & @CRLF
+    EndIf
     $s &= _LI("diag.arch") & @OSArch & @CRLF
-    $s &= _LI("diag.installed") & $installed["status"] & @CRLF
+    $s &= _LI("diag.installed") & _LI_Observation("installation", $installed["status"]) & @CRLF
     If $services < 0 Then
         $s &= _LI("diag.services_unknown") & @CRLF
     Else

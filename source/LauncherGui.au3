@@ -7,8 +7,7 @@
 #include <EditConstants.au3>
 #include <WindowsStylesConstants.au3>
 
-; Honest preview: the GUI can prepare only private user folders, read Windows
-; state and copy its diagnostics. No VM/driver actions are wired to this screen.
+; Non-privileged user-facing preview: no Oracle VM launch or driver mutation.
 Func _LG_ProfileText($status)
     Switch $status
         Case "READY"
@@ -20,8 +19,29 @@ Func _LG_ProfileText($status)
     EndSwitch
 EndFunc
 
+; A ready data directory alone is not enough for a usable VirtualBox.
+Func _LG_ProfileMessage($profile)
+    If Not IsMap($profile) Or Not MapExists($profile, "status") Or _
+            Not MapExists($profile, "app_present") Then Return _LI("profile.blocked")
+    Local $message = _LG_ProfileText($profile["status"])
+    If $profile["status"] == "READY" And Not $profile["app_present"] Then _
+        $message &= " " & _LI("profile.appmissing")
+    Return $message
+EndFunc
+
+; Keep long portable roots legible at standard DPI. The tooltip holds the full
+; path; this is display-only, never fed into any filesystem operation.
+Func _LG_DisplayPath($root, $maxChars = 58)
+    If Not IsString($root) Then Return ""
+    If Not IsInt($maxChars) Or $maxChars < 12 Then Return ""
+    If StringLen($root) <= $maxChars Then Return $root
+    Local $left = Int(($maxChars - 3) / 2)
+    Return StringLeft($root, $left) & "..." & StringRight($root, $maxChars - 3 - $left)
+EndFunc
+
 Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult)
+        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, _
+        $showReadiness = False)
     WinSetTitle($hGui, "", _LI("app.title"))
     GUICtrlSetData($idSubtitle, _LI("app.subtitle"))
     GUICtrlSetData($idWarning, _LI("app.disabled"))
@@ -33,40 +53,49 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     GUICtrlSetData($idEn, _LI("gui.english"))
     GUICtrlSetData($idPrepare, _LI("gui.prepare"))
     GUICtrlSetData($idReady, _LI("gui.readiness"))
-    GUICtrlSetData($idPath, _LI("gui.path") & @ScriptDir)
+    GUICtrlSetData($idPath, _LI("gui.path") & _LG_DisplayPath(@ScriptDir))
     GUICtrlSetTip($idPath, @ScriptDir)
     Local $p = _PP_Inspect(@ScriptDir)
-    GUICtrlSetData($idProfile, _LG_ProfileText($p["status"]))
+    GUICtrlSetData($idProfile, _LG_ProfileMessage($p))
     Local $diagnostic = _PortableDiagnosticCollect()
     GUICtrlSetData($idReport, $diagnostic["text"])
+    ; Never retain a Russian status in English UI (or vice versa).
+    ; Refresh a previously requested readiness probe after locale/preflight changes.
+    If $showReadiness Then
+        Local $readiness = _LR_Inspect(@ScriptDir)
+        GUICtrlSetData($idResult, $readiness["message"])
+    Else
+        GUICtrlSetData($idResult, "")
+    EndIf
 EndFunc
 
 Func _LG_Show()
-    Local $hGui = GUICreate(_LI("app.title"), 630, 640)
+    Local $hGui = GUICreate(_LI("app.title"), 680, 712)
     GUISetBkColor(0xF7F9FC, $hGui)
-    Local $idSubtitle = GUICtrlCreateLabel("", 22, 16, 575, 30)
+    Local $idSubtitle = GUICtrlCreateLabel("", 22, 16, 625, 32)
     GUICtrlSetFont($idSubtitle, 14, 600, 0, "Segoe UI")
-    Local $idWarning = GUICtrlCreateLabel("", 22, 53, 580, 52)
+    Local $idWarning = GUICtrlCreateLabel("", 22, 53, 630, 52)
     GUICtrlSetFont($idWarning, 10, 400, 0, "Segoe UI")
-    Local $idRu = GUICtrlCreateRadio("", 22, 114, 155, 25)
-    Local $idEn = GUICtrlCreateRadio("", 180, 114, 155, 25)
+    Local $idRu = GUICtrlCreateRadio("", 22, 116, 155, 25)
+    Local $idEn = GUICtrlCreateRadio("", 180, 116, 155, 25)
     If _LI_Language() == "ru" Then
         GUICtrlSetState($idRu, $GUI_CHECKED)
     Else
         GUICtrlSetState($idEn, $GUI_CHECKED)
     EndIf
-    Local $idSection = GUICtrlCreateLabel("", 22, 147, 565, 26)
+    Local $idSection = GUICtrlCreateLabel("", 22, 149, 630, 26)
     GUICtrlSetFont($idSection, 11, 600, 0, "Segoe UI")
-    Local $idReport = GUICtrlCreateEdit("", 22, 176, 584, 216, BitOR($ES_READONLY, $WS_VSCROLL, $ES_AUTOVSCROLL))
+    Local $idReport = GUICtrlCreateEdit("", 22, 178, 634, 225, BitOR($ES_READONLY, $WS_VSCROLL, $ES_AUTOVSCROLL))
     GUICtrlSetFont($idReport, 10, 400, 0, "Consolas")
-    Local $idPath = GUICtrlCreateLabel("", 22, 404, 584, 21)
-    Local $idProfile = GUICtrlCreateLabel("", 22, 428, 584, 21)
-    Local $idPrepare = GUICtrlCreateButton("", 22, 455, 584, 35)
-    Local $idReady = GUICtrlCreateButton("", 22, 498, 584, 35)
-    Local $idResult = GUICtrlCreateLabel("", 22, 540, 584, 34)
-    Local $idRefresh = GUICtrlCreateButton("", 22, 584, 185, 35)
-    Local $idCopy = GUICtrlCreateButton("", 218, 584, 184, 35)
-    Local $idClose = GUICtrlCreateButton("", 414, 584, 192, 35)
+    Local $idPath = GUICtrlCreateLabel("", 22, 410, 634, 28)
+    Local $idProfile = GUICtrlCreateLabel("", 22, 445, 634, 42)
+    Local $idPrepare = GUICtrlCreateButton("", 22, 492, 634, 37)
+    Local $idReady = GUICtrlCreateButton("", 22, 537, 634, 37)
+    Local $idResult = GUICtrlCreateLabel("", 22, 583, 634, 56)
+    Local $idRefresh = GUICtrlCreateButton("", 22, 650, 202, 35)
+    Local $idCopy = GUICtrlCreateButton("", 238, 650, 202, 35)
+    Local $idClose = GUICtrlCreateButton("", 454, 650, 202, 35)
+    Local $checked = False
     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
         $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult)
     GUISetState(@SW_SHOW, $hGui)
@@ -74,28 +103,28 @@ Func _LG_Show()
         Switch GUIGetMsg()
             Case $GUI_EVENT_CLOSE, $idClose
                 ExitLoop
-            Case $idRu
-                _LI_Set("ru")
+            Case $idRu, $idEn
+                If GUICtrlRead($idRu) == $GUI_CHECKED Then
+                    _LI_Set("ru")
+                Else
+                    _LI_Set("en")
+                EndIf
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult)
-            Case $idEn
-                _LI_Set("en")
-                _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult)
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $checked)
             Case $idPrepare
                 Local $result = _PP_Ensure(@ScriptDir)
-                GUICtrlSetData($idProfile, _LG_ProfileText($result["status"]))
-                If $result["status"] == "READY" And Not $result["app_present"] Then
-                    GUICtrlSetData($idProfile, _LG_ProfileText($result["status"]) & " " & _LI("profile.appmissing"))
+                GUICtrlSetData($idProfile, _LG_ProfileMessage($result))
+                If $checked Then
+                    Local $readiness = _LR_Inspect(@ScriptDir)
+                    GUICtrlSetData($idResult, $readiness["message"])
                 EndIf
             Case $idReady
-                Local $status = _LR_Inspect(@ScriptDir)
-                GUICtrlSetData($idResult, $status["message"])
+                $checked = True
+                Local $readiness = _LR_Inspect(@ScriptDir)
+                GUICtrlSetData($idResult, $readiness["message"])
             Case $idRefresh
-                Local $diagnostic = _PortableDiagnosticCollect()
-                GUICtrlSetData($idReport, $diagnostic["text"])
-                Local $p = _PP_Inspect(@ScriptDir)
-                GUICtrlSetData($idProfile, _LG_ProfileText($p["status"]))
+                _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $checked)
             Case $idCopy
                 ClipPut(GUICtrlRead($idReport))
         EndSwitch

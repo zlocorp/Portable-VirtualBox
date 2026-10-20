@@ -28,7 +28,7 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Check official Oracle manifest (metadata only; no executable download)
         continue-on-error: true
-        run: python3 scripts/oracle_release.py 7.2.20
+        run: python3 scripts/oracle_release.py 7.2.22
       - name: Enforce preview and inventory quarantined source
         run: |
           python3 scripts/audit_source.py --enforce --output .reports/source-audit.md

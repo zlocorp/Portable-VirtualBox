@@ -67,8 +67,8 @@ Func _LI($sKey, $sLanguage = "")
             If $ru Then Return "Подготовить переносимые папки"
             Return "Prepare portable folders"
         Case "gui.path"
-            If $ru Then Return "Расположение данных: "
-            Return "Data location: "
+            If $ru Then Return "Переносимая папка: "
+            Return "Portable directory: "
         Case "profile.ready"
             If $ru Then Return "Папки настроек, ВМ и журналов готовы."
             Return "Portable profile, VM and log folders are ready."
@@ -138,8 +138,63 @@ Func _LI($sKey, $sLanguage = "")
         Case "diag.runtime"
             If $ru Then Return "Запуск ВМ: ОТКЛЮЧЁН"
             Return "VM startup: DISABLED"
+        Case "diag.unknown"
+            If $ru Then Return "НЕИЗВЕСТНО"
+            Return "UNKNOWN"
+        Case "diag.os.present"
+            If $ru Then Return "ОПРЕДЕЛЕНО"
+            Return "DETECTED"
+        Case "diag.os.absent"
+            If $ru Then Return "НЕ ОПРЕДЕЛЕНО"
+            Return "NOT DETECTED"
+        Case "diag.installed.present"
+            If $ru Then Return "ОБНАРУЖЕН"
+            Return "DETECTED"
+        Case "diag.installed.absent"
+            If $ru Then Return "НЕ ОБНАРУЖЕН"
+            Return "NOT DETECTED"
+        Case "diag.product.workstation"
+            If $ru Then Return "Рабочая станция"
+            Return "Workstation"
+        Case "diag.product.domain"
+            If $ru Then Return "Контроллер домена"
+            Return "Domain controller"
+        Case "diag.product.server"
+            If $ru Then Return "Сервер"
+            Return "Server"
     EndSwitch
     Return $sKey
+EndFunc
+
+; Localize public host observations without confusing unknown state with absence.
+Func _LI_Observation($kind, $status, $language = "")
+    If Not IsString($kind) Or Not IsString($status) Then Return _LI("diag.unknown", $language)
+    Switch $kind & "." & $status
+        Case "os.PRESENT"
+            Return _LI("diag.os.present", $language)
+        Case "os.ABSENT"
+            Return _LI("diag.os.absent", $language)
+        Case "installation.PRESENT"
+            Return _LI("diag.installed.present", $language)
+        Case "installation.ABSENT"
+            Return _LI("diag.installed.absent", $language)
+        Case Else
+            Return _LI("diag.unknown", $language)
+    EndSwitch
+EndFunc
+
+Func _LI_ProductType($kind, $language = "")
+    If Not IsInt($kind) Then Return _LI("diag.unknown", $language)
+    Switch $kind
+        Case 1
+            Return _LI("diag.product.workstation", $language)
+        Case 2
+            Return _LI("diag.product.domain", $language)
+        Case 3
+            Return _LI("diag.product.server", $language)
+        Case Else
+            Return _LI("diag.unknown", $language)
+    EndSwitch
 EndFunc
 
 ; AutoIt ConsoleWrite normally converts Unicode to the host ANSI code page.
