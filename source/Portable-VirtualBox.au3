@@ -10,10 +10,41 @@
 #include "RuntimeSafety.au3"
 #include "HostPreflight.au3"
 #include "HostDiagnostics.au3"
+#include "LauncherI18n.au3"
+#include "LauncherGui.au3"
 #NoTrayIcon
 
+; UI defaults to the host's language. Explicit CLI selection never persists
+; global settings and must appear before the requested command.
+_LI_Set(_LI_Detect(@OSLang))
+Local $iFirst = 1
 If $CmdLine[0] > 0 Then
-    Switch $CmdLine[1]
+    If StringLeft($CmdLine[1], 7) == "--lang=" Then
+        If Not _LI_Set(StringTrimLeft($CmdLine[1], 7)) Then
+            ConsoleWriteError(_LI("error.invalid_lang") & @CRLF)
+            Exit 64
+        EndIf
+        $iFirst = 2
+    ElseIf $CmdLine[1] == "--lang" Then
+        If $CmdLine[0] < 2 Then
+            ConsoleWriteError(_LI("error.invalid_lang") & @CRLF)
+            Exit 64
+        EndIf
+        If Not _LI_Set($CmdLine[2]) Then
+            ConsoleWriteError(_LI("error.invalid_lang") & @CRLF)
+            Exit 64
+        EndIf
+        $iFirst = 3
+    EndIf
+EndIf
+
+If $CmdLine[0] >= $iFirst Then
+    Switch $CmdLine[$iFirst]
+        Case "--help", "-h"
+            ConsoleWrite(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
+                "  --version  --diagnose  --preflight  --selftest  --help" & @CRLF & _
+                _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
+            Exit 0
         Case "--version"
             ConsoleWrite("Portable-VirtualBox development baseline 5b58dbbe" & @CRLF)
             Exit 0
@@ -52,21 +83,18 @@ If $CmdLine[0] > 0 Then
         Case "--preflight"
             Local $sBlocker = _PortableReadOnlyPreflight()
             If $sBlocker <> "" Then
-                ConsoleWrite("Preflight BLOCKED: " & $sBlocker & @CRLF)
+                ConsoleWrite(_LI("preflight.blocked") & _LI_Blocker($sBlocker) & @CRLF)
                 Exit 3
             EndIf
-            ConsoleWrite("Preflight: no detected blocker (runtime still disabled)" & @CRLF)
+            ConsoleWrite(_LI("preflight.ok") & @CRLF)
             Exit 0
         Case "--diagnose"
             Exit _PortableDiagnosticWrite()
         Case Else
-            ConsoleWriteError("Unknown option: use --version, --diagnose, --preflight, --selftest" & @CRLF)
+            ConsoleWriteError(_LI("error.unknown") & @CRLF)
             Exit 64
     EndSwitch
 EndIf
-MsgBox(48, "Portable-VirtualBox development build", _
-    "Runtime intentionally disabled during modernization." & @CRLF & _
-    "This build does not install drivers or start virtual machines." & @CRLF & _
-    "Use --diagnose for a read-only report.")
+_LG_Show()
 Exit 2
 ; END DEVELOPMENT SAFETY GATE
