@@ -3,6 +3,12 @@
 ; Tokens are process-local, monotonic and never re-used. Do not persist them.
 Global $g_WinObsProcesses[], $g_WinObsNextToken = 1
 
+Func _WinObsProcessTokenKnown($token)
+    If Not IsInt($token) Then Return False
+    If $token < 1 Or $token >= $g_WinObsNextToken Then Return False
+    Return MapExists($g_WinObsProcesses, $token)
+EndFunc
+
 Func _WinObsProcessFromHandle($h)
     Local $r = _WinObsResult("process")
     Local $a = DllCall("kernel32.dll", "dword", "WaitForSingleObject", "handle", $h, "dword", 0)
@@ -68,7 +74,7 @@ Func _WinObsProcessOpen($pid)
 EndFunc
 
 Func _WinObsProcessRead($token)
-    If Not IsInt($token) Or Not MapExists($g_WinObsProcesses, $token) Then Return _WinObsError("process", "token", 6)
+    If Not _WinObsProcessTokenKnown($token) Then Return _WinObsError("process", "token", 6)
     Local $entry = $g_WinObsProcesses[$token], $initial = $entry["initial"]
     Local $r = _WinObsProcessFromHandle($entry["handle"])
     If Not ($r["status"] == "PRESENT") Then Return $r
@@ -92,7 +98,7 @@ Func _WinObsProcessMatches($token, ByRef $reference)
 EndFunc
 
 Func _WinObsProcessClose($token)
-    If Not IsInt($token) Or Not MapExists($g_WinObsProcesses, $token) Then Return False
+    If Not _WinObsProcessTokenKnown($token) Then Return False
     Local $entry = $g_WinObsProcesses[$token]
     ; Invalidate even if close fails: a stale token must never target a reused handle.
     MapRemove($g_WinObsProcesses, $token)
