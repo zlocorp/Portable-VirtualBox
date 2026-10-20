@@ -106,6 +106,10 @@ jobs:
           }
           $preflight = Start-Process -FilePath $exe -ArgumentList '--preflight' -Wait -PassThru -NoNewWindow
           if ($preflight.ExitCode -ne 3) { throw "Unsafe preflight policy: expected blocked exit 3, got $($preflight.ExitCode)" }
+          # Even on CI, the regular checkout is outside RUNNER_TEMP. A compiled
+          # binary cannot enable the VM fixture mode from the normal build.
+          $vm = Start-Process -FilePath $exe -ArgumentList '--ci-vm-session' -Wait -PassThru -NoNewWindow
+          if ($vm.ExitCode -ne 9) { throw "CI VM mode unexpectedly enabled from standard build: $($vm.ExitCode)" }
       - name: Real compiled first-run data setup, repeat and collision refusal
         shell: pwsh
         run: |
