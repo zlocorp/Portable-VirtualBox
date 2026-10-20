@@ -164,7 +164,7 @@ function Clear-Exact-VBoxSDS([string]$Binary,[string]$Phase) {
         throw 'Oracle unregistration left system resources, no root move authorized'
     }
     $script:serviceCleanups+= [pscustomobject]@{phase=$Phase;image_path=$Binary;image_matches_expected=$true;idle_before_cleanup=$true;exit_code=$exitCode;clean=$true}
-    Write-Host "VBoxSDS $Phase: clean"
+    Write-Host "VBoxSDS $($Phase): clean"
 }
 try {
     $env:VBOX_USER_HOME=$oldHome
