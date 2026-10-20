@@ -1,0 +1,32 @@
+#include "..\..\source\LauncherI18n.au3"
+Global $checks = 0, $failed = 0
+Func Check($ok, $label)
+    $checks += 1
+    If Not $ok Then
+        $failed += 1
+        ConsoleWriteError("FAIL i18n: " & $label & @CRLF)
+    EndIf
+EndFunc
+Check(_LI_Detect("0419") == "ru", "Russian host locale")
+Check(_LI_Detect("0819") == "ru", "Russian locale suffix")
+Check(_LI_Detect("0409") == "en", "English host locale")
+Check(_LI_Detect("0411") == "en", "unsupported locale falls back to English")
+Check(_LI_Set("ru"), "select Russian")
+Check(_LI_Language() == "ru", "selected locale stored")
+Check(Not _LI_Set("fr"), "unknown locale rejected")
+Check(_LI_Language() == "ru", "invalid locale does not change state")
+Local $keys = StringSplit("app.title|app.subtitle|app.disabled|gui.diagnostics|gui.refresh|gui.copy|gui.exit|gui.russian|gui.english|help.title|help.commands|help.language|help.warning|preflight.ok|preflight.blocked|error.invalid_lang|error.unknown|diag.header|diag.windows|diag.build|diag.product_type|diag.arch|diag.installed|diag.services|diag.services_unknown|diag.processes|diag.processes_unknown|diag.runtime", "|", 2)
+For $i = 0 To UBound($keys) - 1
+    Local $en = _LI($keys[$i], "en")
+    Local $ru = _LI($keys[$i], "ru")
+    Check(StringLen($en) > 2 And $en <> $keys[$i], $keys[$i] & " EN coverage")
+    Check(StringLen($ru) > 2 And $ru <> $keys[$i], $keys[$i] & " RU coverage")
+    Check($ru <> $en, $keys[$i] & " different translations")
+Next
+Check(StringInStr(_LI("app.disabled","ru"), "виртуаль") > 0, "Russian runtime disclaimer")
+Check(_LI("missing.unused.key","ru") == "missing.unused.key", "unknown key explicit")
+Check(_LI_Blocker("Unsupported architecture (x64 required)","ru") <> "Unsupported architecture (x64 required)", "preflight reason localized")
+Check(_LI_Blocker("Unexpected reason","ru") == "Unexpected reason", "unrecognized preflight result preserved")
+Check(_LI("help.title", "fr") == _LI("help.title","en"), "unknown catalog defaults to English")
+ConsoleWrite("Native launcher i18n checks: " & $checks & "; failed: " & $failed & @CRLF)
+Exit ($failed > 0)
