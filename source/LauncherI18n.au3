@@ -22,10 +22,9 @@ EndFunc
 
 Func _LI($sKey, $sLanguage = "")
     Local $s = $sLanguage
-    If Not IsString($s) Or ($s <> "ru" And $s <> "en") Then
-        $s = $g_LI_Language
-        If Not ($s == "ru" Or $s == "en") Then $s = "en"
-    EndIf
+    If Not IsString($s) Then $s = "en"
+    If $s == "" Then $s = $g_LI_Language
+    If Not ($s == "ru" Or $s == "en") Then $s = "en"
     Local $ru = $s == "ru"
     Switch $sKey
         Case "app.title"
