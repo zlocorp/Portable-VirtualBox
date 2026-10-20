@@ -171,6 +171,26 @@ jobs:
             if (($names -join ';') -cne ($expected -join ';')) { throw 'Preview archive contains unexpected files' }
           } finally { $zip.Dispose() }
           Write-Host 'PASS: preview ZIP contains only compiled launcher, README, license and conspicuous warning'
+      - name: Verify actual unpacked preview initializes independent Cyrillic root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $unpacked = Join-Path $env:RUNNER_TEMP 'User Preview ZIP Тест'
+          Expand-Archive -LiteralPath 'build/Portable-VirtualBox-diagnostic-preview.zip' -DestinationPath $unpacked
+          $exe = Join-Path $unpacked 'Portable-VirtualBox.exe'
+          $p = Start-Process -FilePath $exe -ArgumentList '--profile-status' -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 2) { throw 'Newly unpacked preview unexpectedly has an initialized profile' }
+          $p = Start-Process -FilePath $exe -ArgumentList '--prepare-profile' -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw 'Unpacked preview cannot create its own portable profile' }
+          foreach ($folder in @('data\.VirtualBox','data\Machines','logs')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $unpacked $folder) -PathType Container)) {
+              throw "Missing packaged preview folder: $folder"
+            }
+          }
+          $sourceHash = (Get-FileHash -LiteralPath 'build/Portable-VirtualBox_x64.exe' -Algorithm SHA256).Hash
+          $unpackedHash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+          if ($sourceHash -ne $unpackedHash) { throw 'Packaged EXE differs from tested build' }
+          Write-Host 'PASS: unpacked RU/EN preview EXE creates profile in separate Unicode root'
       - name: Retain diagnostic-preview ZIP (not a VM release)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
