@@ -9,6 +9,11 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# VBoxManage can auto-register a persistent LocalSystem VBoxSDS service on first run.
+# Prevent accidental invocation against a developer's normal Windows installation.
+if ($env:GITHUB_ACTIONS -ne 'true' -or $env:GITHUB_REPOSITORY -ne 'zlocorp/Portable-VirtualBox') {
+    throw 'Disposable GitHub Actions runner required: VBoxManage may auto-register VBoxSDS'
+}
 $app = (Resolve-Path -LiteralPath $AppDir -ErrorAction Stop).Path
 $binary = Join-Path $app 'VBoxManage.exe'
 if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) { throw 'Prepared VBoxManage.exe is missing' }
