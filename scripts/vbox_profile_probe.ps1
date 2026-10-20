@@ -20,6 +20,7 @@ $results=@()
 $old=[Environment]::GetEnvironmentVariable('VBOX_USER_HOME','Process')
 $steps=@(
     @{name='set_machine_folder';arguments=@('setproperty','machinefolder',$machine)},
+    @{name='set_oracle_language_ru';arguments=@('setproperty','language','ru')},
     @{name='get_properties';arguments=@('list','systemproperties')},
     @{name='create_definition';arguments=@('createvm','--name',$fixture,'--platform-architecture','x86','--register')},
     @{name='list_definitions';arguments=@('list','vms')}
@@ -69,6 +70,8 @@ $report=[ordered]@{
     commands=$results
     profile_xml_in_isolated_home=(Test-Path -LiteralPath $config -PathType Leaf)
     reported_machinefolder_matches_portable_folder=[bool]$machineFolderExpected
+    oracle_language_ru_requested=$true
+    oracle_language_property_exit_zero=(@($results | Where-Object { $_.name -eq 'set_oracle_language_ru' -and $_.exit_code -eq 0 }).Count -eq 1)
     fixture_registration_listed=[bool]$registrationFound
     machine_definition_files=$vboxFiles.Count
     machine_definition_inside_portable_folder=($vboxFiles.Count -eq 1)
