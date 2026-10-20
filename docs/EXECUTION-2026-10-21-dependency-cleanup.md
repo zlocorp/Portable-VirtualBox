@@ -35,3 +35,25 @@ longer runs against intentionally deleted files.
 **Safety boundary:** this cleanup does not enable normal-user GUI VM
 Start/Stop, Windows 11 standard-user/UAC, optional USB/network drivers or
 a release. CI-only tests are research, not production privileged helpers.
+
+## Verified result for the cleanup commit
+
+[GitHub commit 430f2320](https://github.com/zlocorp/Portable-VirtualBox/commit/430f23202aad9c570443fd47c0144362121bfd40)
+deleted **22** tracked obsolete `source/` assets (**4,528,609 bytes** total),
+plus the old audit script, and replaced historical `build.bat` and
+`BUILDING.md` with current x64 build instructions. A commit-bound tree read
+proved no assets remain under `source/Aut2Exe` or `source/i_data`.
+`source/legacy/Portable-VirtualBox.au3.disabled` and the original license
+remain intact.
+
+- [Python/static and x64 build CI 39502031096](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502031096): **success**, 114 discovered Python tests on Linux and the source-tree absence guard; signed external AutoIt x64 compile, Cyrillic-path rebuild, initialized-profile preservation, and 4-file preview ZIP membership verified.
+- [Native AutoIt 39502031102](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502031102): **17 native test harnesses**, zero failures; RU/EN catalog and GUI text tests passed.
+- [Oracle app64 verification 39502031092](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502031092): **success** for pinned 7.2.22, no MSI/install effect.
+- [Real disposable Windows native boot + exact-owned cleanup 39502023979](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502023979): **success**, compiled AutoIt orchestrated the signed driver startup, empty VM boot and poweroff, independent verification, then VBoxSDS/VBoxSup resource teardown with clean final state.
+
+**Acceptance:** Yes, proven tested preview/native CI workflows work without
+any deleted legacy resource. **Not acceptance** for production GUI Start/Stop,
+full guest OS, Windows 11 standard user, real USB relocation or recovery.
+
+Additional ideas from forks/PRs are recorded separately in
+[community review](REVIEW-2026-10-21-UPSTREAM-FORKS-PRS.md).

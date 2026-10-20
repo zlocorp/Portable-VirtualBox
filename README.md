@@ -98,6 +98,10 @@ See the [latest coordinator report](docs/EXECUTION-2026-10-20-coordinator.md), [
 
 At executable-code checkpoint `539a754`, **107 Python tests** are discovered (Linux: 102 pass, 5 platform skips; Windows: 106 pass, 1 privilege skip). The native suite passes **516 assertions in 14 compiled AutoIt harnesses**; the complete app64 preparation and x64 build pass. Exact evidence is in [the native VM report](docs/EXECUTION-2026-10-20-native-autoit-boot.md). Inherited privileged startup remains quarantined. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
 
+## External implementation review (2026-10-21)
+
+[Review of other authors' upstream pull requests, current forks and tracked failures](docs/REVIEW-2026-10-21-UPSTREAM-FORKS-PRS.md) identifies concrete end-to-end acceptance cases for Manager/VM lifetime, `VBoxSDS` identity after relocation, missing `Machines` directories, staged-download failure and GUI first-run UX. We did not merge old code: several forks use blanket `#RequireAdmin` and process-name termination.
+
 ## Attribution and release boundaries
 
 Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. The root [BUILDING.md](BUILDING.md) and `build.bat` now describe/use the supported external AutoIt x64 PowerShell build, not the historical self-extracting 7-Zip pipeline.

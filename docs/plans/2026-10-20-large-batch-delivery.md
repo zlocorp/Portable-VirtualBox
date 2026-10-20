@@ -59,6 +59,13 @@ Exit criteria: ordinary user can launch/stop confidently and understand any bloc
 
 Exit criteria: isolated guest OS test, crash/cancel/restart/drive-relocation/coexistence cases, signed/hash-documented package and manually approved release.
 
+## External PR/fork findings captured for acceptance (2026-10-21)
+
+[Reviewed upstream PRs, recent forks and concrete user failures](../REVIEW-2026-10-21-UPSTREAM-FORKS-PRS.md). Their **test scenarios**, not their unsafe legacy runtime code, are relevant:
+- **Batch A:** keep Manager and VM process lifetimes distinct; wait for owned `VirtualBoxVM`/`VBoxHeadless` activity and refuse teardown on uncertain/shared processes, stale `VBoxSDS` registration or unexpected session exit. Do not use blanket admin elevation, global name-based process kills or bare `sc` cleanup.
+- **Batch B:** a moved root with old paths or missing `Machines` directory must produce non-destructive, actionable recovery; test Unicode paths, existing UUID, snapshots/medium chains and repeated starts.
+- **Batch C:** interrupted downloads, unsuccessful extraction and failed update must never delete the launcher or user VMs. Optional VirtualBox 7.x icon refresh is lower priority.
+
 ## Work rhythm
 
 - One integrated user-visible feature package per iteration, ideally spanning frontend + backend + native test + CI + docs.
