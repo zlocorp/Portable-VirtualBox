@@ -77,7 +77,7 @@ jobs:
             $dest = 'results/standalone-sup'
             New-Item -ItemType Directory -Force -Path $dest | Out-Null
             Get-ChildItem -LiteralPath $boot -File |
-              Where-Object { $_.Name -eq 'vm-boot-results.json' -or $_.Name -match '^(set_machine_folder|create_fixture|configure_fixture|list_fixture|inspect_fixture|start_headless|show_state|poweroff_fixture)\.(stdout|stderr)\.txt$' } |
+              Where-Object { $_.Name -in @('vm-boot-results.json','hardening-tail.txt') -or $_.Name -match '^(set_machine_folder|create_fixture|configure_fixture|list_fixture|inspect_fixture|start_headless|show_state|poweroff_fixture)\.(stdout|stderr)\.txt$' } |
               ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
           }
       - name: Publish metadata only (no Oracle binaries/drivers)
