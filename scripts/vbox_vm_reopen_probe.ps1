@@ -146,6 +146,7 @@ $report=[ordered]@{
     commands=$results
 }
 $report | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $out 'vm-boot-results.json') -Encoding utf8
+$report | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $out 'reopen-results.json') -Encoding utf8
 Write-Host "Reopened VM: same_uuid=$sameIdentity, started=$vmStarted, final=$state, orphan=$($orphans.Count)"
 if (-not $sameIdentity -or -not $vmStarted -or -not $poweroffSucceeded -or $state -ne 'poweroff' -or
     $orphans.Count -gt 0 -or -not $report.original_vm_definition_present -or -not $report.original_global_profile_present) {
