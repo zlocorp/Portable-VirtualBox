@@ -88,17 +88,119 @@ function Query-VmState {
     return 'UNKNOWN'
 }
 function Require-Step {
-    param([string]$Name,[string[]]$Args)
-    $r=Invoke-LocalVBox -Name $Name -Arguments $Args
+    param([string]$Name,[string[]]$Arguments)
+    if (@($Arguments).Count -lt 2) { throw "Missing VBoxManage arguments for $Name" }
+    $r=Invoke-LocalVBox -Name $Name -Arguments $Arguments
     $script:results+= $r
     Write-Host "$Name : $($r.status)/$($r.exit_code)"
     if ($r.status -ne 'EXITED' -or $r.exit_code -ne 0) { throw "VM setup command failed: $Name" }
 }
 try {
     $env:VBOX_USER_HOME=$profile
-    Require-Step -Name 'set_machine_folder' -Args @('setproperty','machinefolder',$machines)
-    Require-Step -Name 'create_fixture' -Args @('createvm','--name',$vm,'--platform-architecture','x86','--register')
-    Require-Step -Name 'configure_fixture' -Args @('modifyvm',$vm,'--memory','128','--cpus','1','--nic1','none','--boot1','none','--boot2','none','--boot3','none','--boot4','none')
+    Require-Step -Name 'set_machine_folder' -Arguments @('setproperty','machinefolder',$machines)
+    Require-Step -Name 'create_fixture' -Arguments @('createvm','--name',$vm,'--platform-architecture','x86','--register')
+    Require-Step -Name 'configure_fixture' -Arguments @('modifyvm',$vm,'--memory','128','--cpus','1','--nic1','none','--boot1','none','--boot2','none','--boot3','none','--boot4','none')
+    Require-Step -Name 'list_fixture' -Arguments @('list','vms')
+    $registered=Get-Content -LiteralPath (Join-Path $root 'list_fixture.stdout.txt') -Raw
+    if ($registered -notmatch [regex]::Escape($vm)) { throw 'Test VM not registered despite zero CLI exit codes' }
+    Require-Step -Name 'inspect_fixture' -Arguments @('showvminfo',$vm,'--machinereadable')
+    $info=Get-Content -LiteralPath (Join-Path $root 'inspect_fixture.stdout.txt') -Raw
+    if ($info -notmatch '(?m)^memory=128\r?
+    $attempt=Invoke-LocalVBox -Name 'start_headless' -Arguments @('startvm',$vm,'--type','headless')
+    $results+= $attempt
+    $bootReturnedZero=($attempt.status -eq 'EXITED' -and $attempt.exit_code -eq 0)
+    Write-Host "startvm: $($attempt.status)/$($attempt.exit_code)"
+    $endState=Query-VmState
+    if ($endState -in @('running','paused','stuck','saving','starting','stopping') -or $bootReturnedZero) {
+        $poweroffNeeded=$true
+        # Only the disposable VM explicitly created above. Never kill by process name.
+        $stop=Invoke-LocalVBox -Name 'poweroff_fixture' -Arguments @('controlvm',$vm,'poweroff')
+        $results+= $stop
+        $poweroffSucceeded=($stop.status -eq 'EXITED' -and $stop.exit_code -eq 0)
+        Write-Host "controlvm poweroff: $($stop.status)/$($stop.exit_code)"
+        $endState=Query-VmState
+    }
+} finally {
+    if ($null -eq $oldHome) { Remove-Item Env:\VBOX_USER_HOME -ErrorAction SilentlyContinue }
+    else { $env:VBOX_USER_HOME=$oldHome }
+}
+$remaining=@(Get-Process -Name 'VirtualBoxVM' -ErrorAction SilentlyContinue |
+    ForEach-Object { $_.Id })
+$report=[ordered]@{
+    experiment='official-VBoxSup-headless-empty-fixture'
+    source_commit=$env:GITHUB_SHA
+    host_os=[Environment]::OSVersion.VersionString
+    kernel_driver_state=[string]$service.Status
+    startvm_returned_zero=[bool]$bootReturnedZero
+    poweroff_needed=[bool]$poweroffNeeded
+    poweroff_succeeded=[bool]$poweroffSucceeded
+    final_vm_state=$endState
+    orphaned_vm_process_count=$remaining.Count
+    commands=$results
+    guest_os_booted=$false
+    vm_disks_created=$false
+}
+$report | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $root 'vm-boot-results.json') -Encoding utf8
+Write-Host "VM boot capability: start_exit_zero=$bootReturnedZero; final_state=$endState; orphan_VM_processes=$($remaining.Count)"
+if ($env:GITHUB_STEP_SUMMARY) {
+    '### Disposable Windows VBoxSup boot capability' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    "- VBoxSup: $($service.Status); startvm code zero: $bootReturnedZero" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    "- Final VM state: $endState; orphan VM processes: $($remaining.Count)" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    '- No guest disk, OS or user virtual machines were involved.' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+}
+if ($remaining.Count -ne 0 -or ($poweroffNeeded -and $endState -in @('running','paused','stuck','starting'))) {
+    throw 'Blank test VM remained active; disposable host must be destroyed'
+}
+# Nonzero startvm is a recorded capability result, not a build failure.
+) { throw 'Test VM memory was not configured' }
+    if ($info -notmatch '(?m)^VMState="poweroff"\r?
+    $attempt=Invoke-LocalVBox -Name 'start_headless' -Arguments @('startvm',$vm,'--type','headless')
+    $results+= $attempt
+    $bootReturnedZero=($attempt.status -eq 'EXITED' -and $attempt.exit_code -eq 0)
+    Write-Host "startvm: $($attempt.status)/$($attempt.exit_code)"
+    $endState=Query-VmState
+    if ($endState -in @('running','paused','stuck','saving','starting','stopping') -or $bootReturnedZero) {
+        $poweroffNeeded=$true
+        # Only the disposable VM explicitly created above. Never kill by process name.
+        $stop=Invoke-LocalVBox -Name 'poweroff_fixture' -Arguments @('controlvm',$vm,'poweroff')
+        $results+= $stop
+        $poweroffSucceeded=($stop.status -eq 'EXITED' -and $stop.exit_code -eq 0)
+        Write-Host "controlvm poweroff: $($stop.status)/$($stop.exit_code)"
+        $endState=Query-VmState
+    }
+} finally {
+    if ($null -eq $oldHome) { Remove-Item Env:\VBOX_USER_HOME -ErrorAction SilentlyContinue }
+    else { $env:VBOX_USER_HOME=$oldHome }
+}
+$remaining=@(Get-Process -Name 'VirtualBoxVM' -ErrorAction SilentlyContinue |
+    ForEach-Object { $_.Id })
+$report=[ordered]@{
+    experiment='official-VBoxSup-headless-empty-fixture'
+    source_commit=$env:GITHUB_SHA
+    host_os=[Environment]::OSVersion.VersionString
+    kernel_driver_state=[string]$service.Status
+    startvm_returned_zero=[bool]$bootReturnedZero
+    poweroff_needed=[bool]$poweroffNeeded
+    poweroff_succeeded=[bool]$poweroffSucceeded
+    final_vm_state=$endState
+    orphaned_vm_process_count=$remaining.Count
+    commands=$results
+    guest_os_booted=$false
+    vm_disks_created=$false
+}
+$report | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $root 'vm-boot-results.json') -Encoding utf8
+Write-Host "VM boot capability: start_exit_zero=$bootReturnedZero; final_state=$endState; orphan_VM_processes=$($remaining.Count)"
+if ($env:GITHUB_STEP_SUMMARY) {
+    '### Disposable Windows VBoxSup boot capability' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    "- VBoxSup: $($service.Status); startvm code zero: $bootReturnedZero" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    "- Final VM state: $endState; orphan VM processes: $($remaining.Count)" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    '- No guest disk, OS or user virtual machines were involved.' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+}
+if ($remaining.Count -ne 0 -or ($poweroffNeeded -and $endState -in @('running','paused','stuck','starting'))) {
+    throw 'Blank test VM remained active; disposable host must be destroyed'
+}
+# Nonzero startvm is a recorded capability result, not a build failure.
+) { throw 'Test VM is not powered off before boot test' }
     # This tests host virtualization capability. It does NOT boot a guest OS.
     $attempt=Invoke-LocalVBox -Name 'start_headless' -Arguments @('startvm',$vm,'--type','headless')
     $results+= $attempt
