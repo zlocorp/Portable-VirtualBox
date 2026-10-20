@@ -13,7 +13,7 @@ $vbox=Join-Path $app 'VBoxManage.exe'
 if (-not (Test-Path -LiteralPath $vbox -PathType Leaf)) { throw 'Missing VBoxManage.exe' }
 if (Test-Path -LiteralPath $OutputDirectory) { throw 'Refusing existing output folder' }
 $root=(New-Item -ItemType Directory -Path $OutputDirectory).FullName
-$home=(New-Item -ItemType Directory -Path (Join-Path $root 'VBOX_HOME_Тест')).FullName
+$vboxHome=(New-Item -ItemType Directory -Path (Join-Path $root 'VBOX_HOME_Тест')).FullName
 $machine=(New-Item -ItemType Directory -Path (Join-Path $root 'Machines Test Тест')).FullName
 $fixture='portable_probe_fixture'
 $results=@()
@@ -44,7 +44,7 @@ function Invoke-VBoxStep {
     return [pscustomobject]@{name=$Name;status=$status;exit_code=$exitCode;elapsed_ms=$watch.ElapsedMilliseconds;error=$problem;stdout_file=(Split-Path $stdout -Leaf);stderr_file=(Split-Path $stderr -Leaf)}
 }
 try {
-    $env:VBOX_USER_HOME=$home
+    $env:VBOX_USER_HOME=$vboxHome
     foreach ($step in $steps) {
         $r=Invoke-VBoxStep -Name $step.name -Arguments $step.arguments
         $results+= $r
@@ -55,7 +55,7 @@ try {
     if ($null -eq $old) { Remove-Item Env:\VBOX_USER_HOME -ErrorAction SilentlyContinue }
     else { $env:VBOX_USER_HOME=$old }
 }
-$config=Join-Path $home 'VirtualBox.xml'
+$config=Join-Path $vboxHome 'VirtualBox.xml'
 $vboxFiles=@(Get-ChildItem -LiteralPath $machine -Filter '*.vbox' -File -Recurse -ErrorAction SilentlyContinue)
 $propertiesText=if (Test-Path (Join-Path $root 'get_properties.stdout.txt')) { Get-Content -LiteralPath (Join-Path $root 'get_properties.stdout.txt') -Raw } else { '' }
 $listText=if (Test-Path (Join-Path $root 'list_definitions.stdout.txt')) { Get-Content -LiteralPath (Join-Path $root 'list_definitions.stdout.txt') -Raw } else { '' }
