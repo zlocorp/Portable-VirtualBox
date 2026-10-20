@@ -22,6 +22,8 @@ Portable-VirtualBox_x64.exe --version
 Portable-VirtualBox_x64.exe --selftest
 Portable-VirtualBox_x64.exe --diagnose
 Portable-VirtualBox_x64.exe --preflight
+Portable-VirtualBox_x64.exe --profile-status
+Portable-VirtualBox_x64.exe --prepare-profile
 Portable-VirtualBox_x64.exe --lang ru --help
 Portable-VirtualBox_x64.exe --lang ru --diagnose
 Portable-VirtualBox_x64.exe --lang en --diagnose
@@ -30,6 +32,10 @@ Portable-VirtualBox_x64.exe --lang en --diagnose
 Diagnostics print status/counts without private image paths or service account names. An unknown observation returns diagnostic exit 4. A blocked preflight returns 3. A clear preflight is neither ownership evidence nor authorization to run an unverified runtime.
 
 **New localized read-only GUI:** double-clicking the compiled EXE now opens a Windows diagnostics panel, automatically choosing RU on a Russian-language host (otherwise EN), with manual RU/EN switching, **Refresh diagnostics**, **Copy report**, and **Close**. All controls have real effects; the GUI cannot start a VM or mutate system services. Russian CLI help/diagnostics are emitted as UTF-8 and verified by Windows CI. The Oracle VirtualBox Manager has its own separate language setting. Visual GUI layout still needs manual acceptance on isolated Windows 11.
+
+**First-run setup:** With no arguments the localized preview opens a read-only diagnostics GUI with a real "Prepare portable folders" button. The explicit CLI command `--prepare-profile` creates only `data/.VirtualBox`, `data/Machines`, and `logs` alongside the EXE; existing files are never overwritten, and unsafe roots/reparse points/collisions are blocked. `--profile-status` reports READY (exit 0), MISSING (exit 2) or BLOCKED (exit 3). An `app64` with Oracle binaries is NOT automatically downloaded or installed by these commands.
+
+**Developer-only native proof:** a hidden `--ci-service-smoke` is limited to the disposable GitHub-hosted Windows runner configuration; it executes the prepared signed Oracle `VBoxManage setproperty machinefolder`, verifies the exact newly registered `VBoxSDS`, waits for an idle service, then unregisters it using Oracle's supported command. This is **not** a production Start/Stop feature or a security boundary that should be exposed on an ordinary Windows PC. [Proof run](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39438429411).
 
 Developer tools:
 
@@ -68,14 +74,18 @@ A controlled separate MSI reference installation with only `VBoxApplication` ins
 - [Practical P0–P5 product roadmap](docs/PRODUCT-PLAN-2026-10-20.md): first-run UI, real Start/Stop with guarded driver lifecycle, RU/EN, updates, ZIP and acceptance. **Next task is implementing a usable safe launcher**, not another generic coordinator.
 - [Exact inherited binary audit](docs/DEPENDENCIES-2026-10-20.md): bundled AutoIt **3.3.16.1**, `7za 16.04`, DevCon Windows 7 WDK and SnetCfg Windows Server 2003 DDK. Some were unsigned; none is used by the modern launcher. Signed official AutoIt **3.3.18.0** is already used in CI. We plan to **exclude** stale runtime utilities, not simply replace them with arbitrary binaries.
 
+## Self-contained diagnostic preview ZIP
+
+CI packages `Portable-VirtualBox-diagnostic-preview.zip` with precisely four contents: `Portable-VirtualBox.exe`, `README.md`, `LICENSE.md`, and `PREVIEW-NOT-A-HYPERVISOR.txt`. It also publishes a SHA-256 sidecar. The ZIP deliberately **does not contain** Oracle VirtualBox, its driver files, legacy 7-Zip, DevCon, SnetCfg, or a VM. Unpacking it in a new Unicode directory and executing the built EXE's profile setup are checked in Windows CI. This is a testable *diagnostic-only* preview, NOT a functional hypervisor release.
+
 ## Status and evidence
 
 See the [latest coordinator report](docs/EXECUTION-2026-10-20-coordinator.md), [completed coordinator plan](docs/plans/2026-10-20-lifecycle-coordinator.md), [Windows observation report](docs/EXECUTION-2026-10-19-observation.md), [app64 preparation report](docs/EXECUTION-2026-10-19-app64.md), [broader roadmap](docs/MODERNIZATION-2026.md), and [security model](docs/SECURITY-MODEL.md).
 
-At localization code/test checkpoint `dc03104`, the Python suite contains **98 tests**: Windows passes 97 and skips one symbolic-link privilege test; Linux passes 93 and skips five Windows-native tests. The native suite passes **448 assertions across 10 compiled harnesses**, including 97 launcher localization checks. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
+At this large-batch development checkpoint, 105 Python tests and 487 native AutoIt assertions (12 harnesses) are discovered; the exact pass/skip counts and fresh run IDs are recorded in [the large-batch execution report](docs/EXECUTION-2026-10-20-P1-LARGE-BATCH.md). Inherited privileged startup remains quarantined. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
 
 ## Attribution and release boundaries
 
 Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. Existing upstream BUILDING.md describes historical packaging and is not the current CI procedure.
 
-Next work prioritizes portable VM configuration relocation, guarded startup/shutdown orchestration and Windows 11/installed-VirtualBox coexistence. Clean-host empty-VM boot, two restarts and complete driver cleanup were verified in disposable CI; production safety is still unproven. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
+Next major package is reviewed per-session **real driver-assisted Start/Stop from the AutoIt GUI** on a disposable Windows host, followed by Windows 11/user/coexistence acceptance. First-run profile creation, localized UI, native VBoxSDS proof and a diagnostic ZIP are now implemented; a production hypervisor launcher is not yet enabled. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
