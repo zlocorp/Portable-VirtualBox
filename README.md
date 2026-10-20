@@ -10,7 +10,7 @@ Based on the original `vboxme/Portable-VirtualBox` master snapshot `5b58dbbe701c
 - **Native read-only Windows observations:** SCM service configuration/status, process identity through retained query handles, installation keys in both registry views, and workstation/server product type. Unknown/denied observations block preflight instead of becoming false absence. Querying a resource never grants ownership or permission to mutate it.
 - Exact-version Oracle download verification and passive PE resource extraction into MSI/CAB files.
 - **MSI/CAB to new app64 file preparation:** the pinned Oracle 7.2.20 package produces 185 application files / 247738522 bytes without running its installer, MSI actions or any payload. Read-only MSI tables determine placement; cabinet callbacks use Unicode-aware file I/O. Per-file hashes, key AMD64 headers, signatures and unchanged inputs are checked in CI.
-- Native AutoIt lifecycle policy and exclusive journal snapshots. This is tested policy code, not a completed privileged Windows service adapter.
+- **Journaled lifecycle coordination:** persist intent, recheck identity, validate acquisition receipts, confirm results and clean up in reverse order. Cancellation, partial failures, storage failures and changed resources are tested with synthetic effects. Real exclusive UTF-8 snapshots are used in native tests. This is not a completed privileged service/process effect adapter and is not wired into the preview launcher.
 - Read-only VM registry inventory and regression tests for malformed input, download races, staging publication, XML encodings and Windows paths.
 
 The old runtime is preserved byte-for-byte as `source/legacy/Portable-VirtualBox.au3.disabled` and is not compiled. The preview does not request administrator rights or start virtual machines. Hosted test results do not establish coverage under a standard-user Windows account.
@@ -43,12 +43,12 @@ VM inventory hides UUIDs and paths unless `--details` is requested. It does not 
 
 ## Status and evidence
 
-See the [Windows observation report](docs/EXECUTION-2026-10-19-observation.md), [app64 preparation report](docs/EXECUTION-2026-10-19-app64.md), [observation implementation plan](docs/plans/2026-10-19-windows-observation.md), [broader roadmap](docs/MODERNIZATION-2026.md), and [security model](docs/SECURITY-MODEL.md).
+See the [latest coordinator report](docs/EXECUTION-2026-10-20-coordinator.md), [completed coordinator plan](docs/plans/2026-10-20-lifecycle-coordinator.md), [Windows observation report](docs/EXECUTION-2026-10-19-observation.md), [app64 preparation report](docs/EXECUTION-2026-10-19-app64.md), [broader roadmap](docs/MODERNIZATION-2026.md), and [security model](docs/SECURITY-MODEL.md).
 
-At verified checkpoint `d6f2137` the Python suite contains 59 tests: Windows passes 58 and skips one symbolic-link test; Linux passes 54 and skips five Windows-native tests. The compiled native suite passes 164 assertions: 56 lifecycle, 11 runtime, 77 Windows observation and 20 edge checks. The Oracle/app64 preparation also passes. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
+At verified code/test checkpoint `1e952e4` the Python suite contains 62 tests: Windows passes 61 and skips one symbolic-link test; Linux passes 57 and skips five Windows-native tests. The native suite passes **351 assertions across 9 compiled harnesses**, including 187 new coordinator/storage/callback/token assertions. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
 
 ## Attribution and release boundaries
 
 Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. Existing upstream BUILDING.md describes historical packaging and is not the current CI procedure.
 
-Next work is journal/observation coordination with synthetic effects, followed by separately reviewed system-changing adapters, dependency/COM checks and isolated VM acceptance. Neither a master merge nor a release has been performed.
+Next work is an ownership-bound process effect adapter, first tested on harmless private children in hosted Windows, followed by separately reviewed service/dependency/COM integration and isolated VM acceptance. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
