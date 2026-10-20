@@ -12,6 +12,7 @@
 #include "HostDiagnostics.au3"
 #include "LauncherI18n.au3"
 #include "LauncherGui.au3"
+#include "PortableProfile.au3"
 #NoTrayIcon
 
 ; UI defaults to the host's language. Explicit CLI selection never persists
@@ -42,8 +43,31 @@ If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
             _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
-                "  --version  --diagnose  --preflight  --selftest  --help" & @CRLF & _
+                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
+            Exit 0
+        Case "--profile-status"
+            Local $profile = _PP_Inspect(@ScriptDir)
+            Switch $profile["status"]
+                Case "READY"
+                    _LI_Write(_LI("profile.ready") & @CRLF)
+                    If Not $profile["app_present"] Then _LI_Write(_LI("profile.appmissing") & @CRLF)
+                    Exit 0
+                Case "MISSING"
+                    _LI_Write(_LI("profile.missing") & @CRLF)
+                    Exit 2
+                Case Else
+                    _LI_Write(_LI("profile.blocked") & @CRLF, True)
+                    Exit 3
+            EndSwitch
+        Case "--prepare-profile"
+            Local $profile = _PP_Ensure(@ScriptDir)
+            If $profile["status"] <> "READY" Then
+                _LI_Write(_LI("profile.blocked") & @CRLF, True)
+                Exit 3
+            EndIf
+            _LI_Write(_LI("profile.ready") & @CRLF)
+            If Not $profile["app_present"] Then _LI_Write(_LI("profile.appmissing") & @CRLF)
             Exit 0
         Case "--version"
             ConsoleWrite("Portable-VirtualBox development baseline 5b58dbbe" & @CRLF)
