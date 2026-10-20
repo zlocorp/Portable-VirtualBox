@@ -81,21 +81,7 @@ jobs:
           $boot = Join-Path $env:RUNNER_TEMP 'official-empty-vm-boot'
           if (Test-Path -LiteralPath $boot) {
             Get-ChildItem -LiteralPath $boot -File |
-              Where-Object { $_.Name -eq 'vm-boot-results.json' -or $_.Name -match '^(set_machine_folder|create_fixture|configure_fixture|start_headless|show_state|poweroff_fixture)\.(stdout|stderr)\.txt
-          if (Test-Path -LiteralPath $cli) {
-            Get-ChildItem -LiteralPath $cli -File |
-              Where-Object { $_.Name -eq 'probe-results.json' -or $_.Name -match '^(version|list_vms|system_properties)\.(stdout|stderr)\.txt$' } |
-              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target -Force }
-          }
-      - name: Retain bounded diagnostic evidence, never Oracle payloads
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: official-oracle-7.2.20-reference
-          path: results/official-control/
-          if-no-files-found: warn
-          retention-days: 7
- } |
+              Where-Object { $_.Name -eq 'vm-boot-results.json' -or $_.Name -match '^(set_machine_folder|create_fixture|configure_fixture|start_headless|show_state|poweroff_fixture)\.(stdout|stderr)\.txt$' } |
               ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target }
           }
           $cli = Join-Path $env:RUNNER_TEMP 'official-installed-cli'
