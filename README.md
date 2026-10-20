@@ -22,9 +22,14 @@ Portable-VirtualBox_x64.exe --version
 Portable-VirtualBox_x64.exe --selftest
 Portable-VirtualBox_x64.exe --diagnose
 Portable-VirtualBox_x64.exe --preflight
+Portable-VirtualBox_x64.exe --lang ru --help
+Portable-VirtualBox_x64.exe --lang ru --diagnose
+Portable-VirtualBox_x64.exe --lang en --diagnose
 ```
 
-Diagnostics print status/counts without private image paths or service account names. An unknown observation returns diagnostic exit 4. A blocked preflight returns 3. A clear preflight is neither ownership evidence nor authorization to run an unverified runtime. With no arguments the preview shows a warning and exits.
+Diagnostics print status/counts without private image paths or service account names. An unknown observation returns diagnostic exit 4. A blocked preflight returns 3. A clear preflight is neither ownership evidence nor authorization to run an unverified runtime.
+
+**New localized read-only GUI:** double-clicking the compiled EXE now opens a Windows diagnostics panel, automatically choosing RU on a Russian-language host (otherwise EN), with manual RU/EN switching, **Refresh diagnostics**, **Copy report**, and **Close**. All controls have real effects; the GUI cannot start a VM or mutate system services. Russian CLI help/diagnostics are emitted as UTF-8 and verified by Windows CI. The Oracle VirtualBox Manager has its own separate language setting. Visual GUI layout still needs manual acceptance on isolated Windows 11.
 
 Developer tools:
 
@@ -58,11 +63,16 @@ A controlled separate MSI reference installation with only `VBoxApplication` ins
 
 [Full two-cycle evidence](docs/EXECUTION-2026-10-20-two-cycle.md).
 
+## Product delivery roadmap and binary audit
+
+- [Practical P0–P5 product roadmap](docs/PRODUCT-PLAN-2026-10-20.md): first-run UI, real Start/Stop with guarded driver lifecycle, RU/EN, updates, ZIP and acceptance. **Next task is implementing a usable safe launcher**, not another generic coordinator.
+- [Exact inherited binary audit](docs/DEPENDENCIES-2026-10-20.md): bundled AutoIt **3.3.16.1**, `7za 16.04`, DevCon Windows 7 WDK and SnetCfg Windows Server 2003 DDK. Some were unsigned; none is used by the modern launcher. Signed official AutoIt **3.3.18.0** is already used in CI. We plan to **exclude** stale runtime utilities, not simply replace them with arbitrary binaries.
+
 ## Status and evidence
 
 See the [latest coordinator report](docs/EXECUTION-2026-10-20-coordinator.md), [completed coordinator plan](docs/plans/2026-10-20-lifecycle-coordinator.md), [Windows observation report](docs/EXECUTION-2026-10-19-observation.md), [app64 preparation report](docs/EXECUTION-2026-10-19-app64.md), [broader roadmap](docs/MODERNIZATION-2026.md), and [security model](docs/SECURITY-MODEL.md).
 
-At the latest verified executable-code checkpoint `503b435`, the Python suite contains **89 tests**: Windows passes 88 and skips one symbolic-link test; Linux passes 84 and skips five Windows-native tests. The native suite passes **351 assertions across 9 compiled harnesses**, including 187 new coordinator/storage/callback/token assertions. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
+At localization code/test checkpoint `dc03104`, the Python suite contains **98 tests**: Windows passes 97 and skips one symbolic-link privilege test; Linux passes 93 and skips five Windows-native tests. The native suite passes **448 assertions across 10 compiled harnesses**, including 97 launcher localization checks. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
 
 ## Attribution and release boundaries
 
