@@ -1,4 +1,5 @@
 name: Disposable VBoxSDS auto-registration lifecycle
+# Bounded hosted-host verification of Oracle --unregservice; never on a user's PC.
 
 on:
   push:
