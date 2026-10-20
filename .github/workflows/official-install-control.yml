@@ -1,0 +1,73 @@
+name: Official VirtualBox 7.2.20 control (disposable Windows only)
+
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - .github/workflows/official-install-control.yml
+      - scripts/official_install_control.ps1
+      - tests/test_installer_control_contract.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: official-install-control-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  official-control:
+    if: github.repository == 'zlocorp/Portable-VirtualBox'
+    runs-on: windows-2022
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check minimal installation contract
+        shell: pwsh
+        run: |
+          python -X utf8 -m unittest tests.test_installer_control_contract -v
+          if ($LASTEXITCODE -ne 0) { throw 'Installation research contract failed' }
+      - name: Download signed Oracle wrapper and extract MSI/CAB without execution
+        shell: pwsh
+        run: ./scripts/inspect_oracle.ps1 -WorkDirectory (Join-Path $env:RUNNER_TEMP 'oracle-official-reference')
+      - name: Install VBoxApplication only using bounded silent MSI on disposable runner
+        shell: pwsh
+        run: |
+          $msi = Join-Path $env:RUNNER_TEMP 'oracle-official-reference\extracted\VirtualBox-7.2.20-r175154-MultiArch_amd64.msi'
+          $output = Join-Path $env:RUNNER_TEMP 'oracle-official-control'
+          ./scripts/official_install_control.ps1 -MsiPath $msi -OutputDirectory $output -TimeoutSeconds 200
+      - name: Query official VBoxManage when installed (no VM launch)
+        if: env.OFFICIAL_CLI != ''
+        shell: pwsh
+        run: |
+          $app = Split-Path $env:OFFICIAL_CLI -Parent
+          $target = Join-Path $env:RUNNER_TEMP 'official-installed-cli'
+          ./scripts/vbox_cli_probe.ps1 -AppDir $app -OutputDirectory $target -TimeoutSeconds 25 -OfficialInstallReference
+      - name: Collect diagnostic metadata only
+        if: always()
+        shell: pwsh
+        run: |
+          $target = 'results/official-control'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          $folder = Join-Path $env:RUNNER_TEMP 'oracle-official-control'
+          foreach ($name in @('install-results.json','msi-tail.txt')) {
+            $file = Join-Path $folder $name
+            if (Test-Path -LiteralPath $file) { Copy-Item -LiteralPath $file -Destination $target }
+          }
+          $cli = Join-Path $env:RUNNER_TEMP 'official-installed-cli'
+          if (Test-Path -LiteralPath $cli) {
+            Get-ChildItem -LiteralPath $cli -File |
+              Where-Object { $_.Name -eq 'probe-results.json' -or $_.Name -match '^(version|list_vms|system_properties)\.(stdout|stderr)\.txt$' } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target -Force }
+          }
+      - name: Retain bounded diagnostic evidence, never Oracle payloads
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: official-oracle-7.2.20-reference
+          path: results/official-control/
+          if-no-files-found: warn
+          retention-days: 7
