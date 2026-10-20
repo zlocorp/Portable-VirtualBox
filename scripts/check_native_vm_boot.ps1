@@ -30,10 +30,10 @@ $marker=[regex]::Matches($transcript,'(?m)^Native VM: VERIFIED_OWN_BOOT_AND_POWE
 if ($marker.Count -ne 1) { throw 'Compiled native AutoIt success evidence is absent or ambiguous' }
 $nativeUuid=$marker[0].Groups[1].Value
 $vmName='pvbox_compiled_native_fixture'
-$home=Join-Path $root 'data\.VirtualBox'
+$vboxHome=Join-Path $root 'data\.VirtualBox'
 $machines=Join-Path $root 'data\Machines'
 $vmFile=Join-Path (Join-Path $machines $vmName) ($vmName+'.vbox')
-$profileFile=Join-Path $home 'VirtualBox.xml'
+$profileFile=Join-Path $vboxHome 'VirtualBox.xml'
 foreach ($file in @($vmFile,$profileFile)) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw 'Native AutoIt did not create a private VM/profile' }
 }
@@ -66,7 +66,7 @@ $stderr=Join-Path $out 'independent-vminfo.stderr.txt'
 $oldHome=[Environment]::GetEnvironmentVariable('VBOX_USER_HOME','Process')
 $p=$null
 try {
-    $env:VBOX_USER_HOME=$home
+    $env:VBOX_USER_HOME=$vboxHome
     $p=Start-Process -FilePath $cli -WorkingDirectory (Join-Path $root 'app64') -ArgumentList ('showvminfo '+$vmName+' --machinereadable') -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
     if (-not $p.WaitForExit($TimeoutSeconds*1000)) {
         try { $p.Kill(); [void]$p.WaitForExit(5000) } catch {}
