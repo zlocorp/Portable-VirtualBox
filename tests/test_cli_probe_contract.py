@@ -13,6 +13,8 @@ class VBoxCliProbeContract(unittest.TestCase):
     def test_bounded_fixed_commands_with_isolated_profile(self):
         s = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("VBOX_USER_HOME", s)
+        self.assertIn("$env:GITHUB_ACTIONS -ne 'true'", s)
+        self.assertIn("$env:GITHUB_REPOSITORY -ne 'zlocorp/Portable-VirtualBox'", s)
         self.assertIn("VBoxManage.exe", s)
         self.assertIn("'--version'", s)
         self.assertIn("'vms'", s)
