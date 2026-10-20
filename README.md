@@ -52,14 +52,20 @@ A controlled separate MSI reference installation with only `VBoxApplication` ins
 - [Successful portable configuration fixture](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39400449110)
 - [Evidence and follow-up plan](docs/EXECUTION-2026-10-20-runtime-smoke.md)
 
+## Two real blank-VM sessions on one disposable Windows host (2026-10-20)
+
+[GitHub Actions run 39416531988](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39416531988) proved a complete **clean-host two-cycle** with the prepared Oracle 7.2.20 app64 and separately installed signed VBoxSup. First boot/poweroff, VBoxSDS unregistration, VBoxSup stop/driver-store removal, and guarded deletion of the leftover stopped VBoxSup service were verified; the runner was left with zero VBox services and no published INF or system driver file. The same original VM configuration and UUID were reused for a second headless start/poweroff, followed by the same verified cleanup. **No guest OS or disk was booted.** The process remains an isolated research workflow, not an implemented production launcher; installed-VBox coexistence and drive-letter relocation still need testing.
+
+[Full two-cycle evidence](docs/EXECUTION-2026-10-20-two-cycle.md).
+
 ## Status and evidence
 
 See the [latest coordinator report](docs/EXECUTION-2026-10-20-coordinator.md), [completed coordinator plan](docs/plans/2026-10-20-lifecycle-coordinator.md), [Windows observation report](docs/EXECUTION-2026-10-19-observation.md), [app64 preparation report](docs/EXECUTION-2026-10-19-app64.md), [broader roadmap](docs/MODERNIZATION-2026.md), and [security model](docs/SECURITY-MODEL.md).
 
-At verified code/test checkpoint `ca4afd6` the Python suite contains **68 tests**: Windows passes 67 and skips one symbolic-link test; Linux passes 63 and skips five Windows-native tests. The native suite passes **351 assertions across 9 compiled harnesses**, including 187 new coordinator/storage/callback/token assertions. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
+At the latest verified executable-code checkpoint `503b435`, the Python suite contains **89 tests**: Windows passes 88 and skips one symbolic-link test; Linux passes 84 and skips five Windows-native tests. The native suite passes **351 assertions across 9 compiled harnesses**, including 187 new coordinator/storage/callback/token assertions. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
 
 ## Attribution and release boundaries
 
 Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. Existing upstream BUILDING.md describes historical packaging and is not the current CI procedure.
 
-Next work prioritizes ownership-safe VBoxSDS service registration/cleanup and signed VBoxSup driver requirements on disposable Windows hosts, then isolated VM start/stop acceptance. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
+Next work prioritizes portable VM configuration relocation, guarded startup/shutdown orchestration and Windows 11/installed-VirtualBox coexistence. Clean-host empty-VM boot, two restarts and complete driver cleanup were verified in disposable CI; production safety is still unproven. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
