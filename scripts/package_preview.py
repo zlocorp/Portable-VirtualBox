@@ -19,8 +19,11 @@ MEMBERS = ("LICENSE.md", "PREVIEW-NOT-A-HYPERVISOR.txt",
 NOTICE = """Portable-VirtualBox development diagnostic preview
 
 This is NOT a usable virtual machine hypervisor.
-This development diagnostic preview does not launch virtual machines,
+The ordinary user interface does not launch virtual machines,
 install drivers, register Oracle services, or redistribute VirtualBox.
+Normal use remains read-only except when you explicitly prepare data folders.
+An isolated GitHub Actions-only internal research command can exercise
+Oracle VBoxSDS registration/cleanup; do not use it on a personal PC.
 
 What works:
 - RU/EN read-only Windows/VirtualBox diagnostics and built-in help
