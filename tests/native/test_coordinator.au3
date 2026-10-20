@@ -5,12 +5,14 @@ Global $failSave = 0, $raceProbe = 0, $cancelSave = 0, $cancelEffect = False, $r
 Global $unknownProbe = 0, $reenter = False, $nested = "", $badStore = False
 Func Check($ok, $label)
     $n += 1
+    ConsoleWrite("CHECK " & $n & ": " & $label & @CRLF)
     If Not $ok Then
         $failed += 1
         ConsoleWriteError("FAIL: " & $label & @CRLF)
     EndIf
 EndFunc
 Func Reset()
+    ConsoleWrite("RESET begin " & $serial & @CRLF)
     Local $empty[]
     $resources = $empty
     $snapshots = $empty
@@ -31,10 +33,12 @@ Func Reset()
     $badStore = False
     $serial += 1
     $token = _PC_New("coordinator-test-" & $serial, Probe, Effect, Store)
+    ConsoleWrite("RESET token " & $token & @CRLF)
     Return $token
 EndFunc
 Func Probe($q)
     $probes += 1
+    ConsoleWrite("PROBE " & $probes & " " & $q["name"] & @CRLF)
     $events &= "probe:" & $q["name"] & ";"
     Local $r[]
     $r["kind"] = $q["kind"]
@@ -58,6 +62,7 @@ Func Probe($q)
     Return SetError(0, 0, $r)
 EndFunc
 Func Effect($q)
+    ConsoleWrite("EFFECT " & $q["verb"] & " " & $q["name"] & @CRLF)
     Local $r = $q
     If $q["verb"] == "acquire" Then
         $creates += 1
@@ -86,6 +91,7 @@ Func Effect($q)
 EndFunc
 Func Store($q)
     $saves += 1
+    ConsoleWrite("STORE " & $saves & " " & $q["phase"] & @CRLF)
     $events &= "save:" & $q["phase"] & ";"
     If $reenter Then
         $reenter = False
