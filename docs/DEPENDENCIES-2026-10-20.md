@@ -1,6 +1,17 @@
 # Inherited binary and language asset inventory (2026-10-20)
 
-Compiled development executable uses official signed AutoIt **3.3.18.0** obtained directly in CI, and the experimental `app64` is built from Oracle **VirtualBox 7.2.20** signed distribution. Both are currently the latest stable official versions, verified 2026-10-20.
+Compiled development executable uses official signed AutoIt **3.3.18.0** obtained directly in CI, and the experimental `app64` preparation is pinned to signed Oracle **VirtualBox 7.2.22** (build **175245**, released 2026-10-20). Both are the latest stable releases confirmed from the manufacturers' release pages on 2026-10-20.
+
+## Current signed dependency pins (2026-10-20)
+
+- **Oracle VirtualBox 7.2.22** (2026-10-20, maintenance/security release): official Windows installer `VirtualBox-7.2.22-175245-Win.exe`, SHA-256 `afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f`. Independent [passive package inspection](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497891196) verified **185 files / 247834716 bytes**, signatures, MSI version/platform, hash-consistent staged outputs and unchanged Windows services.
+- **VBoxSup** from exactly that Oracle package: SYS `4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be`, INF `2fc48547de7dad96e3ebf0b49c339757317abd0c8a482f5f412a59fb730e05e4`, CAT `8e8c9dc09e518a75968ebf80174e33b77782c33baa4e71dafb637f6d6566ee9d`. These are *new* driver bytes, not compatible with 7.2.20 pins; runtime boot/teardown requires its own fresh CI result.
+- **AutoIt 3.3.18.0** (released 2025-09-07) remains current. CI uses the official signed portable toolkit. We must not replace it with inherited 3.3.16.1.
+- **7-Zip 26.04** (released 2026-10-05) is current, but the modern build **does not require 7z/7za at all**: the original unsigned 16.04 is retained only as quarantined legacy provenance.
+- **DevCon:** Microsoft recommends built-in **PnPUtil**, which we already use for driver experiments. No standalone DevCon download should be bundled. **SnetCfg** is an obsolete, quarantined optional network-component tool; there is no active feature requiring an equivalent.
+- Oracle **Extension Pack** is deliberately excluded pending explicit opt-in and license review. Guest Additions ISO is not a runtime prerequisite for the launcher.
+
+Manufacturer references: [Oracle download index](https://download.virtualbox.org/virtualbox/7.2.22/), [AutoIt downloads](https://www.autoitscript.com/site/autoit/downloads/), [7-Zip downloads](https://www.7-zip.org/download.html), [Microsoft DevCon migration](https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/devcon-migration).
 
 ## Actual committed historical executables
 
@@ -18,7 +29,7 @@ GitHub Actions job [39426115145](https://github.com/zlocorp/Portable-VirtualBox/
 
 **NotSigned** is a signature status, **not** proof of malware. It means these binaries cannot be treated as verified trusted runtime dependencies. Their hashes and publisher VersionInfo are retained in the short-lived CI artifact `inherited-tool-audit`.
 
-Official sources: [Oracle VirtualBox](https://www.oracle.com/virtualization/technologies/vm/downloads/virtualbox-downloads.html), [AutoIt](https://www.autoitscript.com/site/autoit/downloads/), [7-Zip](https://www.7-zip.org/download.html). 7-Zip 26.04 is current as of October 2026 but we have no technical need to bundle even its current executable. Optional compressed release formats can be evaluated later.
+Official sources: [Oracle VirtualBox](https://www.oracle.com/virtualization/technologies/vm/downloads/virtualbox-downloads.html), [AutoIt](https://www.autoitscript.com/site/autoit/downloads/), [7-Zip](https://www.7-zip.org/download.html). 7-Zip 26.04 is current as of October 20, 2026, but we have no technical need to bundle even its current executable. Optional compressed release formats can be evaluated later.
 
 ## Translation inventory
 

@@ -56,9 +56,9 @@ jobs:
             $source = Join-Path $env:RUNNER_TEMP 'Portable USB Исходник Тест'
           }
           New-Item -ItemType Directory -Path $source -ErrorAction Stop | Out-Null
-          $installer = Join-Path $env:RUNNER_TEMP 'portable-relocation-oracle\VirtualBox-7.2.20-175154-Win.exe'
+          $installer = Join-Path $env:RUNNER_TEMP 'portable-relocation-oracle\VirtualBox-7.2.22-175245-Win.exe'
           $app = Join-Path $source 'app64'
-          python -X utf8 scripts/prepare_app64.py $installer $app --sha256 a81777d2b36380ce042a29e9c554cf032eb46a793f62e3cc82e7411e535c2c26 --version 7.2.20
+          python -X utf8 scripts/prepare_app64.py $installer $app --sha256 afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f --version 7.2.22
           if ($LASTEXITCODE -ne 0) { throw 'Portable app64 preparation failed' }
           "ORIGINAL_PORTABLE_ROOT=$source" >> $env:GITHUB_ENV
       - name: Move full root with same VM UUID and disk file, then clean owned VBoxSDS

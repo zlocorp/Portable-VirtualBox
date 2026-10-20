@@ -13,8 +13,8 @@ class OfficialControlContract(unittest.TestCase):
         s=SCRIPT.read_text(encoding="utf-8")
         self.assertIn("$env:GITHUB_ACTIONS -ne 'true'",s)
         self.assertIn("$env:GITHUB_REPOSITORY -ne 'zlocorp/Portable-VirtualBox'",s)
-        self.assertIn("ae40bb2b2770fcd264cb9d03de2d278a621997b33956e88a2de5edc900873d2a",s)
-        self.assertIn("65a3ac87ff3be03e4db4837139eb286e4e1387e1fd5d758d72c6ff745f6e10db",s)
+        self.assertIn("67875d993fe2460f4515fc4571feeffe0b3542f2ac450920332f8a1d53d566e8",s)
+        self.assertIn("6eb8849bfad98f3dacd37d89a0520facca51183ed14c6634f3eda91a4a6b5868",s)
     def test_bounded_minimal_feature_and_no_global_cleanup(self):
         s=SCRIPT.read_text(encoding="utf-8")
         self.assertIn("ADDLOCAL=VBoxApplication",s)

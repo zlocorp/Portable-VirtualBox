@@ -1,4 +1,4 @@
-name: Official VirtualBox 7.2.20 control (disposable Windows only)
+name: Official VirtualBox 7.2.22 control (disposable Windows only)
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
       - name: Install VBoxApplication only using bounded silent MSI on disposable runner
         shell: pwsh
         run: |
-          $msi = Join-Path $env:RUNNER_TEMP 'oracle-official-reference\extracted\VirtualBox-7.2.20-r175154-MultiArch_amd64.msi'
+          $msi = Join-Path $env:RUNNER_TEMP 'oracle-official-reference\extracted\VirtualBox-7.2.22-r175245-MultiArch_amd64.msi'
           $output = Join-Path $env:RUNNER_TEMP 'oracle-official-control'
           ./scripts/official_install_control.ps1 -MsiPath $msi -OutputDirectory $output -TimeoutSeconds 200
       - name: Query official VBoxManage when installed (no VM launch)
@@ -94,7 +94,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: official-oracle-7.2.20-reference
+          name: official-oracle-7.2.22-reference
           path: results/official-control/
           if-no-files-found: warn
           retention-days: 7

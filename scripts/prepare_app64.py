@@ -111,7 +111,7 @@ def prepare(installer,destination,expected_sha256,version):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('installer',type=Path); parser.add_argument('output',type=Path)
-    parser.add_argument('--sha256',required=True); parser.add_argument('--version',default='7.2.20')
+    parser.add_argument('--sha256',required=True); parser.add_argument('--version',default='7.2.22')
     args=parser.parse_args()
     try: report=prepare(args.installer,args.output,args.sha256,args.version)
     except (OSError,ValueError) as exc:

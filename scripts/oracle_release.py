@@ -138,7 +138,7 @@ def download_verified(url: str, destination: Path, expected_sha256: str,
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("version", help="Exact Oracle VirtualBox release, e.g. 7.2.20")
+    parser.add_argument("version", help="Exact Oracle VirtualBox release, e.g. 7.2.22")
     parser.add_argument("--download", type=Path, help="Write verified installer here; never run it")
     args = parser.parse_args()
     try:

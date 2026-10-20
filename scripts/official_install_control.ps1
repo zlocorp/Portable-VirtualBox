@@ -14,15 +14,15 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:GITHUB_REPOSITORY -ne 'zlocorp/Porta
 }
 if (Test-Path -LiteralPath $OutputDirectory) { throw 'Refusing to replace existing control output directory' }
 $msi = (Resolve-Path -LiteralPath $MsiPath -ErrorAction Stop).Path
-if ((Split-Path $msi -Leaf) -ne 'VirtualBox-7.2.20-r175154-MultiArch_amd64.msi') {
+if ((Split-Path $msi -Leaf) -ne 'VirtualBox-7.2.22-r175245-MultiArch_amd64.msi') {
     throw 'Unexpected MSI package name'
 }
-$msiSha = 'ae40bb2b2770fcd264cb9d03de2d278a621997b33956e88a2de5edc900873d2a'
+$msiSha = '67875d993fe2460f4515fc4571feeffe0b3542f2ac450920332f8a1d53d566e8'
 if ((Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant() -ne $msiSha) {
     throw 'MSI is not the pinned Oracle package'
 }
 $cab = Join-Path (Split-Path $msi -Parent) 'common.cab'
-if ((Get-FileHash -LiteralPath $cab -Algorithm SHA256).Hash.ToLowerInvariant() -ne '65a3ac87ff3be03e4db4837139eb286e4e1387e1fd5d758d72c6ff745f6e10db') {
+if ((Get-FileHash -LiteralPath $cab -Algorithm SHA256).Hash.ToLowerInvariant() -ne '6eb8849bfad98f3dacd37d89a0520facca51183ed14c6634f3eda91a4a6b5868') {
     throw 'Common cabinet does not match signed package'
 }
 $target = (New-Item -ItemType Directory -Path $OutputDirectory -ErrorAction Stop).FullName
@@ -65,7 +65,7 @@ $installDir = if ($null -ne $installation) { [string]$installation.InstallDir } 
 $cli = if ($installDir) { Join-Path $installDir 'VBoxManage.exe' } else { '' }
 $ready = ($status -eq 'EXITED' -and $exitCode -in @(0,3010) -and $cli -and (Test-Path -LiteralPath $cli -PathType Leaf))
 $report = [ordered]@{
-    experiment='official-oracle-7.2.20-VBoxApplication-only'
+    experiment='official-oracle-7.2.22-VBoxApplication-only'
     installer_sha256=$msiSha; feature='VBoxApplication'
     status=$status; exit_code=$exitCode; elapsed_ms=$elapsed.ElapsedMilliseconds
     exception=$failure; reboot_requested=($exitCode -eq 3010)

@@ -40,7 +40,7 @@ $report = [ordered]@{
     source_commit = $env:GITHUB_SHA
     inherited_files = @($items)
     modern_toolchain = 'Official signed AutoIt 3.3.18.0 via pinned CI download'
-    modern_virtualbox = 'Signed official Oracle VirtualBox 7.2.20 prepared from MSI/CAB'
+    modern_virtualbox = 'Signed official Oracle VirtualBox 7.2.22 prepared from MSI/CAB'
     binaries_executed = $false
 }
 $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $dest 'bundled-tools.json') -Encoding utf8

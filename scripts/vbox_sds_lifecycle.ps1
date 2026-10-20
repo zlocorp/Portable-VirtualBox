@@ -169,7 +169,7 @@ if ($allCommandsOk -and $createdSds -and $correctService) {
 $report=[ordered]@{
     experiment='owned-VBoxSDS-auto-registration-lifecycle'
     source_commit=$env:GITHUB_SHA
-    oracle_version='7.2.20'
+    oracle_version='7.2.22'
     services_before=@($initial.services)
     commands=$commands
     observed_created_sds=[bool]$createdSds
