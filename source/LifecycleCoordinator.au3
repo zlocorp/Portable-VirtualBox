@@ -8,6 +8,7 @@ Global $g_PC_Contexts[], $g_PC_Sessions[], $g_PC_Next = 1
 
 Func _PC_Known($token)
     If Not IsInt($token) Then Return False
+    If $token < 1 Or $token >= $g_PC_Next Then Return False
     Return MapExists($g_PC_Contexts, $token)
 EndFunc
 
