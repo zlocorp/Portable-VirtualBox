@@ -23,6 +23,7 @@ class NativeReceiptContract(unittest.TestCase):
             "vm-boot-results.json", "startvm_returned_zero",
             "poweroff_succeeded", "orphaned_vm_process_count",
         ): self.assertIn(fragment,script)
+        self.assertNotRegex(script, r"(?im)^\s*\$home\s*=")
         for fragment in ("sc delete", "taskkill", "Stop-Service", "msiexec"):
             self.assertNotIn(fragment,script)
 if __name__=="__main__":
