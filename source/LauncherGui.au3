@@ -2,6 +2,7 @@
 #include "LauncherI18n.au3"
 #include "HostDiagnostics.au3"
 #include "PortableProfile.au3"
+#include "LauncherReadiness.au3"
 #include <GUIConstantsEx.au3>
 #include <EditConstants.au3>
 #include <WindowsStylesConstants.au3>
@@ -20,7 +21,7 @@ Func _LG_ProfileText($status)
 EndFunc
 
 Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare)
+        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult)
     WinSetTitle($hGui, "", _LI("app.title"))
     GUICtrlSetData($idSubtitle, _LI("app.subtitle"))
     GUICtrlSetData($idWarning, _LI("app.disabled"))
@@ -31,6 +32,7 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     GUICtrlSetData($idRu, _LI("gui.russian"))
     GUICtrlSetData($idEn, _LI("gui.english"))
     GUICtrlSetData($idPrepare, _LI("gui.prepare"))
+    GUICtrlSetData($idReady, _LI("gui.readiness"))
     GUICtrlSetData($idPath, _LI("gui.path") & @ScriptDir)
     GUICtrlSetTip($idPath, @ScriptDir)
     Local $p = _PP_Inspect(@ScriptDir)
@@ -40,7 +42,7 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
 EndFunc
 
 Func _LG_Show()
-    Local $hGui = GUICreate(_LI("app.title"), 630, 566)
+    Local $hGui = GUICreate(_LI("app.title"), 630, 640)
     GUISetBkColor(0xF7F9FC, $hGui)
     Local $idSubtitle = GUICtrlCreateLabel("", 22, 16, 575, 30)
     GUICtrlSetFont($idSubtitle, 14, 600, 0, "Segoe UI")
@@ -60,9 +62,11 @@ Func _LG_Show()
     Local $idPath = GUICtrlCreateLabel("", 22, 404, 584, 21)
     Local $idProfile = GUICtrlCreateLabel("", 22, 428, 584, 21)
     Local $idPrepare = GUICtrlCreateButton("", 22, 455, 584, 35)
-    Local $idRefresh = GUICtrlCreateButton("", 22, 508, 185, 35)
-    Local $idCopy = GUICtrlCreateButton("", 218, 508, 184, 35)
-    Local $idClose = GUICtrlCreateButton("", 414, 508, 192, 35)
+    Local $idReady = GUICtrlCreateButton("", 22, 498, 584, 35)
+    Local $idResult = GUICtrlCreateLabel("", 22, 540, 584, 34)
+    Local $idRefresh = GUICtrlCreateButton("", 22, 584, 185, 35)
+    Local $idCopy = GUICtrlCreateButton("", 218, 584, 184, 35)
+    Local $idClose = GUICtrlCreateButton("", 414, 584, 192, 35)
     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
         $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare)
     GUISetState(@SW_SHOW, $hGui)
@@ -84,6 +88,9 @@ Func _LG_Show()
                 If $result["status"] == "READY" And Not $result["app_present"] Then
                     GUICtrlSetData($idProfile, _LG_ProfileText($result["status"]) & " " & _LI("profile.appmissing"))
                 EndIf
+            Case $idReady
+                Local $status = _LR_Inspect(@ScriptDir)
+                GUICtrlSetData($idResult, $status["message"])
             Case $idRefresh
                 Local $diagnostic = _PortableDiagnosticCollect()
                 GUICtrlSetData($idReport, $diagnostic["text"])
