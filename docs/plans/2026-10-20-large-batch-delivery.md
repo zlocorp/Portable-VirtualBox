@@ -11,6 +11,12 @@ Date: 2026-10-20. User explicitly requests **large integrated functional package
 - `source/PortableCISession.au3` already performs a **real AutoIt→Oracle CLI→VBoxSDS registration/cleanup** on disposable hosted Windows ([native session success run 39438429411](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39438429411)). It is deliberately CI-gated and still cannot start VMs or manage VBoxSup.
 - Previous old code in `source/legacy/Portable-VirtualBox.au3.disabled` is never compiled.
 
+## Batch A implementation checkpoint: compiled native VM engine
+
+At code/test commit `539a7542787ca24195d6f1921ec9ffe3a1728a20`, the compiled AutoIt entrypoint has a new **hidden CI-only native VM session**. On an isolated Windows Server 2022 runner, it creates an empty VM, verifies UUID and state, starts it via real VBoxManage, powers it off and verifies the result. Host-side independent verification and the already-audited signed VBoxSup/VBoxSDS cleanup complete the session with zero remaining services. [Evidence](../EXECUTION-2026-10-20-native-autoit-boot.md) / [successful run](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39450334031).
+
+**Still open for Batch A:** production-safe elevated driver helper, Start/Stop controls for the Oracle Manager GUI, ordinary-user Windows 11 approval, existing-VBox coexistence/refusal and robust failure/reboot/owner recovery. CI-only environment markers are **not** a security boundary and do not authorize distribution or local execution. Do not mark Batch A complete merely because the experimental headless VM starts.
+
 ## Batch A: usable launcher core, one substantial change set
 
 Deliver, together:
