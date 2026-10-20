@@ -51,8 +51,8 @@ if ($boot.installation_mode -ne 'standalone-prepared-app64' -or
     $boot.final_vm_state -ne 'poweroff' -or $boot.orphaned_vm_process_count -ne 0) {
     throw 'Disposable guest process has not been positively confirmed powered off'
 }
-if (Test-Path 'HKLM:\SOFTWARE\Oracle\VirtualBox' -or
-    Test-Path 'HKLM:\SOFTWARE\WOW6432Node\Oracle\VirtualBox') {
+if ((Test-Path -LiteralPath 'HKLM:\SOFTWARE\Oracle\VirtualBox') -or
+    (Test-Path -LiteralPath 'HKLM:\SOFTWARE\WOW6432Node\Oracle\VirtualBox')) {
     throw 'Another VirtualBox installation is present'
 }
 $sys=Join-Path $env:SystemRoot 'System32\drivers\VBoxSup.sys'
