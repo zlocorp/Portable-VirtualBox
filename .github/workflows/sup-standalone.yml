@@ -7,6 +7,8 @@ on:
       - .github/workflows/sup-standalone.yml
       - scripts/vbox_sup_standalone.ps1
       - tests/test_sup_standalone_contract.py
+      - scripts/vbox_vm_boot_probe.ps1
+      - tests/test_vm_boot_standalone_contract.py
   workflow_dispatch:
 
 permissions:
@@ -48,6 +50,16 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/vbox_sup_standalone.ps1 -AppDir $env:STANDALONE_APP64 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'standalone-sup-report') -TimeoutSeconds 75
+      - name: Attempt blank VM start from portable app64 and standalone VBoxSup
+        shell: pwsh
+        run: |
+          $sup = Join-Path $env:RUNNER_TEMP 'standalone-sup-report\sup-standalone.json'
+          $report = Get-Content -LiteralPath $sup -Raw | ConvertFrom-Json
+          if ($report.pnputil_exit_code -ne 0 -or -not $report.service_registered -or -not $report.system_driver_matches_package) {
+            Write-Host 'Standalone VBoxSup is not verified; VM start skipped with recorded INF evidence.'
+            exit 0
+          }
+          ./scripts/vbox_vm_boot_probe.ps1 -AppDir $env:STANDALONE_APP64 -StandaloneDriverReport $sup -OutputDirectory (Join-Path $env:RUNNER_TEMP 'standalone-vm-boot') -TimeoutSeconds 35
       - name: Collect probe evidence only
         if: always()
         shell: pwsh
@@ -58,6 +70,14 @@ jobs:
             New-Item -ItemType Directory -Force -Path $dest | Out-Null
             Get-ChildItem -LiteralPath $src -File |
               Where-Object { $_.Name -in @('sup-standalone.json','pnputil.stdout.txt','pnputil.stderr.txt') } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+          }
+          $boot = Join-Path $env:RUNNER_TEMP 'standalone-vm-boot'
+          if (Test-Path -LiteralPath $boot) {
+            $dest = 'results/standalone-sup'
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Get-ChildItem -LiteralPath $boot -File |
+              Where-Object { $_.Name -eq 'vm-boot-results.json' -or $_.Name -match '^(set_machine_folder|create_fixture|configure_fixture|list_fixture|inspect_fixture|start_headless|show_state|poweroff_fixture)\.(stdout|stderr)\.txt$' } |
               ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
           }
       - name: Publish metadata only (no Oracle binaries/drivers)
