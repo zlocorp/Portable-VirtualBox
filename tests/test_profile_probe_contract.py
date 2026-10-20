@@ -8,7 +8,7 @@ class PortableProfileContract(unittest.TestCase):
     def test_only_disposable_host_and_profile(self):
         text=SCRIPT.read_text(encoding='utf-8')
         for phrase in ('GITHUB_ACTIONS','GITHUB_REPOSITORY','VBOX_USER_HOME',
-                       'machinefolder','createvm','--register',
+                       'machinefolder','set_oracle_language_ru','language','ru','createvm','--register',
                        '--platform-architecture','x86','list','VirtualBox.xml',
                        '.vbox','WaitForExit'):
             self.assertIn(phrase,text)
