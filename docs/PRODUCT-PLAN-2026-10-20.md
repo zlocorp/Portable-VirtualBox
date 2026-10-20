@@ -26,7 +26,7 @@ Users need a small trusted launcher with **Start**, **Stop**, **Settings**, **Up
 - [x] Add a real *read-only* GUI: status panel, RU/EN language radio buttons, refresh, copy diagnostic report, close. No fake Start button.
 - [x] Validate UTF-8 Russian CLI output on a compiled hosted Windows build (actual Cyrillic byte content; first failing test reproduced AutoIt's ANSI stdout issue, then passed after fix). Native catalog coverage: 97 assertions.
 - [ ] Visually inspect GUI controls and layout on an isolated interactive Windows 11 desktop; compilation alone cannot validate accessibility or text clipping.
-- [ ] Let the private VirtualBox profile choose Oracle Manager GUI language through its documented setting; do not patch Oracle's translations.
+- [x] Confirm `VBoxManage setproperty language ru` exits zero under a private portable `VBOX_USER_HOME` on disposable Windows ([CI run 39427583563](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39427583563)). This configures Oracle's supported language preference; visual Manager translation remains unverified.
 - [ ] Choose a user-visible launcher version independently of Oracle's runtime version.
 
 ## P1: minimum usable launcher (first *functional* development milestone)
