@@ -8,7 +8,7 @@ class StandaloneSupContract(unittest.TestCase):
         s=S.read_text(encoding="utf-8")
         for required in ("RUNNER_ENVIRONMENT","GITHUB_ACTIONS","RUNNER_TEMP",
             "VBoxSup.sys","VBoxSup.inf","VBoxSup.cat","Get-AuthenticodeSignature",
-            "a4d29ed6ba1c9ad74110cb86d10c0d8c9f492a1b3f6836963139380b02b3ed90",
+            "4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be",
             "pnputil.exe","/add-driver","sup-standalone.json","WaitForExit"):
             self.assertIn(required,s)
     def test_no_unscoped_driver_or_process_cleanup(self):

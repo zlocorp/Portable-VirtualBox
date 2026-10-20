@@ -56,8 +56,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Application staging failed' }
           $report = Get-Content -LiteralPath (Join-Path $app '.prepared.json') -Raw | ConvertFrom-Json
           # Counts were independently read from the pinned MSI using COM in c417037.
-          # Exact package counts will be re-pinned after this release's first independent inspection.
-          if ($report.file_count -lt 150) { throw 'Incomplete pinned package file coverage' }
+          # Exact coverage measured on a clean, signed, pinned 7.2.22 host.
+          if ($report.file_count -ne 185 -or $report.total_bytes -ne 247834716) { throw 'Pinned 7.2.22 package coverage differs from verified baseline' }
           Write-Host ("Verified 7.2.22 prepared file count: " + $report.file_count)
           Write-Host ("Verified 7.2.22 prepared total bytes: " + $report.total_bytes)
           foreach ($item in @('drivers/vboxsup/VBoxSup.sys','drivers/vboxsup/VBoxSup.inf','drivers/vboxsup/VBoxSup.cat')) {

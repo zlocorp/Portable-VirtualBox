@@ -30,10 +30,10 @@ $app=(Resolve-Path -LiteralPath $AppDir).Path
 $stage=(Get-Content -LiteralPath $StandaloneReport -Raw -ErrorAction Stop | ConvertFrom-Json)
 $started=(Get-Content -LiteralPath $DriverStartReport -Raw -ErrorAction Stop | ConvertFrom-Json)
 $boot=(Get-Content -LiteralPath $BootReport -Raw -ErrorAction Stop | ConvertFrom-Json)
-$pinSys='a4d29ed6ba1c9ad74110cb86d10c0d8c9f492a1b3f6836963139380b02b3ed90'
-$pinInf='afc573f92fd4ff8393aea521c664fde36e62a0d9aa4a42d392e485f37d4b2a13'
+$pinSys='4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be'
+$pinInf='2fc48547de7dad96e3ebf0b49c339757317abd0c8a482f5f412a59fb730e05e4'
 if ($stage.experiment -ne 'standalone-VBoxSup-primitive-INF-pnputil' -or
-    $stage.oracle_version -ne '7.2.20' -or $stage.pnputil_status -ne 'EXITED' -or
+    $stage.oracle_version -ne '7.2.22' -or $stage.pnputil_status -ne 'EXITED' -or
     $stage.pnputil_exit_code -ne 0 -or -not $stage.package_verified -or
     -not $stage.system_driver_matches_package -or
     $stage.system_driver_sha256 -ne $pinSys -or
@@ -84,7 +84,7 @@ $out=(New-Item -ItemType Directory -Path $OutputDirectory -ErrorAction Stop).Ful
 $report=[ordered]@{
     experiment='disposable-owned-VBoxSup-stop-and-remove'
     source_commit=$env:GITHUB_SHA
-    oracle_version='7.2.20'
+    oracle_version='7.2.22'
     published_inf=$published
     original_service_baseline_empty=$true
     vm_powered_off_before_cleanup=$true

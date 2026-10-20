@@ -29,9 +29,9 @@ $sys = Join-Path $driverRoot 'VBoxSup.sys'
 $inf = Join-Path $driverRoot 'VBoxSup.inf'
 $cat = Join-Path $driverRoot 'VBoxSup.cat'
 $pinned = [ordered]@{
-    'VBoxSup.sys'='a4d29ed6ba1c9ad74110cb86d10c0d8c9f492a1b3f6836963139380b02b3ed90'
-    'VBoxSup.inf'='afc573f92fd4ff8393aea521c664fde36e62a0d9aa4a42d392e485f37d4b2a13'
-    'VBoxSup.cat'='af50de8913a6dccb6471f8c775a4b56bf5caf6932b90da17f819e8cb210c2a35'
+    'VBoxSup.sys'='4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be'
+    'VBoxSup.inf'='2fc48547de7dad96e3ebf0b49c339757317abd0c8a482f5f412a59fb730e05e4'
+    'VBoxSup.cat'='8e8c9dc09e518a75968ebf80174e33b77782c33baa4e71dafb637f6d6566ee9d'
 }
 foreach ($name in $pinned.Keys) {
     $file = Join-Path $driverRoot $name
@@ -113,7 +113,7 @@ $installedSig = if ($exists) { Get-AuthenticodeSignature -LiteralPath $installed
 $report = [ordered]@{
     experiment='standalone-VBoxSup-primitive-INF-pnputil'
     source_commit=$env:GITHUB_SHA
-    oracle_version='7.2.20'
+    oracle_version='7.2.22'
     package_verified=$true
     services_before=$beforeServices
     services_after=$afterServices

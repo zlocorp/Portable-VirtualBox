@@ -9,7 +9,7 @@ class DriverStartContract(unittest.TestCase):
         for mark in ("GITHUB_ACTIONS","RUNNER_ENVIRONMENT","RUNNER_TEMP",
                      "pnputil_exit_code","standalone-VBoxSup-primitive-INF-pnputil",
                      "services_before","services_after","Get-FileHash",
-                     "a4d29ed6ba1c9ad74110cb86d10c0d8c9f492a1b3f6836963139380b02b3ed90",
+                     "4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be",
                      "WaitForExit","start","VBoxSup","sup-start-results.json"):
             self.assertIn(mark,s)
     def test_never_stops_deletes_or_starts_other_components(self):

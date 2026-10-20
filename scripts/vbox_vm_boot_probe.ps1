@@ -41,7 +41,7 @@ if ($standaloneMode) {
         $reference.pnputil_status -ne 'EXITED' -or $reference.pnputil_exit_code -ne 0 -or
         -not $reference.package_verified -or -not $reference.service_registered -or
         -not $reference.system_driver_matches_package -or
-        $reference.system_driver_sha256 -ne 'a4d29ed6ba1c9ad74110cb86d10c0d8c9f492a1b3f6836963139380b02b3ed90' -or
+        $reference.system_driver_sha256 -ne '4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be' -or
         @($reference.services_before).Count -ne 0 -or
         @($reference.services_after).Count -ne 1 -or
         @($reference.services_after)[0] -ne 'VBoxSup' -or
@@ -82,7 +82,7 @@ if ([int]$driver.Type -ne 1 -or [int]$driver.Start -ne 1 -or
 if ($standaloneMode) {
     $kernel = Join-Path $env:SystemRoot 'System32\drivers\VBoxSup.sys'
     if ((Get-FileHash -LiteralPath $kernel -Algorithm SHA256).Hash.ToLowerInvariant() -ne
-        'a4d29ed6ba1c9ad74110cb86d10c0d8c9f492a1b3f6836963139380b02b3ed90') {
+        '4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be') {
         throw 'Installed standalone VBoxSup system image changed'
     }
     $existing=@(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' |

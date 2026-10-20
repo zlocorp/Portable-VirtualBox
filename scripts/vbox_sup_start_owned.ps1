@@ -46,7 +46,7 @@ if ([int]$config.Type -ne 1 -or [int]$config.Start -ne 1 -or
 }
 $sys=Join-Path $env:SystemRoot 'System32\drivers\VBoxSup.sys'
 if ((Get-FileHash -LiteralPath $sys -Algorithm SHA256).Hash.ToLowerInvariant() -ne
-    'a4d29ed6ba1c9ad74110cb86d10c0d8c9f492a1b3f6836963139380b02b3ed90') {
+    '4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be') {
     throw 'VBoxSup kernel driver has changed from the verified Oracle payload'
 }
 $signature=Get-AuthenticodeSignature -LiteralPath $sys
