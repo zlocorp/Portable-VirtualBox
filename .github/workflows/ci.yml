@@ -106,6 +106,40 @@ jobs:
           }
           $preflight = Start-Process -FilePath $exe -ArgumentList '--preflight' -Wait -PassThru -NoNewWindow
           if ($preflight.ExitCode -ne 3) { throw "Unsafe preflight policy: expected blocked exit 3, got $($preflight.ExitCode)" }
+      - name: Real compiled first-run data setup, repeat and collision refusal
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = (Resolve-Path 'build/Portable-VirtualBox_x64.exe').Path
+          $folder = Split-Path $exe -Parent
+          $initial = Start-Process -FilePath $exe -ArgumentList '--profile-status' -Wait -PassThru -NoNewWindow
+          if ($initial.ExitCode -ne 2) { throw "Expected uninitialized profile, got $($initial.ExitCode)" }
+          $first = Start-Process -FilePath $exe -ArgumentList '--prepare-profile' -Wait -PassThru -NoNewWindow
+          if ($first.ExitCode -ne 0) { throw "Portable profile setup failed: $($first.ExitCode)" }
+          $profile = Join-Path $folder 'data\.VirtualBox'
+          $machines = Join-Path $folder 'data\Machines'
+          $logs = Join-Path $folder 'logs'
+          foreach ($path in @($profile,$machines,$logs)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Container)) { throw "Missing initialized directory: $path" }
+          }
+          $sentinel = Join-Path $profile 'preserved-user-data.txt'
+          'keep-sentinel' | Set-Content -LiteralPath $sentinel -Encoding utf8
+          $again = Start-Process -FilePath $exe -ArgumentList '--prepare-profile' -Wait -PassThru -NoNewWindow
+          if ($again.ExitCode -ne 0 -or (Get-Content -LiteralPath $sentinel -Raw).Trim() -ne 'keep-sentinel') {
+            throw 'Repeating portable setup lost existing user data'
+          }
+          $ready = Start-Process -FilePath $exe -ArgumentList '--profile-status' -Wait -PassThru -NoNewWindow
+          if ($ready.ExitCode -ne 0) { throw "Prepared profile not recognized: $($ready.ExitCode)" }
+          $conflict = Join-Path $env:RUNNER_TEMP 'Portable Profile Collision Тест'
+          New-Item -ItemType Directory -Path $conflict | Out-Null
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $conflict 'Portable-VirtualBox_x64.exe')
+          'foreign-file' | Set-Content -LiteralPath (Join-Path $conflict 'data') -Encoding utf8
+          $blocked = Start-Process -FilePath (Join-Path $conflict 'Portable-VirtualBox_x64.exe') -ArgumentList '--prepare-profile' -Wait -PassThru -NoNewWindow
+          if ($blocked.ExitCode -ne 3 -or (Get-Content -LiteralPath (Join-Path $conflict 'data') -Raw).Trim() -ne 'foreign-file') {
+            throw 'Conflict test failed: expected non-destructive refusal'
+          }
+          if (Test-Path -LiteralPath (Join-Path $conflict 'logs')) { throw 'Collision created partial data' }
+          Write-Host 'PASS: compiled first-run setup, repeated preservation, collision refusal'
       - name: Verify build from path with spaces and Cyrillic
         shell: pwsh
         run: |
