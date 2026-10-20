@@ -153,6 +153,33 @@ jobs:
           if (-not (Test-Path (Join-Path $probe 'build\Portable-VirtualBox_x64.exe'))) {
             throw 'Unicode-path build artifact missing'
           }
+      - name: Package diagnostic preview ZIP without legacy or Oracle binaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -X utf8 scripts/package_preview.py --repo . --exe build/Portable-VirtualBox_x64.exe --out build/Portable-VirtualBox-diagnostic-preview.zip
+          if ($LASTEXITCODE -ne 0) { throw 'Preview packaging failed' }
+          $archive = 'build/Portable-VirtualBox-diagnostic-preview.zip'
+          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          $line = Get-Content -LiteralPath ($archive + '.sha256') -Raw
+          if (-not $line.StartsWith($actual + '  ')) { throw 'Preview checksum mismatch' }
+          Add-Type -AssemblyName System.IO.Compression
+          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $archive).Path)
+          try {
+            $names = @($zip.Entries | ForEach-Object FullName | Sort-Object)
+            $expected = @('LICENSE.md','PREVIEW-NOT-A-HYPERVISOR.txt','Portable-VirtualBox.exe','README.md') | Sort-Object
+            if (($names -join ';') -cne ($expected -join ';')) { throw 'Preview archive contains unexpected files' }
+          } finally { $zip.Dispose() }
+          Write-Host 'PASS: preview ZIP contains only compiled launcher, README, license and conspicuous warning'
+      - name: Retain diagnostic-preview ZIP (not a VM release)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: portable-virtualbox-diagnostic-preview
+          path: |
+            build/Portable-VirtualBox-diagnostic-preview.zip
+            build/Portable-VirtualBox-diagnostic-preview.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload unsigned compiler output and checksum (not a release)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
