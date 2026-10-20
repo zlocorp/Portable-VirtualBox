@@ -9,6 +9,8 @@ on:
       - scripts/vbox_cli_probe.ps1
       - scripts/vbox_sup_probe.ps1
       - tests/test_sup_probe_contract.py
+      - scripts/vbox_vm_boot_probe.ps1
+      - tests/test_vm_boot_contract.py
       - tests/test_installer_control_contract.py
   workflow_dispatch:
 
@@ -31,7 +33,7 @@ jobs:
       - name: Check minimal installation contract
         shell: pwsh
         run: |
-          python -X utf8 -m unittest tests.test_installer_control_contract tests.test_sup_probe_contract -v
+          python -X utf8 -m unittest tests.test_installer_control_contract tests.test_sup_probe_contract tests.test_vm_boot_contract -v
           if ($LASTEXITCODE -ne 0) { throw 'Installation research contract failed' }
       - name: Download signed Oracle wrapper and extract MSI/CAB without execution
         shell: pwsh
@@ -56,6 +58,13 @@ jobs:
           $report = Join-Path $env:RUNNER_TEMP 'oracle-official-control\install-results.json'
           $output = Join-Path $env:RUNNER_TEMP 'sup-driver-observation'
           ./scripts/vbox_sup_probe.ps1 -AppDir (Split-Path $env:OFFICIAL_CLI -Parent) -InstallReport $report -OutputDirectory $output
+      - name: Attempt bounded blank VM boot with verified official VBoxSup
+        if: env.OFFICIAL_CLI != ''
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'oracle-official-control\install-results.json'
+          $output = Join-Path $env:RUNNER_TEMP 'official-empty-vm-boot'
+          ./scripts/vbox_vm_boot_probe.ps1 -AppDir (Split-Path $env:OFFICIAL_CLI -Parent) -InstallReport $report -OutputDirectory $output -TimeoutSeconds 35
       - name: Collect diagnostic metadata only
         if: always()
         shell: pwsh
@@ -69,6 +78,26 @@ jobs:
           }
           $supFile = Join-Path $env:RUNNER_TEMP 'sup-driver-observation\sup-results.json'
           if (Test-Path -LiteralPath $supFile) { Copy-Item -LiteralPath $supFile -Destination $target }
+          $boot = Join-Path $env:RUNNER_TEMP 'official-empty-vm-boot'
+          if (Test-Path -LiteralPath $boot) {
+            Get-ChildItem -LiteralPath $boot -File |
+              Where-Object { $_.Name -eq 'vm-boot-results.json' -or $_.Name -match '^(set_machine_folder|create_fixture|configure_fixture|start_headless|show_state|poweroff_fixture)\.(stdout|stderr)\.txt
+          if (Test-Path -LiteralPath $cli) {
+            Get-ChildItem -LiteralPath $cli -File |
+              Where-Object { $_.Name -eq 'probe-results.json' -or $_.Name -match '^(version|list_vms|system_properties)\.(stdout|stderr)\.txt$' } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target -Force }
+          }
+      - name: Retain bounded diagnostic evidence, never Oracle payloads
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: official-oracle-7.2.20-reference
+          path: results/official-control/
+          if-no-files-found: warn
+          retention-days: 7
+ } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target }
+          }
           $cli = Join-Path $env:RUNNER_TEMP 'official-installed-cli'
           if (Test-Path -LiteralPath $cli) {
             Get-ChildItem -LiteralPath $cli -File |
