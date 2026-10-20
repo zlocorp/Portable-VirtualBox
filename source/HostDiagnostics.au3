@@ -1,26 +1,40 @@
 #include-once
 #include "HostPreflight.au3"
-; Only status/counts: never expose image paths, usernames or service accounts.
-Func _PortableDiagnosticWrite()
+#include "LauncherI18n.au3"
+; Read-only Windows inventory. No secret paths, usernames or service accounts.
+
+Func _PortableDiagnosticCollect()
     Local $os = _WinObsOS(), $installed = _WinObsInstallation()
     Local $services = _PortableCountExistingServices(), $processes = _PortableCountVirtualBoxProcesses()
-    ConsoleWrite("Portable-VirtualBox: read-only diagnostics" & @CRLF)
-    ConsoleWrite("Windows observation: " & $os["status"] & @CRLF)
-    ConsoleWrite("Windows build: " & $os["build"] & @CRLF)
-    ConsoleWrite("Windows product type: " & $os["product_type"] & @CRLF)
-    ConsoleWrite("OS architecture: " & @OSArch & @CRLF)
-    ConsoleWrite("Installed VirtualBox: " & $installed["status"] & @CRLF)
+    Local $report[]
+    Local $s = _LI("diag.header") & @CRLF
+    $s &= _LI("diag.windows") & $os["status"] & @CRLF
+    $s &= _LI("diag.build") & $os["build"] & @CRLF
+    $s &= _LI("diag.product_type") & $os["product_type"] & @CRLF
+    $s &= _LI("diag.arch") & @OSArch & @CRLF
+    $s &= _LI("diag.installed") & $installed["status"] & @CRLF
     If $services < 0 Then
-        ConsoleWrite("VBox services: UNKNOWN" & @CRLF)
+        $s &= _LI("diag.services_unknown") & @CRLF
     Else
-        ConsoleWrite("VBox services count: " & $services & @CRLF)
+        $s &= _LI("diag.services") & $services & @CRLF
     EndIf
     If $processes < 0 Then
-        ConsoleWrite("VBox processes: UNKNOWN" & @CRLF)
+        $s &= _LI("diag.processes_unknown") & @CRLF
     Else
-        ConsoleWrite("VBox processes count: " & $processes & @CRLF)
+        $s &= _LI("diag.processes") & $processes & @CRLF
     EndIf
-    ConsoleWrite("Runtime status: DISABLED" & @CRLF)
-    If Not ($os["status"] == "PRESENT") Or $installed["status"] == "UNKNOWN" Or $services < 0 Or $processes < 0 Then Return 4
-    Return 0
+    $s &= _LI("diag.runtime") & @CRLF
+    $report["text"] = $s
+    If Not ($os["status"] == "PRESENT") Or $installed["status"] == "UNKNOWN" Or $services < 0 Or $processes < 0 Then
+        $report["exit_code"] = 4
+    Else
+        $report["exit_code"] = 0
+    EndIf
+    Return $report
+EndFunc
+
+Func _PortableDiagnosticWrite()
+    Local $report = _PortableDiagnosticCollect()
+    ConsoleWrite($report["text"])
+    Return $report["exit_code"]
 EndFunc
