@@ -57,3 +57,12 @@ full guest OS, Windows 11 standard user, real USB relocation or recovery.
 
 Additional ideas from forks/PRs are recorded separately in
 [community review](REVIEW-2026-10-21-UPSTREAM-FORKS-PRS.md).
+
+## Root compatibility build wrapper verified
+
+[Final root build entrypoint CI 39503487607](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39503487607) succeeded:
+the Windows `cmd.exe` step **called `build.bat` directly**, which
+delegated to PowerShell and compiled the current x64 executable using
+the signed externally obtained AutoIt toolchain. Static checks, full x64
+compile, Cyrillic-path build, preview ZIP and unpacked first-run tests also
+passed. No archived executable or `i_data` file was restored.
