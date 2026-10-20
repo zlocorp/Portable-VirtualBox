@@ -1,10 +1,10 @@
 # Runtime safety model and review gates
 
-Status after code/test checkpoint `1e952e4`: file preparation, native lifecycle policies, read-only Windows adapters and synthetic-effect coordination are implemented. Actual privileged service/process effect adapters, driver mutation and VM launch remain NOT implemented. Windows 11 x64 / VirtualBox 7.2.x runtime compatibility is unverified.
+Status after code/test checkpoint `539a754`: file preparation, native lifecycle policies, read-only Windows observation, a private profile and a **CI-only compiled AutoIt empty-VM boot/poweroff** are implemented. Signed VBoxSup driver installation and exact cleanup are proven **only in separate disposable-host scripts**, not a production privileged helper. Ordinary GUI/CLI VM launch remains DISABLED. Windows 11 x64 / guest OS runtime acceptance is unverified.
 
 ## Compiled boundary
 
-The former launcher is preserved unchanged in `source/legacy/Portable-VirtualBox.au3.disabled`. The preview entrypoint does not include the old installer/updater, COM registration or service commands. It exposes diagnostic/test commands and otherwise exits. No `#RequireAdmin` is active. The new coordinator is compiled in dedicated native tests but is not wired into the preview entrypoint.
+The former launcher is preserved unchanged in `source/legacy/Portable-VirtualBox.au3.disabled`. The default GUI and documented CLI do **not** install drivers, launch VMs or mutate Windows services. No `#RequireAdmin` is active. The separate `PortableCIVM.au3` module is compiled into the development preview but only reachable through an undocumented **`--ci-vm-session` test mode**, requiring exact GitHub-hosted disposable runner markers and a root under runner temporary storage. Environment markers are accidental-use safeguards, NOT cryptographic authority or a protection against a malicious local user spoofing them. The new coordinator is compiled in dedicated tests but is not wired into a production privileged helper.
 
 The active-source pattern audit and bounded literal API contract are enforced in CI. Zero matches is not a whole-program security proof. Original files and historical instructions must not be used to bypass the preview boundary.
 
@@ -37,7 +37,7 @@ The callback interface accepts trusted compiled function references only, not na
 
 Snapshots are bounded UTF-8 TSV with a completion footer. Exclusive CREATE_NEW writes refuse existing files and flush data. Sequenced coordinator snapshots do not overwrite earlier evidence. The caller must provide an existing private trusted directory; the writer also rejects a reparse-point directory leaf. These checks do not guarantee resistance to same-account/admin topology changes or power-loss-proof transactions. Loaded snapshots are always diagnostic READONLY, with formerly active rows UNCERTAIN. A saved token never restores cleanup authority.
 
-Native tests run compiled AutoIt code with synthetic effects, private journal files, real query-only self/child observations and a built-in service read. Test children are private copies that exit naturally. Tests do not create, stop or delete services, run Oracle payloads or install VBox drivers.
+Native **unit** tests run compiled AutoIt code with synthetic effects, private journal files, real query-only self/child observations and a built-in service read. Test children are private copies that exit naturally. These unit harnesses do not install VBox drivers or run real VMs. Separately, [the disposable native VM integration workflow](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39450334031) provisions a signed isolated VBoxSup through pinned PowerShell, uses the compiled AutoIt launcher to boot/power off one fresh empty VM and verifies its own VM UUID/state with a second independent process. Only then does the workflow remove its exact signed VBoxSDS/VBoxSup resources. This is research on a clean Windows Server 2022 host, not a Windows 11 driver/user permission proof.
 
 ## Required before actual startup
 
@@ -50,4 +50,4 @@ Native tests run compiled AutoIt code with synthetic effects, private journal fi
 
 ## Review and publication
 
-Exact counts/run links are in [EXECUTION-2026-10-20-coordinator.md](EXECUTION-2026-10-20-coordinator.md). Review is author-side source inspection, regression tests and artifact readback, not independent security review. Compilation is not deterministic reproduction or release readiness. Keep PR #7 draft and preserve master/archive until explicit merge/release gates are met.
+Latest exact native boot/cleanup checks and updated boundaries: [EXECUTION-2026-10-20-native-autoit-boot.md](EXECUTION-2026-10-20-native-autoit-boot.md). Author-side inspection, native tests and CI artifact readback are NOT an independent security review or proof of production readiness. Keep PR #7 draft and preserve master/archive until explicit merge/release gates are met.
