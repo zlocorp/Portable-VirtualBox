@@ -99,6 +99,11 @@ jobs:
           if ($help.ExitCode -ne 0) { throw "Localized Russian help failed with $($help.ExitCode)" }
           $diagnosticRu = Start-Process -FilePath $exe -ArgumentList '--lang ru --diagnose' -Wait -PassThru -NoNewWindow -RedirectStandardOutput 'build/diagnostic-ru.txt'
           if ($diagnosticRu.ExitCode -ne 0) { throw "Localized Russian diagnostic failed with $($diagnosticRu.ExitCode)" }
+          $ruHelp = Get-Content -LiteralPath 'build/help-ru.txt' -Raw -Encoding utf8
+          $ruDiagnostic = Get-Content -LiteralPath 'build/diagnostic-ru.txt' -Raw -Encoding utf8
+          if (-not $ruHelp.Contains('Портативный VirtualBox') -or -not $ruDiagnostic.Contains('диагностика')) {
+            throw 'Russian CLI output is not valid UTF-8 with intact Cyrillic text'
+          }
           $preflight = Start-Process -FilePath $exe -ArgumentList '--preflight' -Wait -PassThru -NoNewWindow
           if ($preflight.ExitCode -ne 3) { throw "Unsafe preflight policy: expected blocked exit 3, got $($preflight.ExitCode)" }
       - name: Verify build from path with spaces and Cyrillic
