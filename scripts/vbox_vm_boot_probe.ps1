@@ -176,6 +176,16 @@ try {
 }
 $remaining=@(Get-Process -Name 'VirtualBoxVM' -ErrorAction SilentlyContinue |
     ForEach-Object { $_.Id })
+# Only this disposable fixture's own VBoxHardening.log is collected.
+# A boot error might occur before a complete log is written.
+$privateHardening = Join-Path (Join-Path $machines $vm) 'Logs\VBoxHardening.log'
+$hardeningPresent = Test-Path -LiteralPath $privateHardening -PathType Leaf
+if ($hardeningPresent) {
+    $tail = @(Get-Content -LiteralPath $privateHardening -Tail 160 -ErrorAction Stop)
+    $bounded = ($tail -join [Environment]::NewLine)
+    if ($bounded.Length -gt 32768) { $bounded = $bounded.Substring($bounded.Length - 32768) }
+    $bounded | Set-Content -LiteralPath (Join-Path $root 'hardening-tail.txt') -Encoding utf8
+}
 $report=[ordered]@{
     experiment='official-VBoxSup-headless-empty-fixture'
     installation_mode=$experimentMode
@@ -190,6 +200,7 @@ $report=[ordered]@{
     final_vm_state=$endState
     orphaned_vm_process_count=$remaining.Count
     commands=$results
+    hardening_log_present=[bool]$hardeningPresent
     guest_os_booted=$false
     vm_disks_created=$false
 }
