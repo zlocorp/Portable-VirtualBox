@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory)][string]$PortableRoot,
     [Parameter(Mandatory)][string]$DestinationRoot,
     [Parameter(Mandatory)][string]$OutputDirectory,
-    [ValidateRange(5,120)][int]$TimeoutSeconds=30
+    [ValidateRange(5,120)][int]$TimeoutSeconds=30,
+    [switch]$SimulateDriveLetterChange
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -29,7 +30,21 @@ if ($oldRoot -ieq $newRoot -or (Test-Path -LiteralPath $newRoot) -or
 if ([IO.Path]::GetPathRoot($oldRoot) -ine [IO.Path]::GetPathRoot($newRoot)) {
     throw 'This first experiment tests only same-volume root relocation'
 }
-$oldApp=Join-Path $oldRoot 'app64'
+$visibleOldRoot=$oldRoot
+$visibleNewRoot=$newRoot
+$aliasOldMounted=$false
+$aliasNewMounted=$false
+$subst=Join-Path $env:SystemRoot 'System32\subst.exe'
+if ($SimulateDriveLetterChange) {
+    if ((Test-Path -LiteralPath 'P:\') -or (Test-Path -LiteralPath 'Q:\')) {
+        throw 'P: or Q: already in use: refusing drive alias experiment'
+    }
+    & $subst P: $oldRoot | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to mount source drive alias P:' }
+    $aliasOldMounted=$true
+    $visibleOldRoot='P:\'
+}
+$oldApp=Join-Path $visibleOldRoot 'app64'
 $oldCli=Join-Path $oldApp 'VBoxManage.exe'
 $oldSds=Join-Path $oldApp 'VBoxSDS.exe'
 foreach ($exe in @($oldCli,$oldSds)) {
@@ -58,8 +73,8 @@ if (@($baseline.services).Count -ne 0 -or @($baseline.processes).Count -ne 0) {
     throw 'Existing VirtualBox services or processes: refusing experiment'
 }
 $out=(New-Item -ItemType Directory -Path $evidence -ErrorAction Stop).FullName
-$oldHome=Join-Path $oldRoot 'data\.VirtualBox'
-$oldMachines=Join-Path $oldRoot 'data\Machines Тест'
+$oldHome=Join-Path $visibleOldRoot 'data\.VirtualBox'
+$oldMachines=Join-Path $visibleOldRoot 'data\Machines Тест'
 New-Item -ItemType Directory -Path $oldHome -Force | Out-Null
 New-Item -ItemType Directory -Path $oldMachines -Force | Out-Null
 $vm='portable_relocation_fixture'
@@ -203,15 +218,26 @@ try {
     }
     Clear-Exact-VBoxSDS -Binary $oldSds -Phase 'old'
     # Move the whole portable folder, INCLUDING app64, profile and VDI.
+    if ($SimulateDriveLetterChange) {
+        & $subst P: /D | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot release source drive alias P:' }
+        $aliasOldMounted=$false
+    }
     Move-Item -LiteralPath $oldRoot -Destination $newRoot -ErrorAction Stop
+    if ($SimulateDriveLetterChange) {
+        & $subst Q: $newRoot | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot mount destination drive alias Q:' }
+        $visibleNewRoot='Q:\'
+        $aliasNewMounted=$true
+    }
     $profileMoved=$true
     if ((Test-Path -LiteralPath $oldRoot) -or -not (Test-Path -LiteralPath $newRoot)) {
         throw 'Entire root was not moved cleanly'
     }
-    $script:app=Join-Path $newRoot 'app64'
+    $script:app=Join-Path $visibleNewRoot 'app64'
     $script:cli=Join-Path $script:app 'VBoxManage.exe'
-    $newHome=Join-Path $newRoot 'data\.VirtualBox'
-    $newMachines=Join-Path $newRoot 'data\Machines Тест'
+    $newHome=Join-Path $visibleNewRoot 'data\.VirtualBox'
+    $newMachines=Join-Path $visibleNewRoot 'data\Machines Тест'
     $newVbox=Join-Path (Join-Path $newMachines $vm) ($vm+'.vbox')
     $newDisk=Join-Path (Join-Path $newMachines $vm) 'attached Test Диск.vdi'
     $env:VBOX_USER_HOME=$newHome
@@ -231,7 +257,7 @@ try {
     $hddListing=Get-Content -LiteralPath (Join-Path $out 'new_list_hdds.stdout.txt') -Raw
     $properties=Get-Content -LiteralPath (Join-Path $out 'new_systemproperties.stdout.txt') -Raw
     $diskAttachedNewRoot=($hddListing -match [regex]::Escape($newDisk) -and
-        $hddListing -notmatch [regex]::Escape($oldRoot))
+        $hddListing -notmatch [regex]::Escape($visibleOldRoot))
     $machinefolderNewRoot=($properties -match [regex]::Escape($newMachines))
     if ($relocatedUuid -ne $originalUuid -or
         $vmListing -notmatch [regex]::Escape($originalUuid) -or
@@ -243,6 +269,15 @@ try {
 } catch {
     $problems+= $_.Exception.Message
 } finally {
+    if ($SimulateDriveLetterChange -and $finished -and $aliasNewMounted) {
+        & $subst Q: /D | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $problems+= 'Cannot remove destination drive alias after verified VBoxSDS cleanup'
+            $finished=$false
+        } else {
+            $aliasNewMounted=$false
+        }
+    }
     [Environment]::SetEnvironmentVariable('VBOX_USER_HOME',$originalEnvironment,'Process')
     $services=Get-VBox-HostState
     $report=[ordered]@{
@@ -252,6 +287,9 @@ try {
         vm_disks_created=1
         old_root=$oldRoot
         new_root=$newRoot
+        visible_old_root=$visibleOldRoot
+        visible_new_root=$visibleNewRoot
+        drive_letters_changed=[bool]($SimulateDriveLetterChange -and $profileMoved -and -not $aliasOldMounted -and -not $aliasNewMounted)
         profile_moved=[bool]$profileMoved
         original_uuid=$originalUuid
         relocated_uuid=$relocatedUuid
