@@ -72,7 +72,11 @@ try {
         try { $p.Kill(); [void]$p.WaitForExit(5000) } catch {}
         throw 'Independent VM state check exceeded bound'
     }
-    if ($p.ExitCode -ne 0) { throw "Independent VBoxManage failed with $($p.ExitCode)" }
+    if ($p.ExitCode -ne 0) {
+        $details = if (Test-Path -LiteralPath $stderr) { Get-Content -LiteralPath $stderr -Raw -ErrorAction SilentlyContinue } else { '' }
+        if ($details.Length -gt 1400) { $details = $details.Substring(0, 1400) }
+        throw "Independent VBoxManage failed with $($p.ExitCode): $details"
+    }
 } finally {
     if ($null -ne $p) { $p.Dispose() }
     if ($null -eq $oldHome) { Remove-Item Env:\VBOX_USER_HOME -ErrorAction SilentlyContinue }
