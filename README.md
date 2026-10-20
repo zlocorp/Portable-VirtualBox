@@ -49,6 +49,7 @@ Developer tools:
 python -X utf8 -m unittest discover -s tests -v
 python scripts/audit_source.py --enforce
 python scripts/oracle_release.py 7.2.22
+python scripts/check_active_tree.py
 python scripts/vm_inventory.py 'C:\Portable-VirtualBox\data\.VirtualBox\VirtualBox.xml'
 ```
 
@@ -76,7 +77,7 @@ A controlled separate MSI reference installation with only `VBoxApplication` ins
 ## Product delivery roadmap and binary audit
 
 - [Practical P0–P5 product roadmap](docs/PRODUCT-PLAN-2026-10-20.md): first-run UI, real Start/Stop with guarded driver lifecycle, RU/EN, updates, ZIP and acceptance. **Next task is implementing a usable safe launcher**, not another generic coordinator.
-- [Exact inherited binary audit](docs/DEPENDENCIES-2026-10-20.md): bundled AutoIt **3.3.16.1**, `7za 16.04`, DevCon Windows 7 WDK and SnetCfg Windows Server 2003 DDK. Some were unsigned; none is used by the modern launcher. Signed official AutoIt **3.3.18.0** is already used in CI. We plan to **exclude** stale runtime utilities, not simply replace them with arbitrary binaries.
+- [Dependency cleanup and exact version inventory](docs/DEPENDENCIES-2026-10-20.md): removed the old AutoIt 3.3.16.1 binaries, 7za 16.04, Win7 DevCon, Server 2003 SnetCfg, fourteen legacy INI language files and old splash artwork from the active tree. The modern build uses official external AutoIt **3.3.18.0**, built-in Python/Windows APIs and signed Oracle **7.2.22**. A new source-tree guard checks they cannot return; old files remain recoverable through Git history. [Cleanup verification report](docs/EXECUTION-2026-10-21-dependency-cleanup.md).
 
 ## Self-contained diagnostic preview ZIP
 
@@ -99,6 +100,6 @@ At executable-code checkpoint `539a754`, **107 Python tests** are discovered (Li
 
 ## Attribution and release boundaries
 
-Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. Existing upstream BUILDING.md describes historical packaging and is not the current CI procedure.
+Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. The root [BUILDING.md](BUILDING.md) and `build.bat` now describe/use the supported external AutoIt x64 PowerShell build, not the historical self-extracting 7-Zip pipeline.
 
 Next major package is reviewed per-session **real driver-assisted Start/Stop from the AutoIt GUI**, where privileged actions are isolated and can never touch a pre-existing VirtualBox installation, followed by Windows 11/user/coexistence acceptance. First-run profile creation, localized UI, native CLI VM boot and guarded clean-host driver teardown have been demonstrated; a production hypervisor launcher is not yet enabled. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.

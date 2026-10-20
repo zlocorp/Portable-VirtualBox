@@ -29,8 +29,9 @@ jobs:
       - name: Check official Oracle manifest (metadata only; no executable download)
         continue-on-error: true
         run: python3 scripts/oracle_release.py 7.2.22
-      - name: Enforce preview and inventory quarantined source
+      - name: Enforce active dependency absence and audit quarantined legacy code
         run: |
+          python3 scripts/check_active_tree.py
           python3 scripts/audit_source.py --enforce --output .reports/source-audit.md
           python3 scripts/audit_source.py --source source/legacy/Portable-VirtualBox.au3.disabled --output .reports/legacy-audit.md
           test -s .reports/source-audit.md
@@ -55,16 +56,11 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Inventory historical executables (never execute them)
+      - name: Assert retired binaries/translations absent (no execution)
         shell: pwsh
-        run: ./scripts/audit_bundled_tools.ps1
-      - name: Upload inherited-tool metadata
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: inherited-tool-audit
-          path: .reports/bundled-tools.json
-          if-no-files-found: error
-          retention-days: 7
+        run: |
+          python -X utf8 scripts/check_active_tree.py
+          if ($LASTEXITCODE -ne 0) { throw 'Retired dependencies reappeared' }
       - name: Download official AutoIt 3.3.18.0 portable toolkit
         shell: pwsh
         run: |

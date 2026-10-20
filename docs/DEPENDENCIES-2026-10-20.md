@@ -1,40 +1,80 @@
-# Inherited binary and language asset inventory (2026-10-20)
+# Active dependencies and retired upstream assets (updated 2026-10-21)
 
-Compiled development executable uses official signed AutoIt **3.3.18.0** obtained directly in CI, and the experimental `app64` preparation is pinned to signed Oracle **VirtualBox 7.2.22** (build **175245**, released 2026-10-20). Both are the latest stable releases confirmed from the manufacturers' release pages on 2026-10-20.
+The current development branch is built from **official AutoIt 3.3.18.0**,
+downloaded by CI or provided externally, and is tested against signed **Oracle
+VirtualBox 7.2.22 r175245**. It does **not** include Oracle runtime executables
+or drivers in the diagnostic preview ZIP. Normal GUI Start/Stop remains disabled.
 
-## Current signed dependency pins (2026-10-20)
+## Required components
 
-- **Oracle VirtualBox 7.2.22** (2026-10-20, maintenance/security release): official Windows installer `VirtualBox-7.2.22-175245-Win.exe`, SHA-256 `afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f`. Independent [passive package inspection](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497891196) verified **185 files / 247834716 bytes**, signatures, MSI version/platform, hash-consistent staged outputs and unchanged Windows services.
-- **VBoxSup** from exactly that Oracle package: SYS `4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be`, INF `2fc48547de7dad96e3ebf0b49c339757317abd0c8a482f5f412a59fb730e05e4`, CAT `8e8c9dc09e518a75968ebf80174e33b77782c33baa4e71dafb637f6d6566ee9d`. These are *new* driver bytes, not compatible with 7.2.20 pins; runtime boot/teardown requires its own fresh CI result.
-- **AutoIt 3.3.18.0** (released 2025-09-07) remains current. CI uses the official signed portable toolkit. We must not replace it with inherited 3.3.16.1.
-- **7-Zip 26.04** (released 2026-10-05) is current, but the modern build **does not require 7z/7za at all**: the original unsigned 16.04 is retained only as quarantined legacy provenance.
-- **DevCon:** Microsoft recommends built-in **PnPUtil**, which we already use for driver experiments. No standalone DevCon download should be bundled. **SnetCfg** is an obsolete, quarantined optional network-component tool; there is no active feature requiring an equivalent.
-- Oracle **Extension Pack** is deliberately excluded pending explicit opt-in and license review. Guest Additions ISO is not a runtime prerequisite for the launcher.
+| Component | Current version | Origin and usage |
+| --- | --- | --- |
+| Oracle VirtualBox | **7.2.22 r175245** | Signed official installer, passively extracted to prepared `app64` in isolated tests; not bundled in this repository |
+| AutoIt / Aut2Exe | **3.3.18.0** | Signed official compiler fetched separately in GitHub Actions; builds x64 launcher |
+| Python 3 | Runner's supported version | Tests and safe MSI/CAB file-only extraction, not a packaged runtime executable |
+| Windows PnPUtil | Provided by Windows | Scoped signed VBoxSup install/uninstall on disposable research hosts |
 
-Manufacturer references: [Oracle download index](https://download.virtualbox.org/virtualbox/7.2.22/), [AutoIt downloads](https://www.autoitscript.com/site/autoit/downloads/), [7-Zip downloads](https://www.7-zip.org/download.html), [Microsoft DevCon migration](https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/devcon-migration).
+**Exact Oracle 7.2.22 package inputs (2026-10-20):** official
+`VirtualBox-7.2.22-175245-Win.exe` SHA-256
+`afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f`.
+The prepared x64 tree has **185 application files, 247834716 bytes**; package
+signatures, MSI x64 identity, hashes and original host state were independently
+checked in [Windows CI 39497891196](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497891196).
+The exact signed driver package pins are:
+`VBoxSup.sys`: `4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be`;
+`VBoxSup.inf`: `2fc48547de7dad96e3ebf0b49c339757317abd0c8a482f5f412a59fb730e05e4`;
+`VBoxSup.cat`: `8e8c9dc09e518a75968ebf80174e33b77782c33baa4e71dafb637f6d6566ee9d`.
+The real compiled AutoIt blank-VM boot and exact-owned cleanup passed on a
+disposable Windows Server 2022 host ([CI 39498269366](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39498269366)).
+This is **not** Windows 11 or standard-user UAC acceptance.
 
-## Actual committed historical executables
+## Removed from the active repository tree
 
-GitHub Actions job [39426115145](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39426115145) ran `scripts/audit_bundled_tools.ps1` (Get-FileHash, VersionInfo, Get-AuthenticodeSignature). Neither the script nor CI executes any inherited binary.
+The obsolete upstream binaries and language assets were not required by the
+modern build and were **deleted from the active branch**, not merely omitted
+from the distributed preview:
 
-| Original file | Actual file version | Authenticode | Disposition |
-| --- | --- | --- | --- |
-| `source/Aut2Exe/Aut2exe.exe` | 3.3.16.1 | Valid (AutoIt Team) | Legacy only, replaced in CI by 3.3.18.0 |
-| `source/Aut2Exe/Aut2exe_x64.exe` | 3.3.16.1 | Valid (AutoIt Team) | Legacy only |
-| `source/i_data/tools/7za.exe` | 16.04 | NotSigned | Do not ship. Python+Windows API verified MSI/CAB preparation replaces it |
-| `source/i_data/tools/devcon_x64.exe` | 6.1.7600.16385 (Win7 WDK) | NotSigned | Do not ship; test Windows driver API/PnPUtil use instead |
-| `source/i_data/tools/devcon_x86.exe` | 6.1.7600.16385 (Win7 WDK) | NotSigned | Do not ship |
-| `source/i_data/tools/snetcfg_x64.exe` | 5.2.3790.0 (Server 2003 DDK) | NotSigned | Do not ship; optional network feature postponed |
-| `source/i_data/tools/snetcfg_x86.exe` | 5.2.3790.0 (Server 2003 DDK) | NotSigned | Do not ship |
+| Historical input | Version / description | Replacement |
+| --- | --- | --- |
+| `source/Aut2Exe/Aut2exe.exe`, `Aut2exe_x64.exe` | AutoIt **3.3.16.1** | External signed **3.3.18.0** |
+| `source/i_data/tools/7za.exe` | **16.04**, unsigned | Python/Windows MSI/CAB extraction; no archive executable |
+| `source/i_data/tools/devcon_x64.exe`, `devcon_x86.exe` | Win7 WDK **6.1.7600.16385**, unsigned | Built-in Windows **PnPUtil** for approved driver experiments |
+| `source/i_data/tools/snetcfg_x64.exe`, `snetcfg_x86.exe` | Server 2003 DDK **5.2.3790.0**, unsigned | No active network driver feature; don't install by default |
+| `source/i_data/language/*.ini` | Fourteen archived, outdated translations | Compiled modern RU/EN catalog `source/LauncherI18n.au3` |
+| `source/i_data/settings/SplashScreen.jpg` | Historical legacy splash art | Not used by modern GUI |
 
-**NotSigned** is a signature status, **not** proof of malware. It means these binaries cannot be treated as verified trusted runtime dependencies. Their hashes and publisher VersionInfo are retained in the short-lived CI artifact `inherited-tool-audit`.
+**No executable or language file was moved into a release archive.** Git history
+and the upstream source still preserve their origin. Old
+`source/legacy/Portable-VirtualBox.au3.disabled` remains for historical
+inspection, deliberately uncompiled and potentially referring to retired
+files. The original author/license in `LICENSE.md` remain intact. A static
+`python scripts/check_active_tree.py` check and CI guard reject reintroduction
+of obsolete resources or an old batch build command.
 
-Official sources: [Oracle VirtualBox](https://www.oracle.com/virtualization/technologies/vm/downloads/virtualbox-downloads.html), [AutoIt](https://www.autoitscript.com/site/autoit/downloads/), [7-Zip](https://www.7-zip.org/download.html). 7-Zip 26.04 is current as of October 20, 2026, but we have no technical need to bundle even its current executable. Optional compressed release formats can be evaluated later.
+The previous [signed-file inventory CI 39426115145](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39426115145)
+is historic evidence only; the former audit script that **required** old files
+was also removed. **NotSigned** meant unsigned, not malware.
 
-## Translation inventory
+Current upstream 7-Zip **26.04** exists but is *not* needed or bundled. DevCon
+and SnetCfg likewise require no version upgrade because they are absent from
+the shipping architecture. Optional USB, bridged-network drivers and Oracle
+Extension Pack remain deferred to explicitly reviewed features.
 
-The original `source/i_data/language/` includes 14 historic INI translations. These describe tabs/features of the **archived legacy launcher** and are **not included in the active executable**; old Russian `russian.ini` contains broken, ambiguous and obsolete text. Do not patch this 15-year-old text and pretend to have modern translation.
+## Localization and build
 
-New `source/LauncherI18n.au3` supplies explicit RU/EN translation keys to the modern preview GUI and CLI, with native test coverage. The app includes buttons to refresh, copy diagnostics and switch language, but **cannot start a VM yet**. Oracle's own VirtualBox Manager is a separate program with its own built-in language choices, documented [here](https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/configuring-virtualbox.html). Later choose `ru` or `en` via the supported VBox property under the user's isolated portable profile; no binary patching of Oracle translations.
+Modern launcher RU and EN translations are embedded in
+`source/LauncherI18n.au3`, independent of the 14 archived INI files. Native
+Windows tests cover localized diagnostic values, readiness messages and
+locale-switch refresh. Oracle VirtualBox Manager has its **own** language
+setting in the private portable profile.
 
-This repository currently ships no modern translated launcher ZIP, only development build artifacts. Legacy assets remain for provenance/attribution and should be excluded from release packaging by an explicit allowlist.
+Root `build.bat` delegates to `scripts/build.ps1`; `BUILDING.md` now
+documents the supported Windows x64 process. Packaging is a strict allowlist
+of four diagnostic-only ZIP members and **never includes Oracle or drivers**.
+
+References: [Oracle releases](https://download.virtualbox.org/virtualbox/7.2.22/),
+[AutoIt official downloads](https://www.autoitscript.com/site/autoit/downloads/),
+[7-Zip](https://www.7-zip.org/download.html),
+[Microsoft DevCon migration](https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/devcon-migration).
+
+See [active-tree cleanup execution report](EXECUTION-2026-10-21-dependency-cleanup.md).

@@ -8,6 +8,12 @@ on:
       - source/PortableCIVM.au3
       - source/PortableCIIntegrated.au3
       - source/PortableCommand.au3
+      - source/Aut2Exe/**
+      - source/i_data/**
+      - scripts/check_active_tree.py
+      - scripts/build.ps1
+      - build.bat
+      - tests/test_dependency_audit_contract.py
       - source/Portable-VirtualBox.au3
       - scripts/check_native_vm_boot.ps1
       - scripts/native_vm_smoke.ps1
@@ -33,6 +39,11 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+      - name: Verify active source has no retired binaries or translations
+        shell: pwsh
+        run: |
+          python -X utf8 scripts/check_active_tree.py
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy build dependencies reintroduced' }
       - name: Verify native VM host evidence contract and PowerShell syntax
         shell: pwsh
         run: |
