@@ -115,6 +115,14 @@ Func _LI($sKey, $sLanguage = "")
     Return $sKey
 EndFunc
 
+; AutoIt ConsoleWrite normally converts Unicode to the host ANSI code page.
+; Encode as UTF-8 bytes first; matches the official AutoIt Unicode console guide.
+Func _LI_Write($sText, $bError = False)
+    Local $sEncoded = BinaryToString(StringToBinary($sText, 4), 1)
+    If $bError Then Return ConsoleWriteError($sEncoded)
+    Return ConsoleWrite($sEncoded)
+EndFunc
+
 ; Translate *known* preflight diagnostics, never hide an unfamiliar blocker.
 Func _LI_Blocker($sEnglish, $sLanguage = "")
     If $sEnglish == "" Then Return ""
