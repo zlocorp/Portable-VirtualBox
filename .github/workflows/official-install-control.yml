@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/official-install-control.yml
       - scripts/official_install_control.ps1
+      - scripts/vbox_cli_probe.ps1
       - tests/test_installer_control_contract.py
   workflow_dispatch:
 
