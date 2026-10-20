@@ -24,7 +24,8 @@ Users need a small trusted launcher with **Start**, **Stop**, **Settings**, **Up
 - [x] Audit inherited 7za/DevCon/SnetCfg/compiler EXEs by version, SHA-256 and Authenticode without execution. Keep them quarantined. Never ship them merely because they were in upstream.
 - [x] Introduce an RU/EN catalog for the **launcher**, with automatic Russian host locale, explicit locale switch, native key coverage, and documented CLI help.
 - [x] Add a real *read-only* GUI: status panel, RU/EN language radio buttons, refresh, copy diagnostic report, close. No fake Start button.
-- [ ] Validate UTF-8 Russian CLI output and visual GUI text on hosted Windows. AutoIt console encoding and GUI display are separate acceptance points.
+- [x] Validate UTF-8 Russian CLI output on a compiled hosted Windows build (actual Cyrillic byte content; first failing test reproduced AutoIt's ANSI stdout issue, then passed after fix). Native catalog coverage: 97 assertions.
+- [ ] Visually inspect GUI controls and layout on an isolated interactive Windows 11 desktop; compilation alone cannot validate accessibility or text clipping.
 - [ ] Let the private VirtualBox profile choose Oracle Manager GUI language through its documented setting; do not patch Oracle's translations.
 - [ ] Choose a user-visible launcher version independently of Oracle's runtime version.
 
