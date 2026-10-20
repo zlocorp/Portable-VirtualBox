@@ -41,14 +41,25 @@ python scripts/vm_inventory.py 'C:\Portable-VirtualBox\data\.VirtualBox\VirtualB
 
 VM inventory hides UUIDs and paths unless `--details` is requested. It does not migrate data.
 
+## Functional CLI and portable configuration smoke (2026-10-20)
+
+Disposable Windows Server 2022 CI now confirms that the prepared Oracle VirtualBox 7.2.20 app64 can execute `VBoxManage --version`, `list vms`, and `list systemproperties` without installing Oracle. A second test set `VBOX_USER_HOME` and `machinefolder` to separate private directories, then created/registered a test VM with a `.vbox` file stored in that portable directory. **No guest VM was started.**
+
+A controlled separate MSI reference installation with only `VBoxApplication` installed both `VBoxSDS` and `VBoxSup`. Importantly, the uninstalled portable CLI **automatically registered `VBoxSDS`** with a persistent service path pointing to its temporary app64 location. This is an unresolved portability/safety issue, not a release-ready feature.
+
+- [CLI smoke with detected side effect](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39399187350)
+- [Successful official MSI reference comparison](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39399299608)
+- [Successful portable configuration fixture](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39400449110)
+- [Evidence and follow-up plan](docs/EXECUTION-2026-10-20-runtime-smoke.md)
+
 ## Status and evidence
 
 See the [latest coordinator report](docs/EXECUTION-2026-10-20-coordinator.md), [completed coordinator plan](docs/plans/2026-10-20-lifecycle-coordinator.md), [Windows observation report](docs/EXECUTION-2026-10-19-observation.md), [app64 preparation report](docs/EXECUTION-2026-10-19-app64.md), [broader roadmap](docs/MODERNIZATION-2026.md), and [security model](docs/SECURITY-MODEL.md).
 
-At verified code/test checkpoint `1e952e4` the Python suite contains 62 tests: Windows passes 61 and skips one symbolic-link test; Linux passes 57 and skips five Windows-native tests. The native suite passes **351 assertions across 9 compiled harnesses**, including 187 new coordinator/storage/callback/token assertions. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
+At verified code/test checkpoint `ca4afd6` the Python suite contains **68 tests**: Windows passes 67 and skips one symbolic-link test; Linux passes 63 and skips five Windows-native tests. The native suite passes **351 assertions across 9 compiled harnesses**, including 187 new coordinator/storage/callback/token assertions. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
 
 ## Attribution and release boundaries
 
 Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. Existing upstream BUILDING.md describes historical packaging and is not the current CI procedure.
 
-Next work is an ownership-bound process effect adapter, first tested on harmless private children in hosted Windows, followed by separately reviewed service/dependency/COM integration and isolated VM acceptance. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
+Next work prioritizes ownership-safe VBoxSDS service registration/cleanup and signed VBoxSup driver requirements on disposable Windows hosts, then isolated VM start/stop acceptance. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
