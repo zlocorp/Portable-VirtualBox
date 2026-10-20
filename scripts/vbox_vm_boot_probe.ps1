@@ -4,7 +4,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$AppDir,
-    [Parameter(Mandatory)][string]$InstallReport,
+    [string]$InstallReport,
+    [string]$StandaloneDriverReport,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [ValidateRange(5,90)][int]$TimeoutSeconds=35
 )
@@ -20,16 +21,47 @@ $target=[IO.Path]::GetFullPath($OutputDirectory)
 if (-not $target.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase)) {
     throw 'VM experiment output must stay within RUNNER_TEMP'
 }
-$reference=(Get-Content -LiteralPath $InstallReport -Raw -ErrorAction Stop | ConvertFrom-Json)
-if ($reference.status -ne 'EXITED' -or $reference.exit_code -ne 0 -or
-    $reference.feature -ne 'VBoxApplication' -or
-    @($reference.services_before).Count -ne 0 -or
-    @($reference.services_after) -notcontains 'VBoxSup') {
-    throw 'Official installation provenance/clean-host checks failed'
+if ([bool]$InstallReport -eq [bool]$StandaloneDriverReport) {
+    throw 'Exactly one verified installation or standalone-driver report is required'
 }
 $app=(Resolve-Path -LiteralPath $AppDir).Path
-if ($app -ine ([string]$reference.install_directory).TrimEnd('\')) {
-    throw 'Installed program path mismatches the verified installation'
+$standaloneMode = [bool]$StandaloneDriverReport
+$experimentMode = 'official-installed'
+if ($standaloneMode) {
+    $experimentMode = 'standalone-prepared-app64'
+    if (-not ($app.TrimEnd('\') + '\').StartsWith($runner,[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Standalone app64 must be beneath temporary runner root'
+    }
+    $reportPath=(Resolve-Path -LiteralPath $StandaloneDriverReport).Path
+    if (-not $reportPath.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Standalone VBoxSup provenance must come from isolated runner'
+    }
+    $reference=(Get-Content -LiteralPath $reportPath -Raw -ErrorAction Stop | ConvertFrom-Json)
+    if ($reference.experiment -ne 'standalone-VBoxSup-primitive-INF-pnputil' -or
+        $reference.pnputil_status -ne 'EXITED' -or $reference.pnputil_exit_code -ne 0 -or
+        -not $reference.package_verified -or -not $reference.service_registered -or
+        -not $reference.system_driver_matches_package -or
+        $reference.system_driver_sha256 -ne 'a4d29ed6ba1c9ad74110cb86d10c0d8c9f492a1b3f6836963139380b02b3ed90' -or
+        @($reference.services_before).Count -ne 0 -or
+        @($reference.services_after).Count -ne 1 -or
+        @($reference.services_after)[0] -ne 'VBoxSup' -or
+        $reference.service_type -ne 1 -or $reference.service_start -ne 1) {
+        throw 'Standalone driver report is not exact and unambiguous'
+    }
+    if (Test-Path -LiteralPath 'HKLM:\SOFTWARE\Oracle\VirtualBox') {
+        throw 'Official system VirtualBox installation exists'
+    }
+} else {
+    $reference=(Get-Content -LiteralPath $InstallReport -Raw -ErrorAction Stop | ConvertFrom-Json)
+    if ($reference.status -ne 'EXITED' -or $reference.exit_code -ne 0 -or
+        $reference.feature -ne 'VBoxApplication' -or
+        @($reference.services_before).Count -ne 0 -or
+        @($reference.services_after) -notcontains 'VBoxSup') {
+        throw 'Official installation provenance/clean-host checks failed'
+    }
+    if ($app -ine ([string]$reference.install_directory).TrimEnd('\')) {
+        throw 'Installed program path mismatches the verified installation'
+    }
 }
 $cli=Join-Path $app 'VBoxManage.exe'
 $vmBinary=Join-Path $app 'VirtualBoxVM.exe'
@@ -42,7 +74,23 @@ foreach ($path in @($cli,$vmBinary)) {
 }
 $service=Get-Service -Name VBoxSup -ErrorAction Stop
 $driver=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSup' -ErrorAction Stop
-if ($service.Status -ne 'Running' -or [int]$driver.Type -ne 1) {
+$driverStatusBefore = [string]$service.Status
+if ([int]$driver.Type -ne 1 -or [int]$driver.Start -ne 1 -or
+    ([string]$driver.ImagePath -ine '\SystemRoot\System32\drivers\VBoxSup.sys')) {
+    throw 'VBoxSup configuration is not the expected signed Oracle kernel driver'
+}
+if ($standaloneMode) {
+    $kernel = Join-Path $env:SystemRoot 'System32\drivers\VBoxSup.sys'
+    if ((Get-FileHash -LiteralPath $kernel -Algorithm SHA256).Hash.ToLowerInvariant() -ne
+        'a4d29ed6ba1c9ad74110cb86d10c0d8c9f492a1b3f6836963139380b02b3ed90') {
+        throw 'Installed standalone VBoxSup system image changed'
+    }
+    $existing=@(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' |
+        Where-Object { $_.PSChildName -match '^VBox' } | ForEach-Object { $_.PSChildName })
+    if ($existing.Count -ne 1 -or $existing[0] -ne 'VBoxSup') {
+        throw 'Unexpected VirtualBox components before standalone boot'
+    }
+} elseif ($service.Status -ne 'Running') {
     throw 'Official VBoxSup kernel driver is not running'
 }
 if (Test-Path -LiteralPath $target) { throw 'Refusing existing VM test output directory' }
@@ -130,6 +178,9 @@ $remaining=@(Get-Process -Name 'VirtualBoxVM' -ErrorAction SilentlyContinue |
     ForEach-Object { $_.Id })
 $report=[ordered]@{
     experiment='official-VBoxSup-headless-empty-fixture'
+    installation_mode=$experimentMode
+    kernel_driver_state_before=$driverStatusBefore
+    kernel_driver_state_after=[string](Get-Service -Name VBoxSup -ErrorAction SilentlyContinue).Status
     source_commit=$env:GITHUB_SHA
     host_os=[Environment]::OSVersion.VersionString
     kernel_driver_state=[string]$service.Status
@@ -143,7 +194,7 @@ $report=[ordered]@{
     vm_disks_created=$false
 }
 $report | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $root 'vm-boot-results.json') -Encoding utf8
-Write-Host "VM boot capability: start_exit_zero=$bootReturnedZero; final_state=$endState; orphan_VM_processes=$($remaining.Count)"
+Write-Host "VM boot capability: mode=$experimentMode; start_exit_zero=$bootReturnedZero; final_state=$endState; orphan_VM_processes=$($remaining.Count)"
 if ($env:GITHUB_STEP_SUMMARY) {
     '### Disposable Windows VBoxSup boot capability' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
     "- VBoxSup: $($service.Status); startvm code zero: $bootReturnedZero" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
