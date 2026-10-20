@@ -183,10 +183,21 @@ try {
     $removeExit=Run-Bounded $pnputil "/delete-driver $published /uninstall" 'sup-package-remove'
     $report.driver_package_removal="EXIT_$removeExit"
     if ($removeExit -ne 0) { throw 'PnPUtil refused driver package deletion' }
+    # PnPUtil may defer kernel-service cleanup. Observe for a bounded period
+    # before deciding the package was completely removed; never force-delete.
+    for($i=0;$i -lt 25;$i++) {
+        $afterServices=@(Get-VBoxNames)
+        if ($afterServices.Count -eq 0 -and -not (Test-Path -LiteralPath $installedInf)) { break }
+        Start-Sleep -Seconds 1
+    }
     $afterServices=@(Get-VBoxNames)
     $report.final_vbox_services=$afterServices
-    $report.driver_package_removed=(-not (Test-Path -LiteralPath $installedInf) -and $afterServices.Count -eq 0)
-    if (-not $report.driver_package_removed) { throw 'Driver package or service still present after PnPUtil deletion' }
+    $report.published_inf_present=(Test-Path -LiteralPath $installedInf)
+    $report.system_driver_file_present=(Test-Path -LiteralPath $sys)
+    $driverSvc=Get-Service -Name VBoxSup -ErrorAction SilentlyContinue
+    $report.service_state_after=$(if ($null -eq $driverSvc) { 'ABSENT' } else { [string]$driverSvc.Status })
+    $report.driver_package_removed=(-not $report.published_inf_present -and $afterServices.Count -eq 0)
+    if (-not $report.driver_package_removed) { throw 'Driver package removed by PnPUtil, but VBoxSup service or published INF still present' }
 } catch {
     $report.errors+= $_.Exception.Message
 } finally {
