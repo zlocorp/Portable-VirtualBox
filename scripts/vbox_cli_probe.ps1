@@ -31,7 +31,7 @@ function Get-VBoxServiceDetails {
             image_path=[string]$p.ImagePath
             start=[string]$p.Start
             type=[string]$p.Type
-            object_name=[string]$p.ObjectName
+            object_name=$(if ($p.PSObject.Properties['ObjectName']) { [string]$p.ObjectName } else { '' })
         }
     })
 }
