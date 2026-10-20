@@ -21,17 +21,17 @@ Local $iFirst = 1
 If $CmdLine[0] > 0 Then
     If StringLeft($CmdLine[1], 7) == "--lang=" Then
         If Not _LI_Set(StringTrimLeft($CmdLine[1], 7)) Then
-            ConsoleWriteError(_LI("error.invalid_lang") & @CRLF)
+            _LI_Write(_LI("error.invalid_lang") & @CRLF, True)
             Exit 64
         EndIf
         $iFirst = 2
     ElseIf $CmdLine[1] == "--lang" Then
         If $CmdLine[0] < 2 Then
-            ConsoleWriteError(_LI("error.invalid_lang") & @CRLF)
+            _LI_Write(_LI("error.invalid_lang") & @CRLF)
             Exit 64
         EndIf
         If Not _LI_Set($CmdLine[2]) Then
-            ConsoleWriteError(_LI("error.invalid_lang") & @CRLF)
+            _LI_Write(_LI("error.invalid_lang") & @CRLF)
             Exit 64
         EndIf
         $iFirst = 3
@@ -41,7 +41,7 @@ EndIf
 If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
-            ConsoleWrite(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
+            _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
                 "  --version  --diagnose  --preflight  --selftest  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
@@ -83,15 +83,15 @@ If $CmdLine[0] >= $iFirst Then
         Case "--preflight"
             Local $sBlocker = _PortableReadOnlyPreflight()
             If $sBlocker <> "" Then
-                ConsoleWrite(_LI("preflight.blocked") & _LI_Blocker($sBlocker) & @CRLF)
+                _LI_Write(_LI("preflight.blocked") & _LI_Blocker($sBlocker) & @CRLF)
                 Exit 3
             EndIf
-            ConsoleWrite(_LI("preflight.ok") & @CRLF)
+            _LI_Write(_LI("preflight.ok") & @CRLF)
             Exit 0
         Case "--diagnose"
             Exit _PortableDiagnosticWrite()
         Case Else
-            ConsoleWriteError(_LI("error.unknown") & @CRLF)
+            _LI_Write(_LI("error.unknown") & @CRLF, True)
             Exit 64
     EndSwitch
 EndIf
