@@ -29,9 +29,27 @@ Users need a small trusted launcher with **Start**, **Stop**, **Settings**, **Up
 - [x] Confirm `VBoxManage setproperty language ru` exits zero under a private portable `VBOX_USER_HOME` on disposable Windows ([CI run 39427583563](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39427583563)). This configures Oracle's supported language preference; visual Manager translation remains unverified.
 - [ ] Choose a user-visible launcher version independently of Oracle's runtime version.
 
+## Larger implementation batches, not individual helper releases
+
+### Batch A: portable first-run + native session plumbing + inspectable package
+
+**Implemented and CI-verified on 2026-10-20 (diagnostic-only):**
+- Compiled EXE offers `--profile-status` and `--prepare-profile`, preserving files, refusing path collisions, invalid roots and reparse-point folders. GUI has a real **Prepare portable folders** action.
+- A separate hosted-Windows-only AutoIt command actually runs Oracle VBoxManage against its own profile, validates the auto-created VBoxSDS image, waits for idle and unregisters exactly that service. This tests real EXE-to-Oracle integration with no VBoxSup installed or VM boot. It is not user-enabled or production-elevation logic.
+- ZIP packaging with exactly four allowlisted files: launcher EXE, LICENSE, README and a conspicuous diagnostic-only warning, plus SHA-256 sidecar; no Oracle binaries/drivers/legacy tools. The extracted ZIP is executed under a new Cyrillic path in CI.
+- Native failure-first tests for preparation and CI-only gating; all prior test suites remain enforced.
+
+### Batch B: production Start/Stop + driver lifecycle + user-selected settings
+
+**Next substantive feature bundle; not complete:** adapt the proven signed VBoxSup/conditional VBoxSDS Windows flows to actual reviewed native privileged adapters, with a per-session ownership ledger and clear error/cancellation handling. Only then enable **Start VirtualBox Manager** in the regular GUI. Include configurable machine/profile paths, UAC handling, existing-installation coexistence refusal and two-session boot + cleanup on a dedicated isolated Windows 11 machine. No fake Start button or hidden blanket elevation.
+
+### Batch C: updater + localization polish + ZIP release candidate
+
+Manual signed Oracle updates with staged side-by-side `app64` and rollback, user-facing settings, Oracle Manager RU preference, diagnostics export, exact dependency/license inventory, and a release *candidate* ZIP only after Batch B acceptance. Optional networking/USB drivers remain deferred.
+
 ## P1: minimum usable launcher (first *functional* development milestone)
 
-1. **App layout and first-run setup:** `Portable-VirtualBox.exe`, `app64/`, `data/.VirtualBox/`, `data/Machines/`, `logs/`; no data under random Windows profile paths. Refuse existing destinations, preserve old VMs, support spaces/Unicode/drive-letter changes; backup if migration is necessary.
+1. **App layout and first-run setup:** **partly DONE** for automatic, local, non-destructive `data/.VirtualBox/`, `data/Machines/`, `logs/` provisioning in the actual EXE and GUI; path safety, Unicode and repeat-preservation tested. `app64` remains a separately provisioned Oracle tree. User-selected paths, migration backups and USB removal safety remain to implement.
 2. **Actual safe startup:** user sees check results first. Detect existing system Oracle installation and running VBox VMs; fail closed for conflicts. Read and verify exact driver files. Request elevation **only** for required system changes. Use a reviewed, per-session operation record and only exact system actions tested on the disposable host. Show progress/error instead of silently mutating.
 3. **One-click start/stop:** start Oracle VirtualBox Manager with this portable profile; permit VM startup. Close normally and only clean resources created/owned by this session after all relevant VBox VMs/processes exit. Never force-kill another user's VM or remove globally matching services.
 4. **Resilience:** launch twice, cancel halfway, missing admin privileges, hash mismatch, busy service, changed service identity, unplug/no media, retry/refusal, crash/restart. Cleanup must preserve VDI/VBOX/snapshots, and incomplete cleanup must be clearly reported.
@@ -69,8 +87,7 @@ Users need a small trusted launcher with **Start**, **Stop**, **Settings**, **Up
 
 ## Order of next concrete work
 
-1. Resolve UTF-8 Russian CLI and confirm compiled GUI; keep development runtime disabled.
-2. Wire **existing proven driver/SDS operations** into a deliberately minimal safe Start/Stop implementation, not another generic test framework.
-3. Add first-run folder settings + GUI and Oracle built-in RU language selection.
-4. Add safe update checking/staging and release ZIP.
-5. Isolated Windows 11 acceptance, then discuss promotion into small integration PRs.
+1. Batch A is completed as a **diagnostic-only pre-release foundation**, not a hypervisor: native profile initialization, RU/EN GUI, verified signed Oracle CLI session on disposable Windows and allowlisted ZIP.
+2. Batch B is the priority: production gated, signed-driver Start/Stop path from actual AutoIt GUI with explicit per-run ownership, graceful exit, isolated Windows 11 and coexistence/failure testing.
+3. Batch C: user-facing signed update staging, robust rollback, language UX and fully documented packaging. Do not publish a functional release until Batch B acceptance.
+4. Promote vetted modules into **small clean integration PRs** against the original upstream reference, keeping the historical 2020 master and archive untouched.
