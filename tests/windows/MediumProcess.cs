@@ -29,15 +29,21 @@ public static class MediumProcess {
     public static Process Start(string exe,string arguments,string cwd,string stdout,string stderr) {
         IntPtr old=IntPtr.Zero,token=IntPtr.Zero,admin=IntPtr.Zero,medium=IntPtr.Zero,label=IntPtr.Zero;
         Pi pi=new Pi();
+        string stage="OpenProcessToken";
         try {
-            if(!TokenFacts.OpenProcessToken(GetCurrentProcess(),0x000B,out old)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            // QUERY | DUPLICATE | ASSIGN_PRIMARY | ADJUST_DEFAULT. The restricted
+            // handle inherits these rights; setting its medium label needs 0x80.
+            if(!TokenFacts.OpenProcessToken(GetCurrentProcess(),0x008B,out old)) throw new Win32Exception(Marshal.GetLastWin32Error());
             if(!ConvertStringSidToSid("S-1-5-32-544",out admin)) throw new Win32Exception(Marshal.GetLastWin32Error());
             var deny=new SidAttr {Sid=admin,Attr=0};
+            stage="CreateRestrictedToken";
             if(!CreateRestrictedToken(old,5,1,ref deny,0,IntPtr.Zero,0,IntPtr.Zero,out token)) throw new Win32Exception(Marshal.GetLastWin32Error());
             if(!ConvertStringSidToSid("S-1-16-8192",out medium)) throw new Win32Exception(Marshal.GetLastWin32Error());
             var ml=new SidAttr {Sid=medium,Attr=0x20};
             label=Marshal.AllocHGlobal(Marshal.SizeOf(typeof(SidAttr)));Marshal.StructureToPtr(ml,label,false);
+            stage="SetTokenInformation(TokenIntegrityLevel)";
             if(!SetTokenInformation(token,25,label,Marshal.SizeOf(typeof(SidAttr))+(int)GetLengthSid(medium))) throw new Win32Exception(Marshal.GetLastWin32Error());
+            stage="Open fixture streams";
             var sa=new SA {Size=Marshal.SizeOf(typeof(SA)),Inherit=1};
             using(var o=CreateFile(stdout,0x40000000,1,ref sa,1,0x80,IntPtr.Zero))
             using(var e=CreateFile(stderr,0x40000000,1,ref sa,1,0x80,IntPtr.Zero))
@@ -46,13 +52,18 @@ public static class MediumProcess {
                 var si=new Startup {Size=Marshal.SizeOf(typeof(Startup)),Flags=0x101,Show=1,Input=input.DangerousGetHandle(),Output=o.DangerousGetHandle(),Error=e.DangerousGetHandle()};
                 var command=new StringBuilder("\""+exe+"\" "+arguments);
                 // Suspended only long enough to independently measure the child token.
+                stage="CreateProcessAsUser";
                 if(!CreateProcessAsUser(token,exe,command,IntPtr.Zero,IntPtr.Zero,true,0x08000004,IntPtr.Zero,cwd,ref si,out pi)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                stage="Read suspended child token";
                 LastFacts=TokenFacts.ReadHandle(pi.Process,pi.Pid);
                 if(LastFacts.Administrator || LastFacts.Integrity!=8192) throw new InvalidOperationException("Restricted fixture is not medium/non-admin");
                 var process=Process.GetProcessById(pi.Pid);var retained=process.Handle;
+                stage="Resume verified medium child";
                 if(ResumeThread(pi.Thread)!=1) throw new Win32Exception(Marshal.GetLastWin32Error());
                 return process;
             }
+        } catch(Win32Exception e) {
+            throw new Win32Exception(e.NativeErrorCode,stage+": "+e.Message);
         } finally {
             if(pi.Thread!=IntPtr.Zero) TokenFacts.CloseHandle(pi.Thread);
             if(pi.Process!=IntPtr.Zero) TokenFacts.CloseHandle(pi.Process);

@@ -42,6 +42,17 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn('setproperty machinefolder', s)
         self.assertIn('CLEANUP_DECLINED', s)
 
+    def test_medium_fixture_can_lower_its_restricted_token(self):
+        # CreateRestrictedToken preserves handle access rights. Lowering the
+        # integrity label requires TOKEN_ADJUST_DEFAULT, not a more privileged
+        # child token. The real Windows workflow proves the resulting token.
+        import re
+        s = self.text('tests/windows/MediumProcess.cs')
+        rights = re.search(r'OpenProcessToken\(GetCurrentProcess\(\),0x([0-9A-Fa-f]+),out old\)', s)
+        self.assertIsNotNone(rights)
+        self.assertEqual(int(rights.group(1), 16) & 0x008B, 0x008B)
+        self.assertIn('LastFacts.Administrator || LastFacts.Integrity!=8192', s)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
