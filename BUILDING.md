@@ -50,3 +50,17 @@ launcher source remains deliberately disabled at
 Do not run it as a current launcher.
 
 Original author credit and licensing: [LICENSE.md](LICENSE.md).
+
+## Separate Manager-session experiment
+
+`./scripts/build.ps1 -AutoItRoot <official-toolchain-root> -SessionExperiment`
+builds `build/Portable-VirtualBox-Session-Test.exe` from its own entrypoint.
+The ordinary build and six-member preview ZIP are unchanged. The experimental
+EXE refuses an ordinary checkout/PC and needs the disposable hosted Windows
+workflow plus its already-elevated effect adapter. These environment checks
+are accident guards, not a security boundary or a production UAC helper.
+
+The `manager-session.yml` workflow drives actual buttons and Oracle Manager,
+verifies guest preservation/second-controller refusal and two exact-owned
+cleanups. It publishes bounded evidence, not a runnable experimental package.
+See [the execution report](docs/EXECUTION-2026-10-21-manager-session.md).

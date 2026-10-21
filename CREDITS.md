@@ -8,7 +8,7 @@ Original source credits: **Michael Meyer (michaelm_007) and contributors**, and 
 | Source | Use |
 | --- | --- |
 | [Deac2](https://github.com/Deac2/Portable-VirtualBox), [PR #92](https://github.com/vboxme/Portable-VirtualBox/pull/92) | Settings/language UX and missing-folder/relocation scenarios, independently adapted in the modern launcher. |
-| [ThatAdminGuy, a035d06b12](https://github.com/ThatAdminGuy/portable-virtualbox/commit/a035d06b12), [skyshay001, PR #90](https://github.com/vboxme/Portable-VirtualBox/pull/90) | Distinct Manager/guest lifetimes; current adaptation provides diagnostic categories, not the unfinished production shutdown flow. |
+| [ThatAdminGuy, a035d06b12](https://github.com/ThatAdminGuy/portable-virtualbox/commit/a035d06b12), [skyshay001, PR #90](https://github.com/vboxme/Portable-VirtualBox/pull/90) | Manager/guest startup and shutdown flow adapted in `ManagerSession.au3` and `ManagerWindow.au3`; unsafe shell/name waits replaced with retained process handles and guest-aware cleanup. Tested in a separate disposable-host GUI, not yet a production UAC launcher. |
 | [bitamind, 4ffc9e097f](https://github.com/bitamind/Portable-VirtualBox/commit/4ffc9e097f) | Oracle-specific VBoxSDS registration commands, used as a research reference for our CI lifecycle. |
 
 The modern adaptations above were implemented independently; their source links are not claims of copied code. Detailed issue references, historical translation work and pending ideas remain in the repository's [adoption record](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/COMMUNITY-ADOPTION.md). Direct future code imports must retain their original notices and identify local changes.

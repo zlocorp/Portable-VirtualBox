@@ -4,6 +4,15 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added / fixed · 2026-10-21 integrated Manager session
+
+- Adapted the Manager/guest lifecycle flow from ThatAdminGuy and upstream PR #90 into actual **Start / Finish session / Reopen Manager** buttons in a separate experimental frontend, using the existing signed VBoxSup/VBoxSDS operations rather than duplicating an installer.
+- Retain exact process handles; send a normal window-close request, never terminate VirtualBox by process name. Closing Manager leaves a running GUI/headless VM and its driver intact; Manager can be reopened while the VM continues.
+- A second launcher session refuses to interfere. Cleanup requires the session's original receipts, a matching live controller generation and fresh absence of VBox activity. Manager-only cleanup has its own quiescence evidence and does not pretend a VM was booted.
+- Fixed an observed early-close race: wait for a visible, enabled Manager window with stable geometry before posting close, avoiding the tested Oracle geometry-save/COM-teardown error without suppressing its dialogs.
+- [Actual Windows GUI acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39567202279) pressed the compiled buttons, opened Oracle Manager, preserved a running empty VM across Manager close/reopen, refused a second controller, cleaned two sessions and preserved the UUID/configuration.
+- **Scope:** this separate EXE is not in the six-file diagnostic ZIP. Its effect worker still requires an already elevated disposable Windows Server runner. Production UAC/Windows 11 acceptance and ordinary-user Start/Stop remain unfinished.
+
 ### Changed · 2026-10-21 attribution simplification
 
 - About now shows only the product, project address, license/notice location and runtime status, without a contributor roster.

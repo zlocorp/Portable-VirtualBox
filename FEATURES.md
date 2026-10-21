@@ -14,7 +14,8 @@ Updated **2026-10-21**. The comparison baseline is upstream `vboxme/Portable-Vir
 | Oracle 7.2.22 verified file-only preparation | Developer tooling / CI | Exact pinned official package, MSI/CAB extraction, hashes and publisher checks; not a user-facing installer |
 | Empty VM boot and own-resource teardown | CI-only | Actual compiled AutoIt and signed VBoxSup on disposable Windows Server; not a shipped user flow |
 | Controlled powered-off root/drive relocation | CI-only | Fixture UUID/data preservation; not general cross-host/snapshot migration |
-| Production Manager/VM Start/Stop | **Not implemented** | The original has a legacy startup path; this modernization has deliberately not exposed it |
+| Manager Start / Finish / Reopen and guest-aware cleanup | **Integrated experiment, CI verified** | Real compiled GUI + Oracle Manager; live VM preserved, second controller refused, two clean sessions/same UUID; separate non-distributed EXE, not production UAC |
+| Production Manager/VM Start/Stop | **Not yet enabled for ordinary users** | Integrated experimental frontend now works; the privileged adapter and Windows 11 standard-user acceptance remain open |
 | Separate elevated helper / normal-user UAC | **Not implemented** | Must precede safe user-facing driver operations |
 | Existing VM import, snapshots and media-chain migration | Planned | Read-only inventory foundation exists; no automatic rewrite or unregister/delete |
 | Transactional Oracle updater / rollback | Planned | Download/extraction safeguards exist; no complete end-user updater |
