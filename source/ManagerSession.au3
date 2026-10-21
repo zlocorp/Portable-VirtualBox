@@ -23,6 +23,30 @@ Func _MS_Decide($manager, $seen, $total, $guests, $owned)
     Return "READY_TO_CLEAN"
 EndFunc
 
+; Oracle's Manager persists geometry on a deferred timer. Closing immediately
+; after first visibility can race that timer with COM teardown (observed in
+; the real 7.2.22 GUI). Wait for an enabled, stable window, without sleeping
+; the frontend or dismissing Oracle errors. This is not runtime authorization.
+Func _MS_WindowReady($stable, $elapsedMs)
+    If Not IsBool($stable) Or Not IsNumber($elapsedMs) Then Return False
+    Return $stable And $elapsedMs >= 750
+EndFunc
+
+Func _MS_ObserveWindow(ByRef $s, ByRef $manager)
+    Local $hwnd = _MP_Window($manager), $key = ""
+    If $hwnd <> 0 And BitAND(WinGetState($hwnd), 4) Then
+        Local $position = WinGetPos($hwnd)
+        If Not @error And IsArray($position) Then _
+            $key = String($hwnd) & ":" & $position[0] & ":" & $position[1] & ":" & $position[2] & ":" & $position[3]
+    EndIf
+    If $key == "" Or $key <> $s["window_key"] Then
+        $s["window_key"] = $key
+        $s["window_clock"] = TimerInit()
+        Return False
+    EndIf
+    Return _MS_WindowReady(True, TimerDiff($s["window_clock"]))
+EndFunc
+
 Func _MS_New($root, $workspace)
     Local $s[]
     $s["root"] = $root
@@ -36,6 +60,9 @@ Func _MS_New($root, $workspace)
     $s["seen"] = False
     $s["owned"] = False
     $s["stopping"] = False
+    $s["close_posted"] = False
+    $s["window_key"] = ""
+    $s["window_clock"] = TimerInit()
     $s["clock"] = TimerInit()
     $s["quiet"] = 0
     $s["guests"] = 0
@@ -114,6 +141,9 @@ Func _MS_Start(ByRef $s)
     $s["seen"] = False
     $s["owned"] = False
     $s["stopping"] = False
+    $s["close_posted"] = False
+    $s["window_key"] = ""
+    $s["window_clock"] = TimerInit()
     $s["quiet"] = 0
     If FileExists($s["session"]) Or Not _MS_Worker($s, "Prepare") Then
         _MS_State($s, "FAILED", "prepare-worker-not-started")
@@ -136,6 +166,9 @@ Func _MS_OpenManager(ByRef $s)
     If $p["status"] <> "STARTED" Then Return False
     $s["seen"] = False
     $s["stopping"] = False
+    $s["close_posted"] = False
+    $s["window_key"] = ""
+    $s["window_clock"] = TimerInit()
     $s["quiet"] = 0
     _MS_State($s, "OPENING")
     Return True
@@ -149,13 +182,10 @@ EndFunc
 
 Func _MS_Stop(ByRef $s)
     If $s["state"] <> "MANAGER_OPEN" And $s["state"] <> "OPENING" Then Return False
-    Local $p = $s["manager"]
-    If Not _MP_RequestClose($p) Then
-        $s["manager"] = $p
-        Return False
-    EndIf
-    $s["manager"] = $p
+    ; Queue a request; the event loop posts WM_CLOSE only when the observed
+    ; window is stable. Do not race Qt's deferred geometry persistence.
     $s["stopping"] = True
+    $s["close_posted"] = False
     _MS_State($s, "CLOSING")
     Return True
 EndFunc
@@ -201,9 +231,10 @@ Func _MS_Tick(ByRef $s)
     EndIf
     If $state <> "OPENING" And $state <> "MANAGER_OPEN" And $state <> "CLOSING" And _
             $state <> "WAIT_GUESTS" And $state <> "WAIT_BACKGROUND" And $state <> "READY_TO_CLEAN" Then Return
-    Local $manager = $s["manager"], $status = _MP_Poll($manager)
+    Local $manager = $s["manager"], $status = _MP_Poll($manager), $windowReady = False
     If $status == "PRESENT" Then
-        If _MP_Window($manager) <> 0 Then $s["seen"] = True
+        $windowReady = _MS_ObserveWindow($s, $manager)
+        If $windowReady Then $s["seen"] = True
     EndIf
     $s["manager"] = $manager
     Local $activity = _PortableActivityCollect()
@@ -227,6 +258,14 @@ Func _MS_Tick(ByRef $s)
             Return
         EndIf
         If $s["stopping"] Then
+            If Not $s["close_posted"] And $windowReady Then
+                If _MP_RequestClose($manager) Then
+                    $s["close_posted"] = True
+                    $s["clock"] = TimerInit()
+                    ConsoleWrite("Manager session: graceful close posted after stable window" & @CRLF)
+                EndIf
+                $s["manager"] = $manager
+            EndIf
             If TimerDiff($s["clock"]) > 30000 Then _MS_State($s, "FAILED", "manager-close-not-confirmed")
         Else
             _MS_State($s, "MANAGER_OPEN")

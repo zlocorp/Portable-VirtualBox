@@ -28,6 +28,13 @@ class ManagerSessionContract(unittest.TestCase):
         for bad in ('ProcessClose(', 'TerminateProcess', 'taskkill', 'WinClose('):
             self.assertNotIn(bad,data)
 
+    def test_close_is_deferred_until_the_window_geometry_is_settled(self):
+        source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('Func _MS_WindowReady(',source)
+        self.assertIn('$s["close_posted"]',source)
+        self.assertIn('$s["window_key"]',source)
+        self.assertIn('_MS_WindowReady(',source)
+
     def test_diagnostic_package_does_not_ship_experimental_system_worker(self):
         import sys
         sys.path.insert(0,str(ROOT/'scripts'))
