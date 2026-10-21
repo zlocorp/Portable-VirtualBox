@@ -61,7 +61,25 @@ function Await-Idle {
         Start-Sleep -Milliseconds 250
     }
 }
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='VBoxManage-startvm-headless';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
+function Await-GuestLog([Diagnostics.Process]$Process) {
+    # showvminfo acquires LockType_Shared. Do not poll it while the direct
+    # frontend is still trying to acquire its VM lock (observed race).
+    # Wait on this fresh fixture's log, then independently verify VMState.
+    $log=Join-Path $root 'data\Machines\pvbox_helper_boundary_fixture\Logs\VBox.log'
+    $timer=[Diagnostics.Stopwatch]::StartNew()
+    while ($timer.Elapsed.TotalSeconds -lt 40) {
+        if ($Process.HasExited) {
+            throw ('Direct guest exited '+$Process.ExitCode+': '+(Get-Content -LiteralPath (Join-Path $out 'direct-headless.stdout.txt') -Raw)+(Get-Content -LiteralPath (Join-Path $out 'direct-headless.stderr.txt') -Raw))
+        }
+        if (Test-Path -LiteralPath $log -PathType Leaf) {
+            $tail=(Get-Content -LiteralPath $log -Tail 1200) -join "`n"
+            if ($tail -match "Changing the VM state from .* to 'RUNNING'") { return }
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    throw 'Fresh guest log never reached RUNNING'
+}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
 $front=$null;$manager=$null;$guest=$null
 try {
     Clean-System
@@ -107,13 +125,18 @@ try {
             $created=Oracle 'createvm --name pvbox_helper_boundary_fixture --ostype Other --register' 'create-vm'
             if ($created -notmatch '(?im)^UUID:\s*([0-9a-f-]{36})\s*$') { throw 'Missing fixture UUID' };$uuid=$Matches[1]
             $null=Oracle ('modifyvm '+$uuid+' --memory 128 --nic1 none --audio-driver none') 'configure-vm'
-            # Use the real Oracle startup path again now that Manager/CLI/guest
-            # share the protected runtime. The direct diagnostic launch was
-            # only needed to expose the owner rejection in the old input tree.
-            $null=Oracle ('startvm '+$uuid+' --type headless') 'boot-vm'
+            # The detached-console startup is still unverified under this
+            # synthetic restricted token. Use Oracle's supported direct entry
+            # to test the helper/driver boundary, never label this as UAC or
+            # VBoxManage startvm acceptance.
+            $old=$env:VBOX_USER_HOME
+            try {
+                $env:VBOX_USER_HOME=Join-Path $root 'data\.VirtualBox'
+                $guest=Start-Medium (Join-Path $runtime 'VBoxHeadless.exe') ('--startvm '+$uuid+' --vrde off') 'direct-headless'
+            } finally { $env:VBOX_USER_HOME=$old }
+            Await-GuestLog $guest
             $running=Oracle ('showvminfo '+$uuid+' --machinereadable') 'running-vm'
-            if ($running -notmatch '(?m)^VMState="running"') { throw 'Guest did not reach running state' }
-            $proof.vboxmanage_headless_spawn_verified=$true
+            if ($running -notmatch '(?m)^VMState="running"') { throw 'Independent guest state was not running' }
             $guests=@(Get-Process -Name VBoxHeadless -ErrorAction Stop)
             if ($guests.Count -lt 1) { throw 'No headless test guest' }
             foreach ($g in $guests) {
@@ -126,6 +149,8 @@ try {
             if ((Get-Service VBoxSup).Status -ne 'Running') { throw 'Live guest lost its driver' }
             $proof.live_guest_cleanup_refused=$true
             $null=Oracle ('controlvm '+$uuid+' poweroff') 'poweroff-vm'
+            Wait-Exit $guest 0 'direct guest exit' 30
+            $guest.Dispose();$guest=$null
         } else {
             $again=Oracle ('showvminfo '+$uuid+' --machinereadable') 'same-uuid'
             if ($again -notmatch ('(?mi)^UUID="'+[regex]::Escape($uuid)+'"') -or $again -notmatch '(?m)^VMState="poweroff"') { throw 'UUID/state changed on repeat' }
