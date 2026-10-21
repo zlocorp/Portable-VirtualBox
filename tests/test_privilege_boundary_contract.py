@@ -53,6 +53,14 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertEqual(int(rights.group(1), 16) & 0x008B, 0x008B)
         self.assertIn('LastFacts.Administrator || LastFacts.Integrity!=8192', s)
 
+    def test_principal_membership_observer_has_duplicate_right(self):
+        # WindowsPrincipal.IsInRole duplicates a primary token for the native
+        # membership query. QUERY alone raises SecurityException, even for the
+        # freshly created suspended child. This does not adjust token groups.
+        s = self.text('source/privilege/TokenFacts.cs')
+        self.assertIn('OpenProcessToken(p,0x000A,out t)', s)
+        self.assertIn('WindowsPrincipal(id).IsInRole', s)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))

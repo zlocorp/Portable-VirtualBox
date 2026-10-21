@@ -39,7 +39,9 @@ namespace PortableVBox {
         }
         public static TokenFacts ReadHandle(IntPtr p,int pid) {
             IntPtr t;
-            if(!OpenProcessToken(p,8,out t)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            // QUERY | DUPLICATE: WindowsPrincipal.IsInRole duplicates a primary
+            // token to query membership. No ADJUST_* or IMPERSONATE is requested.
+            if(!OpenProcessToken(p,0x000A,out t)) throw new Win32Exception(Marshal.GetLastWin32Error());
             try {
                 var f=new TokenFacts(); f.Pid=pid;
                 using(var id=new WindowsIdentity(t)) {
