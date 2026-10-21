@@ -57,23 +57,11 @@ jobs:
           ./scripts/inspect_oracle.ps1 -WorkDirectory $work
           $root=Join-Path $env:RUNNER_TEMP 'Portable Privilege Тест'
           New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
-          # A portable payload belongs to the normal user. Python's private
-          # staging directory inherits its creator's owner/DACL; preparing as
-          # Administrator would leave a BA-owned tree unreadable by this user.
-          Add-Type -Path @((Join-Path $env:GITHUB_WORKSPACE 'source/privilege/TokenFacts.cs'),(Join-Path $env:GITHUB_WORKSPACE 'tests/windows/MediumProcess.cs'))
-          $python=(Get-Command python.exe -ErrorAction Stop).Source
-          $script=Join-Path $env:GITHUB_WORKSPACE 'scripts/prepare_app64.py'
-          $installer=Join-Path $work 'VirtualBox-7.2.22-175245-Win.exe'
-          $destination=Join-Path $root 'app64'
-          $arguments='-X utf8 "'+$script+'" "'+$installer+'" "'+$destination+'" --sha256 afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f --version 7.2.22'
-          $stdout=Join-Path $env:RUNNER_TEMP 'preparation.stdout.txt'
-          $stderr=Join-Path $env:RUNNER_TEMP 'preparation.stderr.txt'
-          $p=[MediumProcess]::Start($python,$arguments,$root,$stdout,$stderr)
-          [MediumProcess]::LastFacts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'preparation-token.json') -Encoding utf8
-          try {
-            if (-not $p.WaitForExit(120000) -or $p.ExitCode -ne 0) { throw ('Non-admin file preparation failed: '+(Get-Content -LiteralPath $stderr -Raw)) }
-          } finally { $p.Dispose() }
-          Get-Content -LiteralPath $stdout
+          python -X utf8 scripts/prepare_app64.py (Join-Path $work 'VirtualBox-7.2.22-175245-Win.exe') (Join-Path $root 'app64') --sha256 afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f --version 7.2.22
+          if ($LASTEXITCODE -ne 0) { throw 'File preparation failed' }
+          # Arrange user-owned INPUT data only. No access is granted to the
+          # separate ProgramData helper cache, whose write denial is tested.
+          ./tests/windows/Set-PortableFixtureOwner.ps1 -PortableRoot $root
           "MANAGER_ROOT=$root" >> $env:GITHUB_ENV
       - name: Compile separate session frontend with official signed AutoIt
         shell: pwsh
@@ -115,10 +103,6 @@ jobs:
         run: |
           $dest='results/manager-session'
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
-          foreach ($file in @('preparation.stdout.txt','preparation.stderr.txt','preparation-token.json')) {
-            $path=Join-Path $env:RUNNER_TEMP $file
-            if (Test-Path -LiteralPath $path -PathType Leaf) { Copy-Item -LiteralPath $path -Destination $dest }
-          }
           $proof=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
           if (Test-Path -LiteralPath $proof) {
             Get-ChildItem -LiteralPath $proof -File | Where-Object { $_.Extension -in @('.txt','.json','.png') -and $_.Length -lt 2097152 } |
