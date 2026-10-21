@@ -61,8 +61,8 @@ function Await-Idle {
         Start-Sleep -Milliseconds 250
     }
 }
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false}
-$front=$null;$manager=$null
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-inherited-console';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false}
+$front=$null;$manager=$null;$guest=$null
 try {
     Clean-System
     if (Test-Path -LiteralPath $store) { throw 'Fixture requires a fresh store' }
@@ -106,19 +106,38 @@ try {
             $created=Oracle 'createvm --name pvbox_helper_boundary_fixture --ostype Other --register' 'create-vm'
             if ($created -notmatch '(?im)^UUID:\s*([0-9a-f-]{36})\s*$') { throw 'Missing fixture UUID' };$uuid=$Matches[1]
             $null=Oracle ('modifyvm '+$uuid+' --memory 128 --nic1 none --audio-driver none') 'configure-vm'
-            $null=Oracle ('startvm '+$uuid+' --type headless') 'boot-vm'
-            $running=Oracle ('showvminfo '+$uuid+' --machinereadable') 'running-vm'
-            if ($running -notmatch '(?m)^VMState="running"') { throw 'Guest not running' }
+            # The manufactured restricted CI token cannot bootstrap Oracle's
+            # detached console via startvm --type headless (0xc0000142 before
+            # guest code). Use Oracle's documented direct frontend entry with
+            # the same restricted token and an inherited console. This fixture
+            # proves effect separation, NOT that detached spawn or UAC works.
+            $old=$env:VBOX_USER_HOME
+            try {
+                $env:VBOX_USER_HOME=Join-Path $root 'data\.VirtualBox'
+                $guest=Start-Medium (Join-Path $root 'app64\VBoxHeadless.exe') ('--startvm '+$uuid+' --vrde off') 'direct-headless'
+            } finally { $env:VBOX_USER_HOME=$old }
+            $timer=[Diagnostics.Stopwatch]::StartNew();$attempt=0
+            do {
+                if ($guest.HasExited) { throw ('Direct guest exited '+$guest.ExitCode+': '+(Get-Content -LiteralPath (Join-Path $out 'direct-headless.stderr.txt') -Raw)) }
+                if ($timer.Elapsed.TotalSeconds -gt 30) { throw 'Guest did not reach running state' }
+                $attempt++
+                $running=Oracle ('showvminfo '+$uuid+' --machinereadable') ('running-vm-'+$attempt)
+                if ($running -notmatch '(?m)^VMState="running"') { Start-Sleep -Milliseconds 250 }
+            } until ($running -match '(?m)^VMState="running"')
             $guests=@(Get-Process -Name VBoxHeadless -ErrorAction Stop)
-            if ($guests.Count -ne 1) { throw 'Ambiguous test guest' }
-            $facts=[PortableVBox.TokenFacts]::Read($guests[0].Id)
-            if ($facts.Administrator -or $facts.Integrity -ne 8192) { throw 'Guest is elevated' }
-            $facts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out 'guest-token.json') -Encoding utf8
+            if ($guests.Count -lt 1) { throw 'No headless test guest' }
+            foreach ($g in $guests) {
+                $facts=[PortableVBox.TokenFacts]::Read($g.Id)
+                if ($facts.Administrator -or $facts.Integrity -ne 8192 -or $facts.Image -ine (Join-Path $root 'app64\VBoxHeadless.exe')) { throw 'Guest token/image differs' }
+                $facts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out ('guest-token-'+$g.Id+'.json')) -Encoding utf8
+            }
             $proof.manager_guest_medium=$true
             Helper-Action Finish $cycle 70 'refuse-live-guest'
             if ((Get-Service VBoxSup).Status -ne 'Running') { throw 'Live guest lost its driver' }
             $proof.live_guest_cleanup_refused=$true
             $null=Oracle ('controlvm '+$uuid+' poweroff') 'poweroff-vm'
+            Wait-Exit $guest 0 'direct guest exit' 30
+            $guest.Dispose();$guest=$null
         } else {
             $again=Oracle ('showvminfo '+$uuid+' --machinereadable') 'same-uuid'
             if ($again -notmatch ('(?mi)^UUID="'+[regex]::Escape($uuid)+'"') -or $again -notmatch '(?m)^VMState="poweroff"') { throw 'UUID/state changed on repeat' }
@@ -141,5 +160,5 @@ try {
     Write-Host 'PASS: direct-invoker helper boundary with actual medium Manager/guest, pinned-input refusal, protected write denial and two clean cycles; UAC NOT VERIFIED'
 } catch { $proof.error=$_.Exception.Message;throw } finally {
     $proof | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'helper-boundary-proof.json') -Encoding utf8
-    if ($null -ne $front) { $front.Dispose() };if ($null -ne $manager) { $manager.Dispose() }
+    if ($null -ne $front) { $front.Dispose() };if ($null -ne $manager) { $manager.Dispose() };if ($null -ne $guest) { $guest.Dispose() }
 }

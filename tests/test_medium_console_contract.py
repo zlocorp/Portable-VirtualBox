@@ -18,3 +18,11 @@ class MediumConsoleContract(unittest.TestCase):
         self.assertIn('LastFacts.Administrator || LastFacts.Integrity!=8192', s)
         self.assertIn('CreateRestrictedToken(old,5,1,ref deny', s)
         self.assertIn('ResumeThread(pi.Thread)', s)
+
+    def test_helper_fixture_labels_direct_guest_launch_honestly(self):
+        s = (ROOT / 'tests/windows/check_helper_boundary.ps1').read_text(encoding='utf-8-sig')
+        self.assertIn("guest_start_method='direct-VBoxHeadless-inherited-console'", s)
+        self.assertIn('vboxmanage_headless_spawn_verified=$false', s)
+        self.assertIn('interactive_uac_consent_verified=$false', s)
+        self.assertIn('VBoxHeadless.exe', s)
+        self.assertIn('--startvm ', s)
