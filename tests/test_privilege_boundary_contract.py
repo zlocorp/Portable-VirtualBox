@@ -61,6 +61,12 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn('OpenProcessToken(p,0x000A,out t)', s)
         self.assertIn('WindowsPrincipal(id).IsInRole', s)
 
+    def test_portable_payload_preparation_runs_as_the_medium_user(self):
+        workflow = self.text('.github/workflows/privilege-session.yml')
+        self.assertIn('[MediumProcess]::Start($python,$arguments', workflow)
+        self.assertIn('preparation-token.json', workflow)
+        self.assertIn('[MediumProcess]::LastFacts', workflow)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
