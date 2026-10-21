@@ -8,6 +8,8 @@ on:
       - source/ManagedProcess.au3
       - source/ManagerSession.au3
       - source/PrivilegeBoundary.au3
+      - source/PortableApp.au3
+      - source/PortableProfile.au3
       - source/privilege/**
       - scripts/build_session_helper.ps1
       - scripts/privileged_session_worker.ps1
@@ -82,6 +84,12 @@ jobs:
           try {
             ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -SeparatePrivileges
           } catch {
+            # Compare inherited fixture permissions before changing any ACL.
+            $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
+            if (Test-Path -LiteralPath $out) {
+              $paths=@($env:RUNNER_TEMP,$env:MANAGER_ROOT,(Join-Path $env:MANAGER_ROOT 'app64'),(Join-Path $env:MANAGER_ROOT 'app64\VirtualBox.exe'),(Join-Path $env:MANAGER_ROOT 'app64\VBoxRT.dll'))
+              $paths | ForEach-Object { $acl=Get-Acl -LiteralPath $_; [pscustomobject]@{path=$_;owner=$acl.Owner;sddl=$acl.Sddl} } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out 'input-acls.json') -Encoding utf8
+            }
             # Capture before the step's process tree is released by the runner.
             ./scripts/snapshot_manager_windows.ps1 -PortableRoot $env:MANAGER_ROOT
             throw

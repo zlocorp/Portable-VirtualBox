@@ -41,17 +41,29 @@ Func _PA_Inspect($root)
     $r["status"] = "UNSAFE"
     $r["missing"] = ""
     If Not _PP_RootSafe($root) Then Return $r
-    If Not _PP_ParentsSafe($root) Then Return $r
+    If Not _PP_ParentsSafe($root) Then
+        $r["missing"] = "root-or-ancestor-unreadable"
+        ConsoleWriteError("Portable app observation: " & $r["missing"] & @CRLF)
+        Return $r
+    EndIf
     Local $state = _PP_DirectoryState($root & "\app64")
     If $state = 0 Then
         $r["status"] = "MISSING"
         Return $r
     EndIf
-    If $state <> 1 Then Return $r
+    If $state <> 1 Then
+        $r["missing"] = "app64-directory-unreadable"
+        ConsoleWriteError("Portable app observation: " & $r["missing"] & @CRLF)
+        Return $r
+    EndIf
     Local $files = _PA_Required()
     For $i = 0 To UBound($files) - 1
         $state = _PA_FileState($root, "app64\" & $files[$i])
-        If $state < 0 Then Return $r
+        If $state < 0 Then
+            $r["missing"] = $files[$i]
+            ConsoleWriteError("Portable app observation: unsafe/unreadable " & $files[$i] & @CRLF)
+            Return $r
+        EndIf
         If $state = 0 Then
             If $r["missing"] <> "" Then $r["missing"] &= ", "
             $r["missing"] &= $files[$i]
