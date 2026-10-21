@@ -43,7 +43,7 @@ Portable-VirtualBox.exe --about
 
 [FEATURES.md](FEATURES.md) отделяет **доступные пользователю функции**, **эксперименты CI** и **планы**. [CHANGELOG.md](CHANGELOG.md) ведётся в разделе **Unreleased**: опубликованных версий модернизации пока нет.
 
-До этого пакета были подтверждены [сборка и ZIP](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39503487607), [нативные тесты](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502031102) и [запуск пустой ВМ с очисткой собственных ресурсов](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502023979). Новые проверки находятся в `test_community_adoption.au3` и `check_community_ux.ps1`; результаты фиксируются отдельно после исполнения.
+Код пакета адаптаций `183f35da` прошёл [сборку x64, проверки обычного скомпилированного CLI и ZIP](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219426), [18 нативных тестовых программ AutoIt](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219415) и [запуск пустой ВМ с очисткой собственных ресурсов](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548214487). Готовый ZIP скачан и проверен отдельно: контрольная сумма совпадает, оба README и сведения об авторах действительно включены. [Подробный отчёт и границы проверки](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-community-adoption.md).
 
 **Пока не готово:** обычный Start/Stop Manager, проверенный привилегированный helper с UAC, полноценная миграция и восстановление ВМ, обновление Oracle с откатом, дополнительные USB/сетевые драйверы. Не заявляем запуск гостевой ОС с диском или визуальную приёмку Windows 11 и масштабирования. Успех теста на Windows Server не подменяет эту приёмку.
 

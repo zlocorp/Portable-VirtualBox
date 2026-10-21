@@ -18,7 +18,7 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 **Manager and guests are not the same process.** Diagnostics separately report Manager, GUI/headless guest processes and background activity. These are observations, not proof that a guest is running or permission to stop/delete anything.
 
-**Traceable community work.** [The adoption ledger](docs/COMMUNITY-ADOPTION.md) distinguishes implemented adaptations, existing coverage and deferred work. Inspiration is not passed off as copied code, and copied code must retain its license and author notices.
+**Traceable community work.** [The adoption ledger](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/COMMUNITY-ADOPTION.md) distinguishes implemented adaptations, existing coverage and deferred work. Inspiration is not passed off as copied code, and copied code must retain its license and author notices.
 
 ## Try the current preview
 
@@ -43,7 +43,7 @@ A damaged `launcher.ini` is left intact and the launcher falls back to the Windo
 
 [FEATURES.md](FEATURES.md) is the current capability matrix: **public preview**, **CI-only**, **planned**. [CHANGELOG.md](CHANGELOG.md) records user-relevant changes under **Unreleased**, not fictional product releases.
 
-The earlier cleanup checkpoint passed [x64/ZIP build checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39503487607), [native AutoIt tests](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502031102) and [compiled empty-VM boot plus exact-owned driver teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502023979). New public settings/completeness tests are in `tests/native/test_community_adoption.au3` and `scripts/check_community_ux.ps1`; execution results belong in the dated report, not inferred from a successful build.
+The community-adoption implementation `183f35da` passed [x64 build, ordinary compiled CLI and ZIP checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219426), [18 native AutoIt harnesses](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219415) and [compiled empty-VM boot plus exact-owned driver teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548214487). The downloaded preview ZIP was independently inspected: its checksum matches, and credits, notices and both READMEs are included. [Full evidence and environment limits](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-community-adoption.md).
 
 **Not implemented:** production Manager Start/Stop, reviewed privilege-separated UAC helper, general VM migration/recovery, transactional Oracle updates, optional USB/bridged networking. No real guest OS/disk or interactive Windows 11 GUI/DPI acceptance is claimed. A Linux/Windows Server CI pass is not Windows 11 approval.
 
