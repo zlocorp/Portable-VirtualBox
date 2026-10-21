@@ -47,3 +47,26 @@ foreach ($item in @($items | Where-Object Visible | Select-Object -First 8)) {
  }finally{$graphics.Dispose();$bitmap.Dispose()}
 }
 $items | Format-Table Handle,Pid,Title,Class,Visible,Enabled,Owner -AutoSize
+# Read the Oracle profile log before its processes are released. Do not copy
+# VM media, arbitrary user files, or replace any Oracle setting.
+$profile=Join-Path $PortableRoot 'data\.VirtualBox'
+foreach ($name in @('VBoxSVC.log','VBoxSDS.log','selectorwindow.log')) {
+ $path=Join-Path $profile $name
+ if (Test-Path -LiteralPath $path -PathType Leaf) {
+  Get-Content -LiteralPath $path -Tail 160 | Set-Content -LiteralPath (Join-Path $out $name.Replace('.log','-tail.txt')) -Encoding utf8
+ }
+}
+# Accessibility exposes Qt's error details without guessing an OK answer.
+try {
+ Add-Type -AssemblyName UIAutomationClient
+ Add-Type -AssemblyName UIAutomationTypes
+ $nodes=@()
+ foreach ($item in @($items | Where-Object { $_.Visible -and $_.Title -like '*Error*' })) {
+  $element=[Windows.Automation.AutomationElement]::FromHandle([IntPtr]$item.Handle)
+  $all=$element.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
+  foreach ($child in $all) {
+   $nodes+=[ordered]@{name=$child.Current.Name;type=$child.Current.ControlType.ProgrammaticName;id=$child.Current.AutomationId;patterns=@($child.GetSupportedPatterns() | ForEach-Object ProgrammaticName)}
+  }
+ }
+ $nodes | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $out 'oracle-error-accessibility.json') -Encoding utf8
+} catch { $_.Exception.Message | Set-Content -LiteralPath (Join-Path $out 'accessibility-error.txt') }
