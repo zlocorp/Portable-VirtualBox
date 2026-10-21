@@ -1,7 +1,8 @@
 # Build only. This script never runs Portable-VirtualBox or modifies Windows services.
 [CmdletBinding()]
 param(
-    [string] $AutoItRoot = ""
+    [string] $AutoItRoot = "",
+    [switch] $SessionExperiment
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -10,6 +11,10 @@ $source = Join-Path $repo "source\Portable-VirtualBox.au3"
 $icon = Join-Path $repo "source\VirtualBox.ico"
 $outDir = Join-Path $repo "build"
 $out = Join-Path $outDir "Portable-VirtualBox_x64.exe"
+if ($SessionExperiment) {
+    $source = Join-Path $repo 'source\Portable-VirtualBox-Session-Test.au3'
+    $out = Join-Path $outDir 'Portable-VirtualBox-Session-Test.exe'
+}
 
 if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing AutoIt source: $source" }
 if (-not (Test-Path -LiteralPath $icon -PathType Leaf)) { throw "Missing icon: $icon" }
@@ -53,5 +58,5 @@ try {
 } finally { $stream.Dispose() }
 if ($byte1 -ne 0x4D -or $byte2 -ne 0x5A) { throw "Output is not a Windows executable (MZ header missing)" }
 $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $out).Hash.ToLowerInvariant()
-"$sha  Portable-VirtualBox_x64.exe" | Set-Content -LiteralPath (Join-Path $outDir "SHA256SUMS.txt") -Encoding ascii
+"$sha  $(Split-Path $out -Leaf)" | Set-Content -LiteralPath (Join-Path $outDir "SHA256SUMS.txt") -Encoding ascii
 Write-Host "Build OK: $($file.Length) bytes; SHA256 $sha"

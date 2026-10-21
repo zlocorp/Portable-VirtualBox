@@ -1,12 +1,13 @@
 # Proof-only VBoxSup teardown on an exclusive, disposable GitHub Windows runner.
 # This NEVER runs on a user's PC and NEVER deletes a pre-existing VBox driver.
 # Stop/release only after a verified empty VM powered off and VBoxSDS clients exited.
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName="Boot")]
 param(
     [Parameter(Mandatory)][string]$AppDir,
     [Parameter(Mandatory)][string]$StandaloneReport,
     [Parameter(Mandatory)][string]$DriverStartReport,
-    [Parameter(Mandatory)][string]$BootReport,
+    [Parameter(Mandatory,ParameterSetName="Boot")][string]$BootReport,
+    [Parameter(Mandatory,ParameterSetName="Session")][string]$QuiescentReport,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [ValidateRange(5,90)][int]$TimeoutSeconds = 45
 )
@@ -23,13 +24,14 @@ function Under-Runner([string]$Value) {
     $full=[IO.Path]::GetFullPath($Value)
     return $full.StartsWith($runner, [StringComparison]::OrdinalIgnoreCase)
 }
-foreach ($candidate in @($AppDir,$StandaloneReport,$DriverStartReport,$BootReport,$OutputDirectory)) {
+$proofPath=if ($PSCmdlet.ParameterSetName -eq "Session") { $QuiescentReport } else { $BootReport }
+foreach ($candidate in @($AppDir,$StandaloneReport,$DriverStartReport,$proofPath,$OutputDirectory)) {
     if (-not (Under-Runner $candidate)) { throw 'All input/output paths must be in RUNNER_TEMP' }
 }
 $app=(Resolve-Path -LiteralPath $AppDir).Path
 $stage=(Get-Content -LiteralPath $StandaloneReport -Raw -ErrorAction Stop | ConvertFrom-Json)
 $started=(Get-Content -LiteralPath $DriverStartReport -Raw -ErrorAction Stop | ConvertFrom-Json)
-$boot=(Get-Content -LiteralPath $BootReport -Raw -ErrorAction Stop | ConvertFrom-Json)
+$proof=(Get-Content -LiteralPath $proofPath -Raw -ErrorAction Stop | ConvertFrom-Json)
 $pinSys='4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be'
 $pinInf='2fc48547de7dad96e3ebf0b49c339757317abd0c8a482f5f412a59fb730e05e4'
 if ($stage.experiment -ne 'standalone-VBoxSup-primitive-INF-pnputil' -or
@@ -46,10 +48,32 @@ if ($started.experiment -ne 'owned-standalone-VBoxSup-start' -or
     -not $started.driver_running -or $started.start_exit_code -ne 0) {
     throw 'No proof that our VBoxSup was started'
 }
-if ($boot.installation_mode -ne 'standalone-prepared-app64' -or
-    -not $boot.startvm_returned_zero -or -not $boot.poweroff_succeeded -or
-    $boot.final_vm_state -ne 'poweroff' -or $boot.orphaned_vm_process_count -ne 0) {
-    throw 'Disposable guest process has not been positively confirmed powered off'
+$bootVerified=$false
+if ($PSCmdlet.ParameterSetName -eq "Boot") {
+    $boot=$proof
+    if ($boot.installation_mode -ne 'standalone-prepared-app64' -or
+        -not $boot.startvm_returned_zero -or -not $boot.poweroff_succeeded -or
+        $boot.final_vm_state -ne 'poweroff' -or $boot.orphaned_vm_process_count -ne 0) {
+        throw 'Disposable guest process has not been positively confirmed powered off'
+    }
+    $bootVerified=$true
+} else {
+    if ($proof.experiment -ne 'compiled-manager-quiescent-session' -or
+        $proof.portable_root -ine (Split-Path $app -Parent) -or
+        $proof.stage_report -ine $StandaloneReport -or $proof.driver_start_report -ine $DriverStartReport -or
+        $proof.no_vbox_processes_verified -ne $true -or $proof.controller_pid -le 0) {
+        throw 'No matching Manager-session quiescence evidence'
+    }
+    $controller=[Diagnostics.Process]::GetProcessById([int]$proof.controller_pid)
+    try {
+        if ($controller.StartTime.ToUniversalTime().Ticks.ToString() -ne $proof.controller_created -or
+            $controller.MainModule.FileName -ine (Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe')) {
+            throw 'Manager-session controller changed'
+        }
+    } finally { $controller.Dispose() }
+    if (@(Get-Process -ErrorAction Stop | Where-Object ProcessName -match '^(VBox|VirtualBox)').Count -ne 0) {
+        throw 'Active VirtualBox process prohibits Manager-session cleanup'
+    }
 }
 if ((Test-Path -LiteralPath 'HKLM:\SOFTWARE\Oracle\VirtualBox') -or
     (Test-Path -LiteralPath 'HKLM:\SOFTWARE\WOW6432Node\Oracle\VirtualBox')) {
@@ -87,7 +111,8 @@ $report=[ordered]@{
     oracle_version='7.2.22'
     published_inf=$published
     original_service_baseline_empty=$true
-    vm_powered_off_before_cleanup=$true
+    vm_powered_off_before_cleanup=$bootVerified
+    cleanup_basis=$PSCmdlet.ParameterSetName
     sds_cleanup='NOT_ATTEMPTED'
     service_stop='NOT_ATTEMPTED'
     driver_package_removal='NOT_ATTEMPTED'
