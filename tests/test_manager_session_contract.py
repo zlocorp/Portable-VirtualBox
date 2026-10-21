@@ -35,6 +35,11 @@ class ManagerSessionContract(unittest.TestCase):
         self.assertIn('$s["window_key"]',source)
         self.assertIn('_MS_WindowReady(',source)
 
+    def test_exclusion_failure_is_explained_not_left_idle(self):
+        source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('session-lock-create-failed',source)
+        self.assertIn('session-lock-result-unknown',source)
+
     def test_diagnostic_package_does_not_ship_experimental_system_worker(self):
         import sys
         sys.path.insert(0,str(ROOT/'scripts'))

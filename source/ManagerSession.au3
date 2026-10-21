@@ -139,9 +139,20 @@ Func _MS_Start(ByRef $s)
     ; Cross-root exclusion before system changes. Existence is a refusal, not
     ; an invitation to acquire a mutex/resources left by another process.
     Local $a = DllCall("kernel32.dll", "handle", "CreateMutexW", "ptr", 0, "bool", True, "wstr", "Global\PortableVirtualBox.ManagerExperiment")
-    If @error Then Return False
+    If @error Then
+        _MS_State($s, "BLOCKED", "session-lock-create-failed-dll")
+        Return False
+    EndIf
     Local $h = $a[0], $e = DllCall("kernel32.dll", "dword", "GetLastError")
-    If @error Or $h = 0 Then Return False
+    If @error Then
+        If $h <> 0 Then DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $h)
+        _MS_State($s, "BLOCKED", "session-lock-result-unknown")
+        Return False
+    EndIf
+    If $h = 0 Then
+        _MS_State($s, "BLOCKED", "session-lock-create-failed-win32-" & $e[0])
+        Return False
+    EndIf
     If $e[0] = 183 Then
         DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $h)
         _MS_State($s, "BLOCKED", "another-session")

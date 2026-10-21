@@ -54,6 +54,7 @@ Func _PB_Start($root, $action, $cycle)
     DllStructSetData($s, "parameters", DllStructGetPtr($parameters))
     DllStructSetData($s, "directory", DllStructGetPtr($directory))
     DllStructSetData($s, "show", 0)
+    ConsoleWrite("Elevation request: " & $action & " cycle=" & $cycle & @CRLF)
     Local $a = DllCall("shell32.dll", "bool", "ShellExecuteExW", "struct*", $s)
     Local $dllError = @error, $ok = False
     If Not $dllError Then $ok = $a[0] <> 0
@@ -61,6 +62,7 @@ Func _PB_Start($root, $action, $cycle)
     If Not @error Then $error = $e[0]
     Local $handle = DllStructGetData($s, "process")
     $p["status"] = _PB_Outcome($ok, $error, $handle)
+    ConsoleWrite("Elevation result: " & $p["status"] & " win32=" & $error & @CRLF)
     If $p["status"] <> "STARTED" Then Return $p
     $p["handle"] = $handle
     $p["image"] = $exe
