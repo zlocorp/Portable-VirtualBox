@@ -11,6 +11,7 @@ on:
       - source/Portable-VirtualBox-Session-Test.au3
       - scripts/manager_session_worker.ps1
       - scripts/check_manager_session_gui.ps1
+      - scripts/snapshot_manager_windows.ps1
       - scripts/vbox_sup_cleanup.ps1
       - scripts/build.ps1
       - tests/test_manager_session_contract.py
@@ -72,6 +73,10 @@ jobs:
       - name: Exercise real buttons, Manager, live guest, refusal and two-cycle cleanup
         shell: pwsh
         run: ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT
+      - name: Capture actual Oracle windows on failure
+        if: failure()
+        shell: pwsh
+        run: ./scripts/snapshot_manager_windows.ps1 -PortableRoot $env:MANAGER_ROOT
       - name: Collect bounded evidence only, no executable or Oracle payload
         if: always()
         shell: pwsh
@@ -80,7 +85,7 @@ jobs:
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
           $proof=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
           if (Test-Path -LiteralPath $proof) {
-            Get-ChildItem -LiteralPath $proof -File | Where-Object { $_.Extension -in @('.txt','.json') -and $_.Length -lt 262144 } |
+            Get-ChildItem -LiteralPath $proof -File | Where-Object { $_.Extension -in @('.txt','.json','.png') -and $_.Length -lt 2097152 } |
               ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
           }
           Get-ChildItem -LiteralPath $env:RUNNER_TEMP -Directory -Filter 'pvbox-manager-*' | ForEach-Object {
