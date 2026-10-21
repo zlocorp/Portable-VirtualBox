@@ -51,9 +51,12 @@ public static class MediumProcess {
                 if(o.IsInvalid || e.IsInvalid || input.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
                 var si=new Startup {Size=Marshal.SizeOf(typeof(Startup)),Flags=0x101,Show=1,Input=input.DangerousGetHandle(),Output=o.DangerousGetHandle(),Error=e.DangerousGetHandle()};
                 var command=new StringBuilder("\""+exe+"\" "+arguments);
+                // Keep the caller console. A new hidden console under this restricted
+                // token terminated console children before Main (0xc0000142).
+                // Do not relax token rights or protected-cache permissions.
                 // Suspended only long enough to independently measure the child token.
                 stage="CreateProcessAsUser";
-                if(!CreateProcessAsUser(token,exe,command,IntPtr.Zero,IntPtr.Zero,true,0x08000004,IntPtr.Zero,cwd,ref si,out pi)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                if(!CreateProcessAsUser(token,exe,command,IntPtr.Zero,IntPtr.Zero,true,0x00000004,IntPtr.Zero,cwd,ref si,out pi)) throw new Win32Exception(Marshal.GetLastWin32Error());
                 stage="Read suspended child token";
                 LastFacts=TokenFacts.ReadHandle(pi.Process,pi.Pid);
                 if(LastFacts.Administrator || LastFacts.Integrity!=8192) throw new InvalidOperationException("Restricted fixture is not medium/non-admin");
