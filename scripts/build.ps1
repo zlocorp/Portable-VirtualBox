@@ -60,3 +60,5 @@ if ($byte1 -ne 0x4D -or $byte2 -ne 0x5A) { throw "Output is not a Windows execut
 $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $out).Hash.ToLowerInvariant()
 "$sha  $(Split-Path $out -Leaf)" | Set-Content -LiteralPath (Join-Path $outDir "SHA256SUMS.txt") -Encoding ascii
 Write-Host "Build OK: $($file.Length) bytes; SHA256 $sha"
+
+if ($SessionExperiment) { & (Join-Path $PSScriptRoot "build_session_helper.ps1") -Frontend $out }

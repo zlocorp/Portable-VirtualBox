@@ -2,6 +2,7 @@
 #include "ManagedProcess.au3"
 #include "PortableApp.au3"
 #include "PortableCIVM.au3"
+#include "PrivilegeBoundary.au3"
 ; Adapted Manager/VM lifecycle flow from ThatAdminGuy a035d06b12 and
 ; skyshay001 upstream PR #90 (CC BY-NC-SA 3.0; original notices in LICENSE.md).
 ; Replace shell/name waits with retained process handles and asynchronous UI.
@@ -9,6 +10,7 @@
 ; controller is wired only to a separate non-distributed experiment EXE,
 ; not the ordinary diagnostic entrypoint. No production UAC claim.
 Global $g_MS_Cycle = 0
+Global $g_MS_Separated = False
 
 Func _MS_Decide($manager, $seen, $total, $guests, $owned)
     If Not IsBool($owned) Or Not $owned Or Not IsBool($seen) Then Return "BLOCKED"
@@ -54,6 +56,10 @@ Func _MS_New($root, $workspace)
     $s["state"] = "IDLE"
     $s["detail"] = ""
     $s["session"] = ""
+    $s["separated"] = $g_MS_Separated
+    $s["cycle"] = 0
+    $s["elevation_cancelled"] = False
+    $s["app_system"] = $root & "\app64"
     $s["worker"] = _MP_New()
     $s["manager"] = _MP_New()
     $s["mutex"] = 0
@@ -93,6 +99,13 @@ EndFunc
 
 Func _MS_Worker(ByRef $s, $action)
     If $action <> "Prepare" And $action <> "Finish" Then Return False
+    $s["elevation_cancelled"] = False
+    If $s["separated"] Then
+        Local $privileged = _PB_Start($s["root"], $action, $s["cycle"])
+        $s["worker"] = $privileged
+        $s["elevation_cancelled"] = $privileged["status"] == "CANCELLED"
+        Return $privileged["status"] == "STARTED"
+    EndIf
     Local $exe = @ProgramFilesDir & "\PowerShell\7\pwsh.exe"
     Local $script = $s["workspace"] & "\scripts\manager_session_worker.ps1"
     If Not FileExists($exe) Or Not FileExists($script) Then Return False
@@ -107,6 +120,10 @@ Func _MS_Start(ByRef $s)
     If $s["state"] <> "IDLE" And $s["state"] <> "CLEAN" Then Return False
     If Not _MS_Allowed($s["root"], $s["workspace"]) Then
         _MS_State($s, "BLOCKED", "disposable-host-only")
+        Return False
+    EndIf
+    If $s["separated"] And Not _PB_Medium() Then
+        _MS_State($s, "BLOCKED", "frontend-must-be-non-administrator")
         Return False
     EndIf
     Local $app = _PA_Inspect($s["root"])
@@ -137,7 +154,12 @@ Func _MS_Start(ByRef $s)
         Return False
     EndIf
     $g_MS_Cycle += 1
+    $s["cycle"] = $g_MS_Cycle
     $s["session"] = EnvGet("RUNNER_TEMP") & "\pvbox-manager-" & @AutoItPID & "-" & $g_MS_Cycle
+    If $s["separated"] Then
+        $s["session"] = _PB_Store() & "\pvbox-manager-" & @AutoItPID & "-" & $s["cycle"]
+        $s["app_system"] = $s["session"] & "\app64"
+    EndIf
     $s["seen"] = False
     $s["owned"] = False
     $s["stopping"] = False
@@ -146,7 +168,14 @@ Func _MS_Start(ByRef $s)
     $s["window_clock"] = TimerInit()
     $s["quiet"] = 0
     If FileExists($s["session"]) Or Not _MS_Worker($s, "Prepare") Then
-        _MS_State($s, "FAILED", "prepare-worker-not-started")
+        If $s["elevation_cancelled"] Then
+            DllCall("kernel32.dll", "bool", "ReleaseMutex", "handle", $s["mutex"])
+            DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $s["mutex"])
+            $s["mutex"] = 0
+            _MS_State($s, "IDLE", "elevation-cancelled-no-system-changes")
+        Else
+            _MS_State($s, "FAILED", "prepare-worker-not-started")
+        EndIf
         Return False
     EndIf
     _MS_State($s, "PREPARING")
@@ -181,6 +210,11 @@ Func _MS_Reopen(ByRef $s)
 EndFunc
 
 Func _MS_Stop(ByRef $s)
+    If $s["state"] == "CLEANUP_DECLINED" Then
+        $s["quiet"] = 0
+        _MS_State($s, "READY_TO_CLEAN")
+        Return True
+    EndIf
     If $s["state"] <> "MANAGER_OPEN" And $s["state"] <> "OPENING" Then Return False
     ; Queue a request; the event loop posts WM_CLOSE only when the observed
     ; window is stable. Do not race Qt's deferred geometry persistence.
@@ -192,7 +226,7 @@ EndFunc
 
 Func _MS_Tick(ByRef $s)
     Local $state = $s["state"]
-    If $state == "PREPARING" Or $state == "CLEANING" Then
+    If $state == "PREPARING" Or $state == "CLEANING" Or $state == "CONFIGURING" Then
         Local $worker = $s["worker"], $status = _MP_Poll($worker)
         $s["worker"] = $worker
         If $status == "PRESENT" Then
@@ -220,12 +254,29 @@ Func _MS_Tick(ByRef $s)
             _MS_State($s, "CLEAN")
             Return
         EndIf
+        If $state == "CONFIGURING" Then
+            If Not _MS_OpenManager($s) Then _MS_State($s, "FAILED", "manager-not-started")
+            Return
+        EndIf
         Local $sup = _WinObsService("VBoxSup"), $sds = _WinObsService("VBoxSDS")
-        If Not _PCVM_ExpectedSup($sup) Or Not _PVS_ExpectedSDS($sds, $s["root"] & "\app64\VBoxSDS.exe") Then
+        If Not _PCVM_ExpectedSup($sup) Or Not _PVS_ExpectedSDS($sds, $s["app_system"] & "\VBoxSDS.exe") Then
             _MS_State($s, "FAILED", "unexpected-services-after-prepare")
             Return
         EndIf
         $s["owned"] = True
+        If $s["separated"] Then
+            ; This is a USER preference, never an elevated helper command.
+            Local $profile = _PP_Inspect($s["root"])
+            Local $configure = _MP_Start($profile["app"] & "\VBoxManage.exe", 'setproperty machinefolder "' & $profile["machines"] & '"', _
+                $profile["app"], $profile["profile"])
+            $s["worker"] = $configure
+            If $configure["status"] <> "STARTED" Then
+                _MS_State($s, "FAILED", "user-profile-configuration-not-started")
+            Else
+                _MS_State($s, "CONFIGURING")
+            EndIf
+            Return
+        EndIf
         If Not _MS_OpenManager($s) Then _MS_State($s, "FAILED", "manager-not-started")
         Return
     EndIf
@@ -277,7 +328,11 @@ Func _MS_Tick(ByRef $s)
         _MS_State($s, "READY_TO_CLEAN")
         If TimerDiff($s["quiet"]) < 1500 Then Return
         If Not _MS_Worker($s, "Finish") Then
-            _MS_State($s, "FAILED", "cleanup-worker-not-started")
+            If $s["elevation_cancelled"] Then
+                _MS_State($s, "CLEANUP_DECLINED", "click-finish-to-retry-elevation")
+            Else
+                _MS_State($s, "FAILED", "cleanup-worker-not-started")
+            EndIf
         Else
             _MS_State($s, "CLEANING")
         EndIf

@@ -1,7 +1,7 @@
 # End-to-end exercise of the actual compiled buttons and Oracle Manager.
 # Test fixture commands operate only on the freshly created, empty, named VM.
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$PortableRoot)
+param([Parameter(Mandatory)][string]$PortableRoot,[switch]$SeparatePrivileges)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -13,6 +13,20 @@ $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $exe=Join-Path $root 'Portable-VirtualBox-Session-Test.exe'
 $cli=Join-Path $root 'app64\VBoxManage.exe'
+$protectedStore=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Experiment'
+if ($SeparatePrivileges) {
+    Add-Type -Path @((Join-Path $PSScriptRoot '../source/privilege/TokenFacts.cs'),(Join-Path $PSScriptRoot '../tests/windows/MediumProcess.cs'))
+    $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+    $accessProbe=Join-Path $env:RUNNER_TEMP 'ProtectedWriteProbe.exe'
+    & $csc /nologo /target:exe /platform:x64 ("/out:"+$accessProbe) (Join-Path $PSScriptRoot '../tests/windows/ProtectedWriteProbe.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Access probe compilation failed' }
+    $helper=Join-Path $root 'Portable-VirtualBox-Helper-Test.exe'
+    foreach($bad in @('Unrecognized 1 1',('Prepare '+$PID+' 1'))) {
+        $p=Start-Process -FilePath $helper -ArgumentList $bad -Wait -PassThru
+        if ($p.ExitCode -notin @(64,70)) { throw 'Helper accepted unauthorised controller or action' }
+    }
+    if (Test-Path -LiteralPath $protectedStore) { throw 'Negative helper calls wrote protected state' }
+}
 Add-Type -TypeDefinition @'
 using System;
 using System.Text;
@@ -83,7 +97,11 @@ function Oracle([string]$Arguments,[string]$Label) {
     $old=[Environment]::GetEnvironmentVariable('VBOX_USER_HOME','Process')
     try {
         $env:VBOX_USER_HOME=Join-Path $root 'data\.VirtualBox'
-        $p=Start-Process -FilePath $cli -ArgumentList $Arguments -WorkingDirectory (Split-Path $cli -Parent) -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $err
+        if ($SeparatePrivileges) {
+            $p=[MediumProcess]::Start($cli,$Arguments,(Split-Path $cli -Parent),$log,$err)
+        } else {
+            $p=Start-Process -FilePath $cli -ArgumentList $Arguments -WorkingDirectory (Split-Path $cli -Parent) -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $err
+        }
         try {
             if (-not $p.WaitForExit(40000)) { throw "Fixture command timed out: $Label" }
             if ($p.ExitCode -ne 0) { throw "Fixture $Label failed: $(Get-Content -LiteralPath $err -Raw)" }
@@ -95,6 +113,11 @@ function Observe-Manager {
     $found=@(Get-Process -Name VirtualBox -ErrorAction Stop)
     if ($found.Count -ne 1 -or $found[0].MainModule.FileName -ine (Join-Path $root 'app64\VirtualBox.exe') -or
         [ManagerUiProbe]::Window($found[0].Id) -eq [IntPtr]::Zero) { throw 'No exact real Oracle Manager window' }
+    if ($SeparatePrivileges) {
+        $facts=[PortableVBox.TokenFacts]::Read($found[0].Id)
+        if ($facts.Administrator -or $facts.Integrity -ne 8192) { throw 'Oracle Manager was elevated' }
+        $facts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out ('manager-token-'+$found[0].Id+'.json')) -Encoding utf8
+    }
     return $found[0].Id
 }
 function Assert-Clean([string]$Label) {
@@ -103,18 +126,60 @@ function Assert-Clean([string]$Label) {
     if ($services.Count -ne 0 -or $processes.Count -ne 0 -or (Test-Path (Join-Path $env:SystemRoot 'System32\drivers\VBoxSup.sys'))) { throw "Not clean after $Label" }
 }
 function Start-Controller([string]$Label) {
+    if ($SeparatePrivileges) {
+        $p=[MediumProcess]::Start($exe,'--lang en --separate-privileges',$root,(Join-Path $out ($Label+'.stdout.txt')),(Join-Path $out ($Label+'.stderr.txt')))
+        [MediumProcess]::LastFacts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out ($Label+'-token.json')) -Encoding utf8
+        return $p
+    }
     return Start-Process -FilePath $exe -ArgumentList '--lang en' -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
 }
 $front=$null; $other=$null
 $proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false}
 try {
     Assert-Clean 'initial baseline'
+    if ($SeparatePrivileges) {
+        # A forged user manifest must not bless modified elevated DLL inputs.
+        $payload=Join-Path $root 'app64\VBoxRT.dll'
+        $original=[IO.File]::ReadAllBytes($payload)
+        $manifestPath=Join-Path $root 'app64\.prepared.json'
+        $manifestBytes=[IO.File]::ReadAllBytes($manifestPath)
+        try {
+            $changed=[byte[]]$original.Clone();$changed[128]=$changed[128] -bxor 1
+            [IO.File]::WriteAllBytes($payload,$changed)
+            $forged=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            $row=$forged.files | Where-Object path -eq 'VBoxRT.dll'
+            $row.size=(Get-Item -LiteralPath $payload).Length
+            $row.sha256=(Get-FileHash -LiteralPath $payload).Hash.ToLowerInvariant()
+            $forged | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+            $badFront=Start-Controller 'tampered-payload'
+            Await-State $badFront 'IDLE' 20
+            Click-Button $badFront 'Start VirtualBox'
+            Await-State $badFront 'FAILED' 90
+            Assert-Clean 'tampered DLL refusal'
+            Click-Button $badFront 'Close'
+            if (-not $badFront.WaitForExit(10000) -or $badFront.ExitCode -ne 3) { throw 'Failed payload controller did not leave safely' }
+            $badFront.Dispose()
+            $proof["tampered_payload_refused"]=$true
+        } finally {
+            [IO.File]::WriteAllBytes($payload,$original)
+            [IO.File]::WriteAllBytes($manifestPath,$manifestBytes)
+        }
+    }
     $front=Start-Controller 'controller'
     Await-State $front 'IDLE' 20
     Click-Button $front 'Start VirtualBox'
     Await-State $front 'MANAGER_OPEN'
     $manager1=Observe-Manager
     $proof.real_manager_opened=$true
+    if ($SeparatePrivileges) {
+        $firstSession=Join-Path $protectedStore ('pvbox-manager-'+$front.Id+'-1')
+        $p=[MediumProcess]::Start($accessProbe,('"'+$firstSession+'"'),$root,(Join-Path $out 'acl.stdout.txt'),(Join-Path $out 'acl.stderr.txt'))
+        try { if (-not $p.WaitForExit(15000) -or $p.ExitCode -ne 0) { throw 'Medium user could modify protected helper/payload/ownership state' } } finally { $p.Dispose() }
+        $proof["protected_cache_write_denied"]=$true
+        $sds=Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS'
+        if (([string]$sds.ImagePath).Trim().Trim('"') -ine (Join-Path $firstSession 'app64\VBoxSDS.exe')) { throw 'Service executes from user-writable root' }
+        $proof["service_uses_protected_copy"]=$true
+    }
     # The second controller must not mutate another live session.
     $other=Start-Controller 'second-controller'
     Await-State $other 'IDLE' 20
@@ -131,6 +196,16 @@ try {
     $null=Oracle ('startvm '+$uuid+' --type headless') 'start-guest'
     $running=Oracle ('showvminfo '+$uuid+' --machinereadable') 'guest-running'
     if ($running -notmatch '(?m)^VMState="running"') { throw 'Fixture did not reach running' }
+    if ($SeparatePrivileges) {
+        $guest=Get-Process -Name VBoxHeadless -ErrorAction Stop
+        $facts=[PortableVBox.TokenFacts]::Read($guest.Id)
+        if ($facts.Administrator -or $facts.Integrity -ne 8192) { throw 'Guest inherited elevated rights' }
+        $facts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out 'guest-token.json') -Encoding utf8
+        $proof["frontend_manager_guest_medium"]=$true
+        $p=Start-Process -FilePath $helper -ArgumentList ('Finish '+$front.Id+' 1') -PassThru -Wait
+        if ($p.ExitCode -ne 70 -or (Get-Service VBoxSup).Status -ne 'Running') { throw 'Privileged helper accepted cleanup while VM runs' }
+        $proof["live_guest_cleanup_refused"]=$true
+    }
     Click-Button $front 'Finish session'
     Await-State $front 'WAIT_GUESTS' 40
     $running=Oracle ('showvminfo '+$uuid+' --machinereadable') 'guest-after-manager-close'
@@ -164,11 +239,24 @@ try {
     $proof.uuid=$uuid
     $proof.manager_pids=@($manager1,$manager2)
     $proof.vm_config_present_after_cleanup=(Test-Path -LiteralPath $vm)
-    $sessionFolders=@(Get-ChildItem -LiteralPath $env:RUNNER_TEMP -Directory -Filter ('pvbox-manager-'+$front.Id+'-*'))
+    $evidenceRoot=if ($SeparatePrivileges) { $protectedStore } else { $env:RUNNER_TEMP }
+    $sessionFolders=@(Get-ChildItem -LiteralPath $evidenceRoot -Directory -Filter ('pvbox-manager-'+$front.Id+'-*'))
     if ($sessionFolders.Count -ne 2) { throw 'Expected two independent session receipts' }
     foreach ($folder in $sessionFolders) {
+        if ($SeparatePrivileges -and ((Test-Path -LiteralPath (Join-Path $folder.FullName 'app64')) -or (Test-Path -LiteralPath (Join-Path $folder.FullName 'code')) -or -not (Test-Path -LiteralPath (Join-Path $folder.FullName 'payload-removed.json')))) { throw 'Privileged payload/code cache retained after successful cleanup' }
         $clean=Get-Content -LiteralPath (Join-Path $folder.FullName 'cleanup\cleanup-results.json') -Raw | ConvertFrom-Json
-        if (-not $clean.cleanup_verified -or -not $clean.driver_package_removed -or $clean.cleanup_basis -ne 'Session' -or $clean.vm_powered_off_before_cleanup) { throw 'Incorrect cleanup evidence or false VM boot claim' }
+        if (-not $clean.cleanup_verified -or -not $clean.driver_package_removed -or $clean.cleanup_basis -ne $(if($SeparatePrivileges){'PrivilegedSession'}else{'Session'}) -or $clean.vm_powered_off_before_cleanup) { throw 'Incorrect cleanup evidence or false VM boot claim' }
+    }
+    if ($SeparatePrivileges) {
+        $helpers=@($sessionFolders | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Filter 'helper-*.json' -File } | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json })
+        $successful=@($helpers | Where-Object childExit -eq 0)
+        if ($successful.Count -ne 4) { throw 'Missing two elevated prepare/finish pairs' }
+        foreach($h in $helpers) {
+            if (-not $h.helper.Administrator -or $h.helper.Integrity -lt 12288 -or $h.controller.Administrator -or $h.controller.Integrity -ne 8192) { throw 'Privilege separation proof inconsistent' }
+        }
+        $proof["only_helper_elevated"]=$true
+        $proof["helper_verbs"]='ShellExecuteExW runas'
+        $proof["interactive_uac_consent_verified"]=$false
     }
     Click-Button $front 'Close'
     if (-not $front.WaitForExit(10000) -or $front.ExitCode -ne 0) { throw 'Completed frontend did not exit cleanly' }

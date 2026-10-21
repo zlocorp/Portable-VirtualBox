@@ -8,6 +8,7 @@ param(
     [Parameter(Mandatory)][string]$DriverStartReport,
     [Parameter(Mandatory,ParameterSetName="Boot")][string]$BootReport,
     [Parameter(Mandatory,ParameterSetName="Session")][string]$QuiescentReport,
+    [Parameter(Mandatory,ParameterSetName="PrivilegedSession")][string]$PrivilegedReport,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [ValidateRange(5,90)][int]$TimeoutSeconds = 45
 )
@@ -24,7 +25,7 @@ function Under-Runner([string]$Value) {
     $full=[IO.Path]::GetFullPath($Value)
     return $full.StartsWith($runner, [StringComparison]::OrdinalIgnoreCase)
 }
-$proofPath=if ($PSCmdlet.ParameterSetName -eq "Session") { $QuiescentReport } else { $BootReport }
+$proofPath=if ($PSCmdlet.ParameterSetName -eq "Session") { $QuiescentReport } elseif ($PSCmdlet.ParameterSetName -eq "PrivilegedSession") { $PrivilegedReport } else { $BootReport }
 foreach ($candidate in @($AppDir,$StandaloneReport,$DriverStartReport,$proofPath,$OutputDirectory)) {
     if (-not (Under-Runner $candidate)) { throw 'All input/output paths must be in RUNNER_TEMP' }
 }
@@ -57,7 +58,7 @@ if ($PSCmdlet.ParameterSetName -eq "Boot") {
         throw 'Disposable guest process has not been positively confirmed powered off'
     }
     $bootVerified=$true
-} else {
+} elseif ($PSCmdlet.ParameterSetName -eq "Session") {
     if ($proof.experiment -ne 'compiled-manager-quiescent-session' -or
         $proof.portable_root -ine (Split-Path $app -Parent) -or
         $proof.stage_report -ine $StandaloneReport -or $proof.driver_start_report -ine $DriverStartReport -or
@@ -73,6 +74,22 @@ if ($PSCmdlet.ParameterSetName -eq "Boot") {
     } finally { $controller.Dispose() }
     if (@(Get-Process -ErrorAction Stop | Where-Object ProcessName -match '^(VBox|VirtualBox)').Count -ne 0) {
         throw 'Active VirtualBox process prohibits Manager-session cleanup'
+    }
+}
+if ($PSCmdlet.ParameterSetName -eq "PrivilegedSession") {
+    if ($proof.experiment -ne 'privilege-separated-manager-quiescent' -or
+        $proof.protected_app -ine $app -or $proof.stage_report -ine $StandaloneReport -or
+        $proof.driver_start_report -ine $DriverStartReport -or $proof.no_vbox_processes_verified -ne $true -or
+        $proof.controller_image -ine (Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe')) {
+        throw 'No matching protected privilege-session proof'
+    }
+    $controller=[Diagnostics.Process]::GetProcessById([int]$proof.controller_pid)
+    try {
+        if ($controller.StartTime.ToFileTimeUtc().ToString() -ne $proof.controller_created_filetime -or
+            $controller.MainModule.FileName -ine $proof.controller_image) { throw 'Privilege-session controller changed' }
+    } finally { $controller.Dispose() }
+    if (@(Get-Process -ErrorAction Stop | Where-Object ProcessName -match '^(VBox|VirtualBox)').Count -ne 0) {
+        throw 'Activity prohibits privileged-session cleanup'
     }
 }
 if ((Test-Path -LiteralPath 'HKLM:\SOFTWARE\Oracle\VirtualBox') -or

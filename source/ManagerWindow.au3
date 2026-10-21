@@ -32,6 +32,12 @@ Func _MSW_Text($key)
         Case "PREPARING"
             If $ru Then Return "Проверка подписанного пакета и подготовка драйвера."
             Return "Verifying the signed package and preparing the driver."
+        Case "CONFIGURING"
+            If $ru Then Return "Настройка переносимого профиля с обычными правами пользователя."
+            Return "Configuring the portable profile with ordinary user rights."
+        Case "CLEANUP_DECLINED"
+            If $ru Then Return "Повышение прав отменено. Ресурсы сохранены. Нажмите «Завершить сессию», чтобы повторить очистку."
+            Return "Elevation was declined. Resources retained. Click Finish session to retry cleanup."
         Case "OPENING"
             If $ru Then Return "Открывается окно Oracle VirtualBox Manager."
             Return "Opening the Oracle VirtualBox Manager window."
@@ -99,7 +105,7 @@ Func _MSW_Show($root, $workspace)
         If $last <> $display Then
             GUICtrlSetData($status, $display)
             Local $canStart = $s["state"] == "IDLE" Or $s["state"] == "CLEAN"
-            Local $canStop = $s["state"] == "MANAGER_OPEN" Or $s["state"] == "OPENING"
+            Local $canStop = $s["state"] == "MANAGER_OPEN" Or $s["state"] == "OPENING" Or $s["state"] == "CLEANUP_DECLINED"
             Local $canReopen = $s["state"] == "WAIT_GUESTS" Or $s["state"] == "WAIT_BACKGROUND"
             GUICtrlSetState($start, ($canStart ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($stop, ($canStop ? $GUI_ENABLE : $GUI_DISABLE))

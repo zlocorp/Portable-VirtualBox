@@ -10,9 +10,18 @@ If Not _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) Then
 EndIf
 Local $preferences = _LS_Load(@ScriptDir)
 _LI_Set(_LS_Select($preferences["language"], @OSLang))
-If $CmdLine[0] = 2 And $CmdLine[1] == "--lang" Then
-    If Not _LI_Set($CmdLine[2]) Then Exit 64
-ElseIf $CmdLine[0] <> 0 Then
-    Exit 64
-EndIf
+Local $arg = 1
+While $arg <= $CmdLine[0]
+    Switch $CmdLine[$arg]
+        Case "--lang"
+            If $arg >= $CmdLine[0] Then Exit 64
+            $arg += 1
+            If Not _LI_Set($CmdLine[$arg]) Then Exit 64
+        Case "--separate-privileges"
+            $g_MS_Separated = True
+        Case Else
+            Exit 64
+    EndSwitch
+    $arg += 1
+WEnd
 Exit _MSW_Show(@ScriptDir, EnvGet("GITHUB_WORKSPACE"))
