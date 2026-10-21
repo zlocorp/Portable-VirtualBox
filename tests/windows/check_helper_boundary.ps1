@@ -61,7 +61,7 @@ function Await-Idle {
         Start-Sleep -Milliseconds 250
     }
 }
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-inherited-console';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='VBoxManage-startvm-headless';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
 $front=$null;$manager=$null;$guest=$null
 try {
     Clean-System
@@ -107,24 +107,13 @@ try {
             $created=Oracle 'createvm --name pvbox_helper_boundary_fixture --ostype Other --register' 'create-vm'
             if ($created -notmatch '(?im)^UUID:\s*([0-9a-f-]{36})\s*$') { throw 'Missing fixture UUID' };$uuid=$Matches[1]
             $null=Oracle ('modifyvm '+$uuid+' --memory 128 --nic1 none --audio-driver none') 'configure-vm'
-            # The manufactured restricted CI token cannot bootstrap Oracle's
-            # detached console via startvm --type headless (0xc0000142 before
-            # guest code). Use Oracle's documented direct frontend entry with
-            # the same restricted token and an inherited console. This fixture
-            # proves effect separation, NOT that detached spawn or UAC works.
-            $old=$env:VBOX_USER_HOME
-            try {
-                $env:VBOX_USER_HOME=Join-Path $root 'data\.VirtualBox'
-                $guest=Start-Medium (Join-Path $runtime 'VBoxHeadless.exe') ('--startvm '+$uuid+' --vrde off') 'direct-headless'
-            } finally { $env:VBOX_USER_HOME=$old }
-            $timer=[Diagnostics.Stopwatch]::StartNew();$attempt=0
-            do {
-                if ($guest.HasExited) { throw ('Direct guest exited '+$guest.ExitCode+': '+(Get-Content -LiteralPath (Join-Path $out 'direct-headless.stdout.txt') -Raw)+(Get-Content -LiteralPath (Join-Path $out 'direct-headless.stderr.txt') -Raw)) }
-                if ($timer.Elapsed.TotalSeconds -gt 30) { throw 'Guest did not reach running state' }
-                $attempt++
-                $running=Oracle ('showvminfo '+$uuid+' --machinereadable') ('running-vm-'+$attempt)
-                if ($running -notmatch '(?m)^VMState="running"') { Start-Sleep -Milliseconds 250 }
-            } until ($running -match '(?m)^VMState="running"')
+            # Use the real Oracle startup path again now that Manager/CLI/guest
+            # share the protected runtime. The direct diagnostic launch was
+            # only needed to expose the owner rejection in the old input tree.
+            $null=Oracle ('startvm '+$uuid+' --type headless') 'boot-vm'
+            $running=Oracle ('showvminfo '+$uuid+' --machinereadable') 'running-vm'
+            if ($running -notmatch '(?m)^VMState="running"') { throw 'Guest did not reach running state' }
+            $proof.vboxmanage_headless_spawn_verified=$true
             $guests=@(Get-Process -Name VBoxHeadless -ErrorAction Stop)
             if ($guests.Count -lt 1) { throw 'No headless test guest' }
             foreach ($g in $guests) {
@@ -137,8 +126,6 @@ try {
             if ((Get-Service VBoxSup).Status -ne 'Running') { throw 'Live guest lost its driver' }
             $proof.live_guest_cleanup_refused=$true
             $null=Oracle ('controlvm '+$uuid+' poweroff') 'poweroff-vm'
-            Wait-Exit $guest 0 'direct guest exit' 30
-            $guest.Dispose();$guest=$null
         } else {
             $again=Oracle ('showvminfo '+$uuid+' --machinereadable') 'same-uuid'
             if ($again -notmatch ('(?mi)^UUID="'+[regex]::Escape($uuid)+'"') -or $again -notmatch '(?m)^VMState="poweroff"') { throw 'UUID/state changed on repeat' }
