@@ -14,8 +14,7 @@ import stat
 import sys
 import zipfile
 
-DOC_MEMBERS = ("LICENSE.md", "README.md", "README.ru.md", "CHANGELOG.md",
-               "FEATURES.md", "CREDITS.md", "THIRD_PARTY_NOTICES.md")
+DOC_MEMBERS = ("LICENSE.md", "README.md", "README.ru.md", "CREDITS.md")
 MEMBERS = DOC_MEMBERS + ("PREVIEW-NOT-A-HYPERVISOR.txt", "Portable-VirtualBox.exe")
 NOTICE = """Portable-VirtualBox development diagnostic preview
 
@@ -29,7 +28,7 @@ Oracle VBoxSDS registration/cleanup; do not use it on a personal PC.
 
 What works:
 - RU/EN diagnostics, explicit saved language, completeness checks and built-in help
-- About/credits, authors and third-party notices included with the preview
+- concise About dialog; original license and consolidated notices included
 - explicit first-run setup of data/.VirtualBox, data/Machines and logs
 - repeat setup without overwriting existing user files
 
@@ -41,8 +40,7 @@ the regular launcher. No elevation is requested.
 Do not copy this over an existing working VirtualBox installation.
 Keep your own VM disks, snapshots and backups untouched.
 
-Original license: LICENSE.md. Authors and reuse: CREDITS.md.
-External components and distribution boundaries: THIRD_PARTY_NOTICES.md.
+Original license: LICENSE.md. Authors, reuse and external component notices: CREDITS.md.
 """
 
 def _read_regular(path: Path, limit: int) -> bytes:

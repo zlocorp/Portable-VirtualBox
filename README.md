@@ -1,6 +1,6 @@
 # Portable-VirtualBox · 2026 modernization
 
-[Русский](README.ru.md) · [Features](FEATURES.md) · [Changelog](CHANGELOG.md) · [Credits](CREDITS.md)
+[Русский](README.ru.md) · [Features](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/FEATURES.md) · [Changelog](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/CHANGELOG.md) · [Credits](CREDITS.md)
 
 A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portable-VirtualBox), focused on a small bilingual launcher, verifiable dependencies and portable user data.
 
@@ -8,7 +8,7 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 ## What is different
 
-**A usable diagnostic shell.** Native Russian/English GUI and UTF-8 CLI, remembered language with an explicit “Save language” action, a return to Windows language selection, readable failure reasons, copyable diagnostics and an About window with project credits. A temporary `--lang` selection never overwrites the saved preference.
+**A usable diagnostic shell.** Native Russian/English GUI and UTF-8 CLI, remembered language with an explicit “Save language” action, a return to Windows language selection, readable failure reasons, copyable diagnostics and a compact About window. A temporary `--lang` selection never overwrites the saved preference.
 
 **No bundled obsolete executables.** Old AutoIt compilers, 7za, DevCon, SnetCfg, fourteen legacy translation INIs and the old splash were removed. The build uses official external AutoIt **3.3.18.0**. The tested Oracle package is pinned to **7.2.22 r175245**, with exact hashes, publisher checks and file-only MSI/CAB preparation rather than silently running an installer.
 
@@ -17,8 +17,6 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 **Portable user preferences and data.** Explicit first-run creation of `data/.VirtualBox`, `data/Machines` and `logs` preserves existing files. The only preference file is `data/launcher.ini`; malformed/foreign settings are not overwritten. Saving uses a same-directory staged replacement and refuses stale `.pending` files. No Oracle XML is rewritten by these public features.
 
 **Manager and guests are not the same process.** Diagnostics separately report Manager, GUI/headless guest processes and background activity. These are observations, not proof that a guest is running or permission to stop/delete anything.
-
-**Traceable community work.** [The adoption ledger](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/COMMUNITY-ADOPTION.md) distinguishes implemented adaptations, existing coverage and deferred work. Inspiration is not passed off as copied code, and copied code must retain its license and author notices.
 
 ## Try the current preview
 
@@ -41,18 +39,18 @@ A damaged `launcher.ini` is left intact and the launcher falls back to the Windo
 
 ## Evidence and limits
 
-[FEATURES.md](FEATURES.md) is the current capability matrix: **public preview**, **CI-only**, **planned**. [CHANGELOG.md](CHANGELOG.md) records user-relevant changes under **Unreleased**, not fictional product releases.
+[FEATURES.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/FEATURES.md) is the current capability matrix: **public preview**, **CI-only**, **planned**. [CHANGELOG.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/CHANGELOG.md) records user-relevant changes under **Unreleased**, not fictional product releases.
 
-The community-adoption implementation `183f35da` passed [x64 build, ordinary compiled CLI and ZIP checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219426), [18 native AutoIt harnesses](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219415) and [compiled empty-VM boot plus exact-owned driver teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548214487). The downloaded preview ZIP was independently inspected: its checksum matches, and credits, notices and both READMEs are included. [Full evidence and environment limits](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-community-adoption.md).
+The earlier cleanup checkpoint passed [x64/ZIP build checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39503487607), [native AutoIt tests](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502031102) and [compiled empty-VM boot plus exact-owned driver teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502023979). The community package passed [ordinary compiled CLI and ZIP checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219426) and [18 native AutoIt harnesses](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219415). See the [execution report](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-community-adoption.md) for that checkpoint; subsequent packaging changes are recorded in the changelog.
 
 **Not implemented:** production Manager Start/Stop, reviewed privilege-separated UAC helper, general VM migration/recovery, transactional Oracle updates, optional USB/bridged networking. No real guest OS/disk or interactive Windows 11 GUI/DPI acceptance is claimed. A Linux/Windows Server CI pass is not Windows 11 approval.
 
 ## Build and packaging
 
-See [build instructions](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/BUILDING.md). `build.bat` delegates to `scripts/build.ps1`; Python runs tests and builds the diagnostic ZIP. Oracle, drivers and VM data are never bundled in that ZIP. The allowlist contains the launcher, warning, license, both READMEs, feature/changelog documents and attribution notices.
+See [build instructions](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/BUILDING.md). `build.bat` delegates to `scripts/build.ps1`; Python runs tests and builds the diagnostic ZIP. Oracle, drivers and VM data are never bundled in that ZIP. The six-file package contains the launcher, preview warning, original license, both READMEs and one consolidated CREDITS file. The changelog and feature matrix stay in the repository.
 
 ## Authors and license
 
 Based on upstream snapshot `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Original author credits, including **Michael Meyer (michaelm_007) and contributors** and the **vboxme project**, are retained. This modernization is maintained in **zlocorp/Portable-VirtualBox**.
 
-The original **CC BY-NC-SA 3.0** license remains unchanged; see [LICENSE.md](LICENSE.md). [CREDITS.md](CREDITS.md) identifies community references and the kind of reuse. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) separates the launcher's license from external software. No affiliation with or endorsement by Oracle, AutoIt or community authors is implied.
+The original **CC BY-NC-SA 3.0** license remains unchanged; see [LICENSE.md](LICENSE.md). [CREDITS.md](CREDITS.md) identifies community references and the kind of reuse. The same CREDITS file includes notices for external components. No affiliation with or endorsement by Oracle, AutoIt or community authors is implied.

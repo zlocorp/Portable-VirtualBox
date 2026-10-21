@@ -20,7 +20,7 @@ class CommunityAdoption(unittest.TestCase):
             self.assertIn(relative.replace('/', '\\'), source)
 
     def test_user_docs_and_provenance_are_available(self):
-        for name in ('CHANGELOG.md', 'FEATURES.md', 'CREDITS.md', 'THIRD_PARTY_NOTICES.md',
+        for name in ('CHANGELOG.md', 'FEATURES.md', 'CREDITS.md',
                      'README.ru.md', 'docs/COMMUNITY-ADOPTION.md'):
             with self.subTest(name=name):
                 self.assertTrue((ROOT / name).is_file(), 'Missing product document: ' + name)
@@ -31,3 +31,17 @@ class CommunityAdoption(unittest.TestCase):
         source = path.read_text(encoding='utf-8-sig')
         for forbidden in ('#RequireAdmin', 'RegWrite(', 'Run(', 'RunWait(', 'Execute('):
             self.assertNotIn(forbidden, source)
+
+    def test_about_is_short_not_a_contributor_roster(self):
+        source = (ROOT / 'source/LauncherAbout.au3').read_text(encoding='utf-8-sig')
+        self.assertNotIn('_LI("about.community"', source)
+        self.assertNotIn('Deac2, ThatAdminGuy', source)
+        self.assertNotIn('THIRD_PARTY_NOTICES.md', source)
+        self.assertIn('CREDITS.md', source)
+        self.assertIn('CC BY-NC-SA 3.0', source)
+
+    def test_notices_are_consolidated_without_losing_upstream(self):
+        source = (ROOT / 'CREDITS.md').read_text(encoding='utf-8')
+        for mark in ('Michael Meyer', 'vboxme', 'CC BY-NC-SA 3.0', 'AutoIt', 'Deac2', 'ThatAdminGuy', 'bitamind'):
+            self.assertIn(mark, source)
+        self.assertFalse((ROOT / 'THIRD_PARTY_NOTICES.md').exists())

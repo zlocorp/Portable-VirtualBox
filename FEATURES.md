@@ -9,7 +9,7 @@ Updated **2026-10-21**. The comparison baseline is upstream `vboxme/Portable-Vir
 | Report all missing runtime files | Public preview | 15 required EXE/DLL/driver inputs; regular/nonempty paths; **not signature verification**; `PortableApp.au3` |
 | Identify missing portable directories | Public preview | Names `data/Machines` etc.; preparation preserves existing user data |
 | Distinguish Manager / guest / background processes | Public preview | Query-only diagnostic snapshot; not VM state or teardown permission |
-| About, authors and reuse notices | Public preview | GUI, `--about`, root CREDITS/THIRD_PARTY_NOTICES and ZIP |
+| About, authors and reuse notices | Public preview | Concise GUI/`--about`; detailed authors and component notices in one CREDITS file, also included in ZIP |
 | Legacy binary-free source/build | Implemented | Old AutoIt/7za/DevCon/SnetCfg removed; signed external compiler; source-tree guard |
 | Oracle 7.2.22 verified file-only preparation | Developer tooling / CI | Exact pinned official package, MSI/CAB extraction, hashes and publisher checks; not a user-facing installer |
 | Empty VM boot and own-resource teardown | CI-only | Actual compiled AutoIt and signed VBoxSup on disposable Windows Server; not a shipped user flow |
@@ -23,7 +23,7 @@ Updated **2026-10-21**. The comparison baseline is upstream `vboxme/Portable-Vir
 
 ## Substantive architecture changes
 
-Compared with the inherited launcher/build, this branch removes bundled old executables, separates file preparation from system installation, uses explicit process observations and refuses unknown states rather than guessing. The public GUI does not request blanket administration. Ordinary data setup is explicit, and community references are tracked by author and adoption type.
+Compared with the inherited launcher/build, this branch removes bundled old executables, separates file preparation from system installation, uses explicit process observations and refuses unknown states rather than guessing. The public GUI does not request blanket administration. Ordinary data setup is explicit, and reused work is credited in CREDITS without adding contributor lists to the interface.
 
 Those are engineering differences, **not a blanket security certification**. Signed external packages do not make the unsigned launcher trusted, and its CI-only environment markers are not an access-control boundary.
 

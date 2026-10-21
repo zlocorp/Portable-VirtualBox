@@ -40,12 +40,15 @@ class DiagnosticPreviewTests(unittest.TestCase):
         self.assertEqual(len(receipt["sha256"]),64)
         self.assertTrue(self.output.with_suffix(".zip.sha256").is_file())
 
-    def test_archive_carries_attribution_and_feature_status(self):
+    def test_archive_carries_only_user_docs_and_one_credit_file(self):
         build_preview(self.root,self.exe,self.output)
         with zipfile.ZipFile(self.output) as archive:
-            for name in ("CREDITS.md", "THIRD_PARTY_NOTICES.md", "README.ru.md", "CHANGELOG.md", "FEATURES.md"):
+            for name in ("CREDITS.md", "LICENSE.md", "README.md", "README.ru.md"):
                 self.assertIn(name, archive.namelist())
                 self.assertEqual(archive.read(name),(self.root/name).read_bytes())
+            self.assertEqual(set(archive.namelist()), {"Portable-VirtualBox.exe", "PREVIEW-NOT-A-HYPERVISOR.txt", "README.md", "README.ru.md", "LICENSE.md", "CREDITS.md"})
+            for name in ("THIRD_PARTY_NOTICES.md", "FEATURES.md", "CHANGELOG.md"):
+                self.assertNotIn(name, archive.namelist())
 
     def test_no_zip_is_created_when_credits_missing(self):
         (self.root/"CREDITS.md").unlink()

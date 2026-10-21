@@ -1,6 +1,6 @@
 # Portable-VirtualBox · модернизация 2026 года
 
-[English](README.md) · [Возможности](FEATURES.md) · [История изменений](CHANGELOG.md) · [Авторы](CREDITS.md)
+[English](README.md) · [Возможности](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/FEATURES.md) · [История изменений](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/CHANGELOG.md) · [Авторы](CREDITS.md)
 
 Модернизация [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portable-VirtualBox): двуязычная оболочка, проверяемые зависимости и переносимые пользовательские данные.
 
@@ -8,7 +8,7 @@
 
 ## Что изменилось относительно оригинала
 
-**Новая русско-английская оболочка.** Язык можно переключить, явно сохранить кнопкой «Запомнить язык» и вернуть выбор по Windows. Настройка переживает перезапуск и перенос папки. Временный `--lang` её не перезаписывает. Диагностика копируется, причины отказа читаемы, в окне «О программе» указаны авторы и ограничения.
+**Новая русско-английская оболочка.** Язык можно переключить, явно сохранить кнопкой «Запомнить язык» и вернуть выбор по Windows. Настройка переживает перезапуск и перенос папки. Временный `--lang` её не перезаписывает. Диагностика копируется, причины отказа читаемы, окно «О программе» содержит краткую информацию о сборке.
 
 **Без устаревших бинарников.** Из активного дерева удалены старые AutoIt, 7za, DevCon, SnetCfg, четырнадцать старых INI-переводов и заставка. Для сборки используется официальный внешний AutoIt **3.3.18.0**, для тестов зафиксирован Oracle **VirtualBox 7.2.22 r175245**. Дистрибутив проверяется по хешу и подписи, файлы извлекаются из MSI/CAB без скрытого запуска установщика.
 
@@ -17,8 +17,6 @@
 **Переносимые данные без переписывания чужих настроек.** Явная подготовка создаёт `data/.VirtualBox`, `data/Machines` и `logs`, сохраняя существующие файлы. Язык хранится в `data/launcher.ini`. Повреждённый или чужой файл не перезаписывается; новая настройка записывается через промежуточный файл в той же папке. Эти функции не редактируют Oracle XML.
 
 **Окно Manager не равно работающей ВМ.** В отчёте раздельно показаны процессы Manager, GUI/headless-процессы ВМ и фоновые процессы. Это снимок наблюдений, а не подтверждение состояния гостевой ОС и не основание для остановки или удаления служб.
-
-**У заимствований есть источник.** [Реестр переноса](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/COMMUNITY-ADOPTION.md) показывает, какие идеи реализованы, какие уже покрывались нашим кодом, а какие отложены. Авторы перечислены не только в репозитории, но и в файлах ZIP и окне «О программе».
 
 ## Что можно использовать сейчас
 
@@ -41,16 +39,16 @@ Portable-VirtualBox.exe --about
 
 ## Готовность и проверки
 
-[FEATURES.md](FEATURES.md) отделяет **доступные пользователю функции**, **эксперименты CI** и **планы**. [CHANGELOG.md](CHANGELOG.md) ведётся в разделе **Unreleased**: опубликованных версий модернизации пока нет.
+[FEATURES.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/FEATURES.md) отделяет **доступные пользователю функции**, **эксперименты CI** и **планы**. [CHANGELOG.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/CHANGELOG.md) ведётся в разделе **Unreleased**: опубликованных версий модернизации пока нет.
 
-Код пакета адаптаций `183f35da` прошёл [сборку x64, проверки обычного скомпилированного CLI и ZIP](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219426), [18 нативных тестовых программ AutoIt](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219415) и [запуск пустой ВМ с очисткой собственных ресурсов](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548214487). Готовый ZIP скачан и проверен отдельно: контрольная сумма совпадает, оба README и сведения об авторах действительно включены. [Подробный отчёт и границы проверки](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-community-adoption.md).
+До этого пакета были подтверждены [сборка и ZIP](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39503487607), [нативные тесты](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502031102) и [запуск пустой ВМ с очисткой собственных ресурсов](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502023979). Пакет адаптаций прошёл [проверки обычного скомпилированного CLI и ZIP](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219426) и [18 нативных тестовых программ](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219415). Подробности этого этапа находятся в [отчёте](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-community-adoption.md); последующие изменения упаковки отражаются в чейнджлоге.
 
 **Пока не готово:** обычный Start/Stop Manager, проверенный привилегированный helper с UAC, полноценная миграция и восстановление ВМ, обновление Oracle с откатом, дополнительные USB/сетевые драйверы. Не заявляем запуск гостевой ОС с диском или визуальную приёмку Windows 11 и масштабирования. Успех теста на Windows Server не подменяет эту приёмку.
 
 ## Сборка, авторы и лицензия
 
-[BUILDING.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/BUILDING.md) описывает сборку x64 через внешний AutoIt. ZIP содержит только лаунчер, предупреждение, лицензию, оба README, возможности, чейнджлог и сведения об авторах. Oracle, драйверы и данные ВМ в него не включены.
+[BUILDING.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/BUILDING.md) описывает сборку x64 через внешний AutoIt. ZIP содержит шесть файлов: лаунчер, предупреждение о статусе сборки, исходную лицензию, оба README и один CREDITS. Чейнджлог и список возможностей остаются в репозитории. Oracle, драйверы и данные ВМ в него не включены.
 
 Основа: upstream `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Сохранены исходные сведения об **авторе Michael Meyer (michaelm_007), участниках и проекте vboxme**. Модернизация ведётся в **zlocorp/Portable-VirtualBox**.
 
-Исходная лицензия **CC BY-NC-SA 3.0** не изменена: [LICENSE.md](LICENSE.md). Источники и характер использования перечислены в [CREDITS.md](CREDITS.md); внешние компоненты отдельно описаны в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Упоминание Oracle, AutoIt и авторов сообщества не означает их одобрения этой сборки.
+Исходная лицензия **CC BY-NC-SA 3.0** не изменена: [LICENSE.md](LICENSE.md). Источники и характер использования перечислены в [CREDITS.md](CREDITS.md); там же собраны уведомления о внешних компонентах. Упоминание Oracle, AutoIt и авторов сообщества не означает их одобрения этой сборки.

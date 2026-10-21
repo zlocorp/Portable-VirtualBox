@@ -4,6 +4,13 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Changed · 2026-10-21 attribution simplification
+
+- About now shows only the product, project address, license/notice location and runtime status, without a contributor roster.
+- Consolidated external-component notices into `CREDITS.md`; removed the duplicate `THIRD_PARTY_NOTICES.md`. Original `LICENSE.md` and source notices are unchanged.
+- Diagnostic ZIP now contains **six files**: EXE, preview warning, two READMEs, LICENSE and CREDITS. CHANGELOG, FEATURES and detailed adoption records remain in the repository rather than duplicating developer material in the user package.
+- Suitable fork code is reused and adapted directly when it fits; only a concrete incompatibility justifies replacement. Lists of ideas do not count as implemented behavior.
+
 ### Added · 2026-10-21 community-adoption package
 
 - Explicit saved RU/EN launcher language and “Windows language” reset; GUI buttons and `--save-language ru|en|auto`. Preference is local to the portable root and survives relocation. Inspired by **Deac2** first-run/settings UX; independently implemented.
@@ -17,7 +24,7 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 - Explicit language saving stages a small versioned file in `data/launcher.ini.pending`, flushes it and replaces only a recognized launcher configuration in the same directory. Read-only commands and temporary `--lang` do not persist anything. Unknown schema, foreign files and stale pending files are refused; this is not a claim of power-loss recovery.
 - Readiness result is scrollable so a long missing-file list is accessible.
-- Preview ZIP allowlist now includes **nine files**: EXE, warning, original license, both READMEs, CHANGELOG, FEATURES, CREDITS and THIRD_PARTY_NOTICES. Oracle and old tools remain excluded.
+- At the first adaptation checkpoint the preview ZIP included **nine files** (subsequently reduced above): EXE, warning, original license, both READMEs, CHANGELOG, FEATURES, CREDITS and THIRD_PARTY_NOTICES. Oracle and old tools remain excluded.
 
 ### Earlier modernization checkpoints · 2026-10-20 to 2026-10-21
 
@@ -33,4 +40,4 @@ These entries are reconstructed from the tracked execution reports, not retroact
 
 Normal-user Manager/VM Start/Stop, production UAC helper, Windows 11 end-to-end acceptance, guest OS/disk boot, general migration/crash recovery and transactional Oracle updates remain unfinished. They must not be listed as shipped advantages.
 
-For every subsequent code change, update this log and [FEATURES.md](FEATURES.md). External sources require an entry in [CREDITS.md](CREDITS.md) and the adoption ledger; see [CONTRIBUTING.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/CONTRIBUTING.md).
+Record user-visible changes here and update [FEATURES.md](FEATURES.md) when capability status changes. Actual external reuse belongs in [CREDITS.md](CREDITS.md); detailed research stays in the adoption record; see [CONTRIBUTING.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/CONTRIBUTING.md).

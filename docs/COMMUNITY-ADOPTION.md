@@ -15,14 +15,16 @@ Updated 2026-10-21. Author/source details: [CREDITS.md](../CREDITS.md). This led
 | COM-09 | #69/#68: English clarity and encoding | **Modern catalog maintained independently** | Embedded RU/EN, UTF-8 output, exhaustive key tests, persistent language | Additional locales and visual layout/DPI acceptance |
 | COM-10 | #100: new 7.x icon/splash | **Not adopted** | No new assets copied; old splash stays removed | Optional design/licensing decision after functional runtime |
 
-## Reuse rules
+## Adoption approach
 
-1. Record author, original URL and immutable commit/PR where possible, applicable license and reuse type: inherited code, copied/adapted code, independently implemented behavior, test scenario, dependency or reviewed-only reference.
-2. Preserve original notices and identify local changes. Do not claim a source was copied when only its idea was used, or call a planned feature implemented.
-3. Add behavior checks before implementation and record which environments really ran them. Source-text contracts alone do not prove Windows behavior.
-4. Update CHANGELOG, FEATURES, CREDITS and the relevant README sections with every adopted feature. Include the notices in the ZIP and keep compiled About credits useful even without the repository.
-5. Do not import blanket `#RequireAdmin`, global process-name termination, unconditional `sc delete`, arbitrary XML replacement, unverified binaries or automatic Hyper-V/BCD changes.
+Use suitable code directly, with local interface/error-handling adaptations, retained author/license notices and behavioral checks. Independently reimplement only when there is a concrete incompatibility or unsafe operation. Do not reject a whole fork just because one function needs repair.
+
+The “still open” column above previously mixed follow-up work with complete new features. Production Manager Start/Stop, cross-host VM migration and a transactional updater are not completed patch imports; they are still implementation work. Existing hash/download checks should be reused rather than duplicated. Optional artwork and unused legacy features are not required merely because a PR exists.
+
+A finished adaptation means the intended public behavior works and its tests have run. A diagnostic category, test idea or backlog row does not finish a shutdown controller or updater.
+
+Actual reuse is acknowledged once in CREDITS.md (plus preserved source headers). LICENSE.md and that same CREDITS file travel with the ZIP. The About dialog does not list community contributors. CHANGELOG/FEATURES and this development record stay in the repository.
 
 ## Remaining functional sequence
 
-The next production runtime milestone is still Batch A: a non-elevated Manager GUI paired with a reviewed minimal privileged helper and exact ownership/recovery checks, then isolated Windows 11 standard-user/UAC acceptance. The ledger records the full useful backlog; this first public-UX package does **not** finish all fork-derived work.
+The main unfinished useful runtime adaptation is Manager/session startup and shutdown using the existing tested driver/SDS operations, with ownership checks and a narrow elevated helper. Do not postpone suitable code behind further attribution documents or generic infrastructure. Windows 11 standard-user/UAC acceptance remains a real test requirement, not a reason to avoid implementing the flow.

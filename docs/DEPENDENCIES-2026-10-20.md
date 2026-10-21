@@ -70,7 +70,7 @@ setting in the private portable profile.
 
 Root `build.bat` delegates to `scripts/build.ps1`; `BUILDING.md` now
 documents the supported Windows x64 process. Packaging is a strict allowlist
-of nine diagnostic-only ZIP members (including bilingual docs and credits) and **never includes Oracle or drivers**.
+of six diagnostic-only ZIP members (including bilingual READMEs and consolidated credits) and **never includes Oracle or drivers**.
 
 References: [Oracle releases](https://download.virtualbox.org/virtualbox/7.2.22/),
 [AutoIt official downloads](https://www.autoitscript.com/site/autoit/downloads/),
