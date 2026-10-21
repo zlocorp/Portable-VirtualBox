@@ -71,6 +71,16 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn('RUNNER_TEMP', fixture)
         self.assertNotIn('CommonApplicationData', fixture)
 
+    def test_direct_helper_fixture_does_not_claim_uac_acceptance(self):
+        workflow = self.text('.github/workflows/helper-boundary.yml')
+        self.assertIn('tests/windows/check_helper_boundary.ps1', workflow)
+        fixture = self.text('tests/windows/check_helper_boundary.ps1')
+        self.assertIn('gui_runas_verified=$false', fixture)
+        self.assertIn('interactive_uac_consent_verified=$false', fixture)
+        self.assertIn('ProtectedWriteProbe.cs', fixture)
+        self.assertIn("Helper-Action Finish $cycle 70", fixture)
+        self.assertNotIn('EnableLUA', fixture)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
