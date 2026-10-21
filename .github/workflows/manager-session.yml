@@ -72,11 +72,14 @@ jobs:
           Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
       - name: Exercise real buttons, Manager, live guest, refusal and two-cycle cleanup
         shell: pwsh
-        run: ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT
-      - name: Capture actual Oracle windows on failure
-        if: failure()
-        shell: pwsh
-        run: ./scripts/snapshot_manager_windows.ps1 -PortableRoot $env:MANAGER_ROOT
+        run: |
+          try {
+            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT
+          } catch {
+            # Capture before the step's process tree is released by the runner.
+            ./scripts/snapshot_manager_windows.ps1 -PortableRoot $env:MANAGER_ROOT
+            throw
+          }
       - name: Collect bounded evidence only, no executable or Oracle payload
         if: always()
         shell: pwsh
