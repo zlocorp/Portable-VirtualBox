@@ -201,7 +201,9 @@ Func _MS_OpenManager(ByRef $s)
     EndIf
     Local $profile = _PP_Inspect($s["root"])
     If $profile["status"] <> "READY" Then Return False
-    Local $p = _MP_Start($profile["app"] & "\VirtualBox.exe", "", $profile["app"], $profile["profile"], True)
+    ; Code comes from the helper-validated protected copy in separated mode.
+    ; The process token and portable user profile remain non-administrative.
+    Local $p = _MP_Start($s["app_system"] & "\VirtualBox.exe", "", $s["app_system"], $profile["profile"], True)
     $s["manager"] = $p
     If $p["status"] <> "STARTED" Then Return False
     $s["seen"] = False
@@ -278,8 +280,8 @@ Func _MS_Tick(ByRef $s)
         If $s["separated"] Then
             ; This is a USER preference, never an elevated helper command.
             Local $profile = _PP_Inspect($s["root"])
-            Local $configure = _MP_Start($profile["app"] & "\VBoxManage.exe", 'setproperty machinefolder "' & $profile["machines"] & '"', _
-                $profile["app"], $profile["profile"])
+            Local $configure = _MP_Start($s["app_system"] & "\VBoxManage.exe", 'setproperty machinefolder "' & $profile["machines"] & '"', _
+                $s["app_system"], $profile["profile"])
             $s["worker"] = $configure
             If $configure["status"] <> "STARTED" Then
                 _MS_State($s, "FAILED", "user-profile-configuration-not-started")

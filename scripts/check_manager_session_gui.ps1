@@ -12,7 +12,8 @@ if (-not $root.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase)) { thro
 $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $exe=Join-Path $root 'Portable-VirtualBox-Session-Test.exe'
-$cli=Join-Path $root 'app64\VBoxManage.exe'
+$runtime=Join-Path $root 'app64'
+$cli=Join-Path $runtime 'VBoxManage.exe'
 $protectedStore=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Experiment'
 if ($SeparatePrivileges) {
     Add-Type -Path @((Join-Path $PSScriptRoot '../source/privilege/TokenFacts.cs'),(Join-Path $PSScriptRoot '../tests/windows/MediumProcess.cs'))
@@ -111,7 +112,7 @@ function Oracle([string]$Arguments,[string]$Label) {
 }
 function Observe-Manager {
     $found=@(Get-Process -Name VirtualBox -ErrorAction Stop)
-    if ($found.Count -ne 1 -or $found[0].MainModule.FileName -ine (Join-Path $root 'app64\VirtualBox.exe') -or
+    if ($found.Count -ne 1 -or $found[0].MainModule.FileName -ine (Join-Path $runtime 'VirtualBox.exe') -or
         [ManagerUiProbe]::Window($found[0].Id) -eq [IntPtr]::Zero) { throw 'No exact real Oracle Manager window' }
     if ($SeparatePrivileges) {
         $facts=[PortableVBox.TokenFacts]::Read($found[0].Id)
@@ -169,6 +170,10 @@ try {
     Await-State $front 'IDLE' 20
     Click-Button $front 'Start VirtualBox'
     Await-State $front 'MANAGER_OPEN'
+    if ($SeparatePrivileges) {
+        $runtime=Join-Path $protectedStore ('pvbox-manager-'+$front.Id+'-1\app64')
+        $cli=Join-Path $runtime 'VBoxManage.exe'
+    }
     $manager1=Observe-Manager
     $proof.real_manager_opened=$true
     if ($SeparatePrivileges) {
@@ -228,6 +233,10 @@ try {
     # boot receipt for a Manager-only second cycle.
     Click-Button $front 'Start VirtualBox'
     Await-State $front 'MANAGER_OPEN'
+    if ($SeparatePrivileges) {
+        $runtime=Join-Path $protectedStore ('pvbox-manager-'+$front.Id+'-2\app64')
+        $cli=Join-Path $runtime 'VBoxManage.exe'
+    }
     $null=Observe-Manager
     $again=Oracle ('showvminfo '+$uuid+' --machinereadable') 'same-uuid-second-session'
     if ($again -notmatch ('(?mi)^UUID="'+[regex]::Escape($uuid)+'"') -or $again -notmatch '(?m)^VMState="poweroff"') { throw 'Second Manager session lost fixture UUID/state' }

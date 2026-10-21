@@ -44,7 +44,7 @@ function Oracle([string]$Arguments,[string]$Label) {
     $previous=$env:VBOX_USER_HOME
     try {
         $env:VBOX_USER_HOME=Join-Path $root 'data\.VirtualBox'
-        $p=Start-Medium (Join-Path $root 'app64\VBoxManage.exe') $Arguments $Label
+        $p=Start-Medium (Join-Path $runtime 'VBoxManage.exe') $Arguments $Label
         try { Wait-Exit $p 0 $Label 40 } finally { $p.Dispose() }
     } finally { $env:VBOX_USER_HOME=$previous }
     return [string](Get-Content -LiteralPath (Join-Path $out ($Label+'.stdout.txt')) -Raw)
@@ -61,7 +61,7 @@ function Await-Idle {
         Start-Sleep -Milliseconds 250
     }
 }
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-inherited-console';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-inherited-console';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
 $front=$null;$manager=$null;$guest=$null
 try {
     Clean-System
@@ -88,6 +88,7 @@ try {
     foreach ($cycle in @(2,3)) {
         Helper-Action Prepare $cycle 0 ('prepare-'+$cycle)
         $session=Join-Path $store ('pvbox-manager-'+$front.Id+'-'+$cycle)
+        $runtime=Join-Path $session 'app64'
         $sds=Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS'
         if (([string]$sds.ImagePath).Trim().Trim('"') -ine (Join-Path $session 'app64\VBoxSDS.exe')) { throw 'SDS path is not protected' }
         $p=Start-Medium $accessProbe ('"'+$session+'"') ('deny-write-'+$cycle)
@@ -95,7 +96,7 @@ try {
         $proof.protected_write_denied=$true
         $null=Oracle ('setproperty machinefolder "'+(Join-Path $root 'data\Machines')+'"') ('configure-'+$cycle)
         $old=$env:VBOX_USER_HOME
-        try { $env:VBOX_USER_HOME=Join-Path $root 'data\.VirtualBox';$manager=Start-Medium (Join-Path $root 'app64\VirtualBox.exe') '' ('manager-'+$cycle) } finally { $env:VBOX_USER_HOME=$old }
+        try { $env:VBOX_USER_HOME=Join-Path $root 'data\.VirtualBox';$manager=Start-Medium (Join-Path $runtime 'VirtualBox.exe') '' ('manager-'+$cycle) } finally { $env:VBOX_USER_HOME=$old }
         $timer=[Diagnostics.Stopwatch]::StartNew()
         do {
             $manager.Refresh()
@@ -114,11 +115,11 @@ try {
             $old=$env:VBOX_USER_HOME
             try {
                 $env:VBOX_USER_HOME=Join-Path $root 'data\.VirtualBox'
-                $guest=Start-Medium (Join-Path $root 'app64\VBoxHeadless.exe') ('--startvm '+$uuid+' --vrde off') 'direct-headless'
+                $guest=Start-Medium (Join-Path $runtime 'VBoxHeadless.exe') ('--startvm '+$uuid+' --vrde off') 'direct-headless'
             } finally { $env:VBOX_USER_HOME=$old }
             $timer=[Diagnostics.Stopwatch]::StartNew();$attempt=0
             do {
-                if ($guest.HasExited) { throw ('Direct guest exited '+$guest.ExitCode+': '+(Get-Content -LiteralPath (Join-Path $out 'direct-headless.stderr.txt') -Raw)) }
+                if ($guest.HasExited) { throw ('Direct guest exited '+$guest.ExitCode+': '+(Get-Content -LiteralPath (Join-Path $out 'direct-headless.stdout.txt') -Raw)+(Get-Content -LiteralPath (Join-Path $out 'direct-headless.stderr.txt') -Raw)) }
                 if ($timer.Elapsed.TotalSeconds -gt 30) { throw 'Guest did not reach running state' }
                 $attempt++
                 $running=Oracle ('showvminfo '+$uuid+' --machinereadable') ('running-vm-'+$attempt)
@@ -128,7 +129,7 @@ try {
             if ($guests.Count -lt 1) { throw 'No headless test guest' }
             foreach ($g in $guests) {
                 $facts=[PortableVBox.TokenFacts]::Read($g.Id)
-                if ($facts.Administrator -or $facts.Integrity -ne 8192 -or $facts.Image -ine (Join-Path $root 'app64\VBoxHeadless.exe')) { throw 'Guest token/image differs' }
+                if ($facts.Administrator -or $facts.Integrity -ne 8192 -or $facts.Image -ine (Join-Path $runtime 'VBoxHeadless.exe')) { throw 'Guest token/image differs' }
                 $facts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out ('guest-token-'+$g.Id+'.json')) -Encoding utf8
             }
             $proof.manager_guest_medium=$true

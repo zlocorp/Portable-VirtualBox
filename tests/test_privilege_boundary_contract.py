@@ -81,6 +81,16 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn("Helper-Action Finish $cycle 70", fixture)
         self.assertNotIn('EnableLUA', fixture)
 
+    def test_manager_and_cli_use_the_validated_protected_runtime(self):
+        s = self.text('source/ManagerSession.au3')
+        self.assertIn('_MP_Start($s["app_system"] & "\\VirtualBox.exe"', s)
+        self.assertIn('_MP_Start($s["app_system"] & "\\VBoxManage.exe"', s)
+        self.assertNotIn('_MP_Start($profile["app"]', s)
+        # Only code moves to the protected cache; profile and VM data stay with
+        # the ordinary user's portable root and do not acquire admin ownership.
+        self.assertIn('$profile["profile"]', s)
+        self.assertIn('$profile["machines"]', s)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
