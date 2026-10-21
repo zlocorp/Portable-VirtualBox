@@ -1,109 +1,58 @@
-# Portable-VirtualBox (modernization branch)
+# Portable-VirtualBox · 2026 modernization
 
-> **Development preview, not a release-ready portable hypervisor.** Normal GUI/CLI cannot start VMs or install drivers. A hidden disposable-runner-only compiled AutoIt mode now orders signed VBoxSup staging/start, real empty-VM boot/poweroff, independent verification and exact-owned VBoxSDS/VBoxSup cleanup using CI-only PowerShell effect adapters. These adapters are NOT a production privileged helper. Do not distribute this EXE as a usable VirtualBox release.
+[Русский](README.ru.md) · [Features](FEATURES.md) · [Changelog](CHANGELOG.md) · [Credits](CREDITS.md)
 
-Based on the original `vboxme/Portable-VirtualBox` master snapshot `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Historical personal modifications are not merged; the old fork remains in `archive/legacy-zlocorp-2020`. Work is isolated in `dev/modernization-2026`; draft [PR #7](https://github.com/zlocorp/Portable-VirtualBox/pull/7) targets the clean upstream reference, not historical master.
+A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portable-VirtualBox), focused on a small bilingual launcher, verifiable dependencies and portable user data.
 
-## Verified development capabilities
+> **Development preview, not a usable VM launcher yet.** The normal GUI does not start VirtualBox Manager or VMs and does not install drivers. Actual driver/empty-VM tests run only on disposable Windows CI hosts. Windows 11 standard-user/UAC acceptance is still pending.
 
-- Windows x64 compilation with the official signed AutoIt 3.3.18.0 compiler, including checkout paths with spaces and Cyrillic characters.
-- **Native read-only Windows observations:** SCM service configuration/status, process identity through retained query handles, installation keys in both registry views, and workstation/server product type. Unknown/denied observations block preflight instead of becoming false absence. Querying a resource never grants ownership or permission to mutate it.
-- Exact-version Oracle download verification and passive PE resource extraction into MSI/CAB files.
-- **MSI/CAB to new app64 file preparation:** the pinned Oracle 7.2.22 package produces 185 application files / 247834716 bytes without running its installer, MSI actions or any payload. Read-only MSI tables determine placement; cabinet callbacks use Unicode-aware file I/O. Per-file hashes, key AMD64 headers, signatures and unchanged inputs are checked in CI.
-- **Journaled lifecycle coordination:** persist intent, recheck identity, validate acquisition receipts, confirm results and clean up in reverse order. Cancellation, partial failures, storage failures and changed resources are tested with synthetic effects. Real exclusive UTF-8 snapshots are used in native tests. This is not a completed privileged service/process effect adapter and is not wired into the preview launcher.
-- Read-only VM registry inventory and regression tests for malformed input, download races, staging publication, XML encodings and Windows paths.
+## What is different
 
-The old runtime is preserved byte-for-byte as `source/legacy/Portable-VirtualBox.au3.disabled` and is not compiled. The preview does not request administrator rights or start virtual machines. Hosted test results do not establish coverage under a standard-user Windows account.
+**A usable diagnostic shell.** Native Russian/English GUI and UTF-8 CLI, remembered language with an explicit “Save language” action, a return to Windows language selection, readable failure reasons, copyable diagnostics and an About window with project credits. A temporary `--lang` selection never overwrites the saved preference.
 
-## Commands
+**No bundled obsolete executables.** Old AutoIt compilers, 7za, DevCon, SnetCfg, fourteen legacy translation INIs and the old splash were removed. The build uses official external AutoIt **3.3.18.0**. The tested Oracle package is pinned to **7.2.22 r175245**, with exact hashes, publisher checks and file-only MSI/CAB preparation rather than silently running an installer.
 
-```text
-Portable-VirtualBox_x64.exe --version
-Portable-VirtualBox_x64.exe --selftest
-Portable-VirtualBox_x64.exe --diagnose
-Portable-VirtualBox_x64.exe --preflight
-Portable-VirtualBox_x64.exe --profile-status
-Portable-VirtualBox_x64.exe --prepare-profile
-Portable-VirtualBox_x64.exe --lang ru --help
-Portable-VirtualBox_x64.exe --lang ru --diagnose
-Portable-VirtualBox_x64.exe --lang en --diagnose
-```
+**Checks that distinguish failure states.** Missing directories, incomplete `app64`, inaccessible/reparse paths, existing installations and unknown host observations are not treated as “ready”. The application inspection names missing or empty required EXEs, DLLs and VBoxSup files. Presence alone is explicitly **not** a signature check or permission to launch.
 
-Diagnostics print status/counts without private image paths or service account names. An unknown observation returns diagnostic exit 4. A blocked preflight returns 3. A clear preflight is neither ownership evidence nor authorization to run an unverified runtime.
+**Portable user preferences and data.** Explicit first-run creation of `data/.VirtualBox`, `data/Machines` and `logs` preserves existing files. The only preference file is `data/launcher.ini`; malformed/foreign settings are not overwritten. Saving uses a same-directory staged replacement and refuses stale `.pending` files. No Oracle XML is rewritten by these public features.
 
-**New localized read-only GUI:** double-clicking the compiled EXE now opens a Windows diagnostics panel, automatically choosing RU on a Russian-language host (otherwise EN), with manual RU/EN switching, **Refresh diagnostics**, **Copy report**, and **Close**. All controls have real effects; the GUI cannot start a VM or mutate system services. Russian CLI help/diagnostics are emitted as UTF-8 and verified by Windows CI. The Oracle VirtualBox Manager has its own separate language setting. Visual GUI layout still needs manual acceptance on isolated Windows 11.
+**Manager and guests are not the same process.** Diagnostics separately report Manager, GUI/headless guest processes and background activity. These are observations, not proof that a guest is running or permission to stop/delete anything.
 
-**First-run setup:** With no arguments the localized preview opens a read-only diagnostics GUI with a real "Prepare portable folders" button. The explicit CLI command `--prepare-profile` creates only `data/.VirtualBox`, `data/Machines`, and `logs` alongside the EXE; existing files are never overwritten, and unsafe roots/reparse points/collisions are blocked. `--profile-status` reports READY (exit 0), MISSING (exit 2) or BLOCKED (exit 3). An `app64` with Oracle binaries is NOT automatically downloaded or installed by these commands.
+**Traceable community work.** [The adoption ledger](docs/COMMUNITY-ADOPTION.md) distinguishes implemented adaptations, existing coverage and deferred work. Inspiration is not passed off as copied code, and copied code must retain its license and author notices.
 
-**Developer-only native proof:** a hidden `--ci-service-smoke` is limited to the disposable GitHub-hosted Windows runner configuration; it executes the prepared signed Oracle `VBoxManage setproperty machinefolder`, verifies the exact newly registered `VBoxSDS`, waits for an idle service, then unregisters it using Oracle's supported command. This is **not** a production Start/Stop feature or a security boundary that should be exposed on an ordinary Windows PC. [Proof run](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39438429411).
+## Try the current preview
 
-**Current dependencies and localization (2026-10-20):** Oracle **VirtualBox 7.2.22** is the signed pinned runtime. [Official 7.2.22 package verified](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497891196); [real compiled AutoIt native VM + signed VBoxSup lifecycle verified](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39498269366) on disposable Windows Server 2022. **AutoIt 3.3.18.0** remains current. Obsolete 7za/DevCon/SnetCfg are excluded, not replaced. RU/EN observation texts and stale language-switch readiness messages were corrected: [17 native harnesses passed](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39497271846), including 157 bilingual assertions and 10 GUI text assertions. [Dependency inventory](docs/DEPENDENCIES-2026-10-20.md). Normal GUI still cannot start VMs.
-
-**Integrated native checkpoint (CI only):** `--ci-integrated-session` is omitted from public help and GUI. The compiled AutoIt executable now **orchestrates** signed driver staging/start, VM boot/poweroff, independent host verification and exact-owned cleanup on a single-use Windows Server 2022 runner. [Successful integrated run](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39494324031) / [execution evidence](docs/EXECUTION-2026-10-20-integrated-native-lifecycle.md). Native regression: 16 harnesses, zero failures. Still not implemented: production privilege-separated helper and UAC, real Manager GUI Start/Stop, Windows 11 standard-user acceptance, coexistence and crash recovery.
-
-Developer tools:
+Double-click the compiled launcher for the GUI, or use the ordinary CLI:
 
 ```powershell
-./scripts/build.ps1 -AutoItRoot 'C:\Program Files (x86)\AutoIt3'
-./scripts/test-native.ps1 -AutoItRoot 'C:\Program Files (x86)\AutoIt3'
-python -X utf8 -m unittest discover -s tests -v
-python scripts/audit_source.py --enforce
-python scripts/oracle_release.py 7.2.22
-python scripts/check_active_tree.py
-python scripts/vm_inventory.py 'C:\Portable-VirtualBox\data\.VirtualBox\VirtualBox.xml'
+Portable-VirtualBox.exe --lang ru --help
+Portable-VirtualBox.exe --save-language ru
+Portable-VirtualBox.exe --save-language auto
+Portable-VirtualBox.exe --prepare-profile
+Portable-VirtualBox.exe --app-status
+Portable-VirtualBox.exe --check-readiness
+Portable-VirtualBox.exe --diagnose
+Portable-VirtualBox.exe --about
 ```
 
-`python scripts/prepare_app64.py --help` describes the Windows developer preparation interface. It requires a trusted expected wrapper checksum and publisher-signature validation by its caller; the hosted workflow performs those checks. The output directory must not already exist. This tool prepares files, not system prerequisites, COM registration or drivers, and is not yet integrated into the AutoIt UI.
+`--save-language ru|en|auto` explicitly creates portable data folders when needed. Other inspection commands do not create them. `--app-status` returns 0 for required nonempty files present, 2 for absent `app64`, and 3 for incomplete/unsafe files. `--check-readiness` returns 3 for a blocker or 2 when preflight is clear but this build's runtime is disabled. Neither exit code enables a VM.
 
-VM inventory hides UUIDs and paths unless `--details` is requested. It does not migrate data.
+A damaged `launcher.ini` is left intact and the launcher falls back to the Windows language. Inspect a stale `launcher.ini.pending` before removing it; it can be evidence of an interrupted write. Do not overwrite a working VirtualBox installation with this preview.
 
-## Functional CLI and portable configuration smoke (2026-10-20)
+## Evidence and limits
 
-Earlier disposable Windows Server 2022 CI confirmed that the then-current Oracle VirtualBox 7.2.20 app64 could execute `VBoxManage --version`, `list vms`, and `list systemproperties` without installing Oracle. A second test set `VBOX_USER_HOME` and `machinefolder` to separate private directories, then created/registered a test VM with a `.vbox` file stored in that portable directory. **No guest VM was started.**
+[FEATURES.md](FEATURES.md) is the current capability matrix: **public preview**, **CI-only**, **planned**. [CHANGELOG.md](CHANGELOG.md) records user-relevant changes under **Unreleased**, not fictional product releases.
 
-A controlled separate MSI reference installation with only `VBoxApplication` installed both `VBoxSDS` and `VBoxSup`. Importantly, the uninstalled portable CLI **automatically registered `VBoxSDS`** with a persistent service path pointing to its temporary app64 location. This is an unresolved portability/safety issue, not a release-ready feature.
+The earlier cleanup checkpoint passed [x64/ZIP build checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39503487607), [native AutoIt tests](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502031102) and [compiled empty-VM boot plus exact-owned driver teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39502023979). New public settings/completeness tests are in `tests/native/test_community_adoption.au3` and `scripts/check_community_ux.ps1`; execution results belong in the dated report, not inferred from a successful build.
 
-- [CLI smoke with detected side effect](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39399187350)
-- [Successful official MSI reference comparison](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39399299608)
-- [Successful portable configuration fixture](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39400449110)
-- [Evidence and follow-up plan](docs/EXECUTION-2026-10-20-runtime-smoke.md)
+**Not implemented:** production Manager Start/Stop, reviewed privilege-separated UAC helper, general VM migration/recovery, transactional Oracle updates, optional USB/bridged networking. No real guest OS/disk or interactive Windows 11 GUI/DPI acceptance is claimed. A Linux/Windows Server CI pass is not Windows 11 approval.
 
-## Two real blank-VM sessions on one disposable Windows host (2026-10-20)
+## Build and packaging
 
-[GitHub Actions run 39416531988](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39416531988) historically proved a complete **clean-host two-cycle** with the earlier Oracle 7.2.20 app64 and separately installed signed VBoxSup. First boot/poweroff, VBoxSDS unregistration, VBoxSup stop/driver-store removal, and guarded deletion of the leftover stopped VBoxSup service were verified; the runner was left with zero VBox services and no published INF or system driver file. The same original VM configuration and UUID were reused for a second headless start/poweroff, followed by the same verified cleanup. **No guest OS or disk was booted.** The process remains an isolated research workflow, not an implemented production launcher; installed-VBox coexistence and drive-letter relocation still need testing.
+See [build instructions](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/BUILDING.md). `build.bat` delegates to `scripts/build.ps1`; Python runs tests and builds the diagnostic ZIP. Oracle, drivers and VM data are never bundled in that ZIP. The allowlist contains the launcher, warning, license, both READMEs, feature/changelog documents and attribution notices.
 
-[Full two-cycle evidence](docs/EXECUTION-2026-10-20-two-cycle.md).
+## Authors and license
 
-## Product delivery roadmap and binary audit
+Based on upstream snapshot `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Original author credits, including **Michael Meyer (michaelm_007) and contributors** and the **vboxme project**, are retained. This modernization is maintained in **zlocorp/Portable-VirtualBox**.
 
-- [Practical P0–P5 product roadmap](docs/PRODUCT-PLAN-2026-10-20.md): first-run UI, real Start/Stop with guarded driver lifecycle, RU/EN, updates, ZIP and acceptance. **Next task is implementing a usable safe launcher**, not another generic coordinator.
-- [Dependency cleanup and exact version inventory](docs/DEPENDENCIES-2026-10-20.md): removed the old AutoIt 3.3.16.1 binaries, 7za 16.04, Win7 DevCon, Server 2003 SnetCfg, fourteen legacy INI language files and old splash artwork from the active tree. The modern build uses official external AutoIt **3.3.18.0**, built-in Python/Windows APIs and signed Oracle **7.2.22**. A new source-tree guard checks they cannot return; old files remain recoverable through Git history. [Cleanup verification report](docs/EXECUTION-2026-10-21-dependency-cleanup.md).
-
-## Self-contained diagnostic preview ZIP
-
-CI packages `Portable-VirtualBox-diagnostic-preview.zip` with precisely four contents: `Portable-VirtualBox.exe`, `README.md`, `LICENSE.md`, and `PREVIEW-NOT-A-HYPERVISOR.txt`. It also publishes a SHA-256 sidecar. The ZIP deliberately **does not contain** Oracle VirtualBox, its driver files, legacy 7-Zip, DevCon, SnetCfg, or a VM. Unpacking it in a new Unicode directory and executing the built EXE's profile setup are checked in Windows CI. This is a testable *diagnostic-only* preview, NOT a functional hypervisor release.
-
-## Native compiled AutoIt VM boot: new experimental milestone
-
-[Hosted Windows run 39450334031](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39450334031) proves the **compiled launcher executable itself** now created, started, inspected and powered off one freshly created **empty** VM in a private `VBOX_USER_HOME`. Each native command has bounded execution and a real Windows process exit code (not merely a PID). An independent host-side `showvminfo` confirmed the exact same UUID and `poweroff`; `VirtualBoxVM` process count was zero. The existing signed-driver test scripts then removed the new `VBoxSDS` and `VBoxSup` resources, leaving no VBox services or driver package behind. CI artifact contents were read back and validated.
-
-**This path is available only through hidden `--ci-vm-session` experimental mode** with strict disposable GitHub runner checks. It is deliberately not exposed from the normal GUI, needs no real user's VM, does not boot a guest OS, and cannot be called a safe Windows 11 production launcher. Its driver installation/cleanup has NOT yet been integrated into a reviewed elevated frontend/backend pair.
-
-- [Full native execution report](docs/EXECUTION-2026-10-20-native-autoit-boot.md)
-- [Native VM workflow](.github/workflows/native-vm-session.yml)
-
-## Status and evidence
-
-See the [latest coordinator report](docs/EXECUTION-2026-10-20-coordinator.md), [completed coordinator plan](docs/plans/2026-10-20-lifecycle-coordinator.md), [Windows observation report](docs/EXECUTION-2026-10-19-observation.md), [app64 preparation report](docs/EXECUTION-2026-10-19-app64.md), [broader roadmap](docs/MODERNIZATION-2026.md), and [security model](docs/SECURITY-MODEL.md).
-
-At executable-code checkpoint `539a754`, **107 Python tests** are discovered (Linux: 102 pass, 5 platform skips; Windows: 106 pass, 1 privilege skip). The native suite passes **516 assertions in 14 compiled AutoIt harnesses**; the complete app64 preparation and x64 build pass. Exact evidence is in [the native VM report](docs/EXECUTION-2026-10-20-native-autoit-boot.md). Inherited privileged startup remains quarantined. Core x64 build and the actual Oracle/app64 preparation also pass. None of this establishes Windows 11 driver/VM compatibility or bit-for-bit reproducible AutoIt binaries.
-
-## External implementation review (2026-10-21)
-
-[Review of other authors' upstream pull requests, current forks and tracked failures](docs/REVIEW-2026-10-21-UPSTREAM-FORKS-PRS.md) identifies concrete end-to-end acceptance cases for Manager/VM lifetime, `VBoxSDS` identity after relocation, missing `Machines` directories, staged-download failure and GUI first-run UX. We did not merge old code: several forks use blanket `#RequireAdmin` and process-name termination.
-
-## Attribution and release boundaries
-
-Preserve the original launcher credit to Michael Meyer and contributors and the original license in `LICENSE.md`. This branch does not silently relicense upstream. Deac2 and bitamind were research references, not wholesale imported code. Oracle payloads and Extension Packs are not published as CI artifacts or project releases. The root [BUILDING.md](BUILDING.md) and `build.bat` now describe/use the supported external AutoIt x64 PowerShell build, not the historical self-extracting 7-Zip pipeline.
-
-Next major package is reviewed per-session **real driver-assisted Start/Stop from the AutoIt GUI**, where privileged actions are isolated and can never touch a pre-existing VirtualBox installation, followed by Windows 11/user/coexistence acceptance. First-run profile creation, localized UI, native CLI VM boot and guarded clean-host driver teardown have been demonstrated; a production hypervisor launcher is not yet enabled. The coordinator's synthetic receipts do not authorize actual system mutations. Neither a master merge nor a release has been performed.
+The original **CC BY-NC-SA 3.0** license remains unchanged; see [LICENSE.md](LICENSE.md). [CREDITS.md](CREDITS.md) identifies community references and the kind of reuse. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) separates the launcher's license from external software. No affiliation with or endorsement by Oracle, AutoIt or community authors is implied.

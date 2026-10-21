@@ -5,7 +5,8 @@
 
 Func _PortableDiagnosticCollect()
     Local $os = _WinObsOS(), $installed = _WinObsInstallation()
-    Local $services = _PortableCountExistingServices(), $processes = _PortableCountVirtualBoxProcesses()
+    Local $services = _PortableCountExistingServices(), $activity = _PortableActivityCollect()
+    Local $processes = $activity["total"]
     Local $report[]
     Local $s = _LI("diag.header") & @CRLF
     $s &= _LI("diag.windows") & _LI_Observation("os", $os["status"]) & @CRLF
@@ -27,6 +28,9 @@ Func _PortableDiagnosticCollect()
         $s &= _LI("diag.processes_unknown") & @CRLF
     Else
         $s &= _LI("diag.processes") & $processes & @CRLF
+        $s &= _LI("diag.manager_processes") & $activity["manager"] & @CRLF
+        $s &= _LI("diag.guest_processes") & $activity["guest"] & @CRLF
+        $s &= _LI("diag.background_processes") & $activity["background"] & @CRLF
     EndIf
     $s &= _LI("diag.runtime") & @CRLF
     $report["text"] = $s

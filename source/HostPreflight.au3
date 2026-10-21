@@ -20,24 +20,62 @@ Func _PortableCountExistingServices()
     Return $count
 EndFunc
 
-Func _PortableCountVirtualBoxProcesses()
+; Distinct Manager/guest lifetimes: independent adaptation of the scenario in
+; ThatAdminGuy's a035d06b12 and upstream PR #90. Never kill by image name.
+Func _PortableProcessRole($name)
+    If Not IsString($name) Then Return ""
+    Switch StringLower($name)
+        Case "virtualbox.exe"
+            Return "manager"
+        Case "virtualboxvm.exe", "vboxheadless.exe"
+            Return "guest"
+        Case "vboxsvc.exe", "vboxmanage.exe", "vboxsds.exe", "vboxnetdhcp.exe", "vboxnetnat.exe", "vboxballoonctrl.exe", "vboxautostart.exe"
+            Return "background"
+    EndSwitch
+    Return ""
+EndFunc
+
+Func _PortableActivityCollect()
+    Local $r[]
+    $r["status"] = "UNKNOWN"
+    $r["manager"] = -1
+    $r["guest"] = -1
+    $r["background"] = -1
+    $r["total"] = -1
+    Local $counts[]
+    $counts["manager"] = 0
+    $counts["guest"] = 0
+    $counts["background"] = 0
     Local $names[10] = ["VirtualBox.exe", "VirtualBoxVM.exe", "VBoxSVC.exe", "VBoxManage.exe", "VBoxSDS.exe", "VBoxHeadless.exe", "VBoxNetDHCP.exe", "VBoxNetNAT.exe", "VBoxBalloonCtrl.exe", "VBoxAutostart.exe"]
-    Local $count = 0
     For $i = 0 To UBound($names) - 1
         Local $list = ProcessList($names[$i])
-        If @error Or Not IsArray($list) Then Return SetError(1, 0, -1)
+        If @error Or Not IsArray($list) Then Return $r
         For $k = 1 To $list[0][0]
             Local $token = _WinObsProcessOpen($list[$k][1])
-            If $token = 0 Then Return SetError(1, @extended, -1)
-            Local $r = _WinObsProcessRead($token)
+            If $token = 0 Then Return $r
+            Local $obs = _WinObsProcessRead($token)
             Local $closed = _WinObsProcessClose($token)
-            If Not $closed Or Not ($r["status"] == "PRESENT") Then Return SetError(1, 0, -1)
-            Local $baseName = StringRegExpReplace($r["image"], "^.*[\\/]", "")
-            If Not (StringLower($baseName) == StringLower($names[$i])) Then Return SetError(1, 0, -1)
-            $count += 1
+            If Not $closed Or Not ($obs["status"] == "PRESENT") Then Return $r
+            Local $baseName = StringRegExpReplace($obs["image"], "^.*[\\/]", "")
+            If Not (StringLower($baseName) == StringLower($names[$i])) Then Return $r
+            Local $role = _PortableProcessRole($baseName)
+            If $role == "" Then Return $r
+            $counts[$role] += 1
         Next
     Next
-    Return $count
+    $r["status"] = "KNOWN"
+    $r["manager"] = $counts["manager"]
+    $r["guest"] = $counts["guest"]
+    $r["background"] = $counts["background"]
+    $r["total"] = $r["manager"] + $r["guest"] + $r["background"]
+    ; This is a non-atomic read-only snapshot, NOT shutdown/cleanup authority.
+    Return $r
+EndFunc
+
+Func _PortableCountVirtualBoxProcesses()
+    Local $activity = _PortableActivityCollect()
+    If $activity["status"] <> "KNOWN" Then Return SetError(1, 0, -1)
+    Return $activity["total"]
 EndFunc
 
 Func _PortablePreflightBlocker($iWindowsBuild, $sArch, $bHasVBoxExecutable, $sVersion, _
@@ -56,11 +94,11 @@ Func _PortablePreflightBlocker($iWindowsBuild, $sArch, $bHasVBoxExecutable, $sVe
     Return ""
 EndFunc
 
-Func _PortableReadOnlyPreflight()
+Func _PortableReadOnlyPreflight($root = @ScriptDir)
     Local $os = _WinObsOS()
     If Not ($os["status"] == "PRESENT") Then Return "Windows version observation is unknown"
     If Not _WinObsWorkstationAccepted($os["build"], $os["product_type"], $os["major"]) Then Return "Unsupported Windows product/build (Windows 11 workstation required)"
-    Local $sApp = @ScriptDir & "\app64\VirtualBox.exe"
+    Local $sApp = $root & "\app64\VirtualBox.exe"
     Local $bPresent = FileExists($sApp) <> 0, $sVersion = ""
     If $bPresent Then $sVersion = FileGetVersion($sApp)
     Local $installed = _PortableInstalledVBoxDetected()

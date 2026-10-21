@@ -14,19 +14,22 @@ import stat
 import sys
 import zipfile
 
-MEMBERS = ("LICENSE.md", "PREVIEW-NOT-A-HYPERVISOR.txt",
-           "Portable-VirtualBox.exe", "README.md")
+DOC_MEMBERS = ("LICENSE.md", "README.md", "README.ru.md", "CHANGELOG.md",
+               "FEATURES.md", "CREDITS.md", "THIRD_PARTY_NOTICES.md")
+MEMBERS = DOC_MEMBERS + ("PREVIEW-NOT-A-HYPERVISOR.txt", "Portable-VirtualBox.exe")
 NOTICE = """Portable-VirtualBox development diagnostic preview
 
 This is NOT a usable virtual machine hypervisor.
 The ordinary user interface does not launch virtual machines,
 install drivers, register Oracle services, or redistribute VirtualBox.
-Normal use remains read-only except when you explicitly prepare data folders.
+Normal use remains read-only except explicit portable-folder preparation
+and saving the launcher language to data/launcher.ini.
 An isolated GitHub Actions-only internal research command can exercise
 Oracle VBoxSDS registration/cleanup; do not use it on a personal PC.
 
 What works:
-- RU/EN read-only Windows/VirtualBox diagnostics and built-in help
+- RU/EN diagnostics, explicit saved language, completeness checks and built-in help
+- About/credits, authors and third-party notices included with the preview
 - explicit first-run setup of data/.VirtualBox, data/Machines and logs
 - repeat setup without overwriting existing user files
 
@@ -38,7 +41,8 @@ the regular launcher. No elevation is requested.
 Do not copy this over an existing working VirtualBox installation.
 Keep your own VM disks, snapshots and backups untouched.
 
-The source project retains original attribution/license in LICENSE.md.
+Original license: LICENSE.md. Authors and reuse: CREDITS.md.
+External components and distribution boundaries: THIRD_PARTY_NOTICES.md.
 """
 
 def _read_regular(path: Path, limit: int) -> bytes:
@@ -72,14 +76,13 @@ def build_preview(root: Path, exe: Path, output: Path) -> dict:
     executable = _read_regular(exe, 64 * 1024 * 1024)
     if len(executable) < 10240 or executable[:2] != b"MZ":
         raise ValueError("Compiled launcher does not have a plausible PE header")
-    license_text = _read_regular(root / "LICENSE.md", 256 * 1024)
-    readme = _read_regular(root / "README.md", 256 * 1024)
-    inputs = {
-        "LICENSE.md": license_text,
+    # Read every mandatory notice before creating the output: attribution is
+    # required package content, not an optional README link.
+    inputs = {name: _read_regular(root / name, 256 * 1024) for name in DOC_MEMBERS}
+    inputs.update({
         "PREVIEW-NOT-A-HYPERVISOR.txt": NOTICE.encode("utf-8"),
         "Portable-VirtualBox.exe": executable,
-        "README.md": readme,
-    }
+    })
     with output.open("xb") as handle:
         with zipfile.ZipFile(handle, mode="w", compression=zipfile.ZIP_DEFLATED,
                              allowZip64=False) as archive:

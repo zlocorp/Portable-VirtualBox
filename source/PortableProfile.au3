@@ -57,6 +57,7 @@ Func _PP_NewResult($root)
     $r["logs"] = ""
     $r["app"] = ""
     $r["app_present"] = False
+    $r["missing_folders"] = ""
     Return $r
 EndFunc
 
@@ -84,7 +85,11 @@ Func _PP_Inspect($root)
             $r["message"] = "path-collision-or-reparse"
             Return $r
         EndIf
-        If $state = 0 Then $missing = True
+        If $state = 0 Then
+            $missing = True
+            If $r["missing_folders"] <> "" Then $r["missing_folders"] &= ", "
+            $r["missing_folders"] &= StringTrimLeft($folders[$i], StringLen($root) + 1)
+        EndIf
     Next
     If $missing Then
         $r["status"] = "MISSING"

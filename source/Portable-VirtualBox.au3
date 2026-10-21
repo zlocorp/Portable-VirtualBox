@@ -15,14 +15,18 @@
 #include "LauncherI18n.au3"
 #include "LauncherGui.au3"
 #include "PortableProfile.au3"
+#include "LauncherSettings.au3"
+#include "PortableApp.au3"
+#include "LauncherAbout.au3"
 #include "PortableCISession.au3"
 #include "PortableCIVM.au3"
 #include "PortableCIIntegrated.au3"
 #NoTrayIcon
 
-; UI defaults to the host's language. Explicit CLI selection never persists
-; global settings and must appear before the requested command.
-_LI_Set(_LI_Detect(@OSLang))
+; Saved launcher language overrides the host; --lang overrides this invocation
+; only. Reads never create files. Explicit save touches only data/launcher.ini.
+Local $savedLanguage = _LS_Load(@ScriptDir)
+_LI_Set(_LS_Select($savedLanguage["language"], @OSLang))
 Local $iFirst = 1
 If $CmdLine[0] > 0 Then
     If StringLeft($CmdLine[1], 7) == "--lang=" Then
@@ -48,7 +52,7 @@ If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
             _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
-                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --help" & @CRLF & _
+                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --app-status  --check-readiness  --save-language ru|en|auto  --about  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
         Case "--ci-service-smoke"
@@ -61,6 +65,36 @@ If $CmdLine[0] >= $iFirst Then
         Case "--ci-integrated-session"
             ; Only a disposable CI runner may drive privileged experiments.
             Exit _PCI_Execute(@ScriptDir)
+        Case "--save-language"
+            If $CmdLine[0] <> $iFirst + 1 Then
+                _LI_Write(_LI("settings.invalid") & @CRLF, True)
+                Exit 64
+            EndIf
+            If Not _LS_Valid($CmdLine[$iFirst + 1]) Then
+                _LI_Write(_LI("settings.invalid") & @CRLF, True)
+                Exit 64
+            EndIf
+            If Not _LS_Save(@ScriptDir, $CmdLine[$iFirst + 1]) Then
+                _LI_Write(_LI("settings.save_failed") & @CRLF, True)
+                Exit 3
+            EndIf
+            _LI_Set(_LS_Select($CmdLine[$iFirst + 1], @OSLang))
+            _LI_Write(_LI("settings.saved") & $CmdLine[$iFirst + 1] & @CRLF)
+            Exit 0
+        Case "--app-status"
+            Local $app = _PA_Inspect(@ScriptDir)
+            _LI_Write(_PA_Message($app) & @CRLF)
+            If $app["status"] == "PRESENT" Then Exit 0
+            If $app["status"] == "MISSING" Then Exit 2
+            Exit 3
+        Case "--check-readiness"
+            Local $ready = _LR_Inspect(@ScriptDir)
+            _LI_Write($ready["message"] & @CRLF)
+            If $ready["status"] == "RESEARCH_ONLY" Then Exit 2
+            Exit 3
+        Case "--about"
+            _LI_Write(_LA_Text() & @CRLF)
+            Exit 0
         Case "--profile-status"
             Local $profile = _PP_Inspect(@ScriptDir)
             Switch $profile["status"]

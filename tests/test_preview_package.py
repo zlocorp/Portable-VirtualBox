@@ -19,6 +19,8 @@ class DiagnosticPreviewTests(unittest.TestCase):
         self.exe.write_bytes(b"MZ"+b"x"*12000)
         (self.root/"README.md").write_text("readme",encoding="utf-8")
         (self.root/"LICENSE.md").write_text("original license",encoding="utf-8")
+        for name in ("README.ru.md", "CHANGELOG.md", "FEATURES.md", "CREDITS.md", "THIRD_PARTY_NOTICES.md"):
+            (self.root/name).write_text("attribution fixture: "+name, encoding="utf-8")
         # Deliberately leave unwanted old/external binaries in repo.
         (self.root/"source"/"i_data"/"tools").mkdir(parents=True)
         (self.root/"source"/"i_data"/"tools"/"devcon_x64.exe").write_bytes(b"x")
@@ -37,6 +39,19 @@ class DiagnosticPreviewTests(unittest.TestCase):
             self.assertIn("development diagnostic preview",notice)
         self.assertEqual(len(receipt["sha256"]),64)
         self.assertTrue(self.output.with_suffix(".zip.sha256").is_file())
+
+    def test_archive_carries_attribution_and_feature_status(self):
+        build_preview(self.root,self.exe,self.output)
+        with zipfile.ZipFile(self.output) as archive:
+            for name in ("CREDITS.md", "THIRD_PARTY_NOTICES.md", "README.ru.md", "CHANGELOG.md", "FEATURES.md"):
+                self.assertIn(name, archive.namelist())
+                self.assertEqual(archive.read(name),(self.root/name).read_bytes())
+
+    def test_no_zip_is_created_when_credits_missing(self):
+        (self.root/"CREDITS.md").unlink()
+        with self.assertRaises(ValueError):
+            build_preview(self.root,self.exe,self.output)
+        self.assertFalse(self.output.exists())
 
     def test_rejects_overwrite_without_mutating_existing_result(self):
         self.output.write_bytes(b"foreign")

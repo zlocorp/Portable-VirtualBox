@@ -148,6 +148,9 @@ jobs:
           }
           if (Test-Path -LiteralPath (Join-Path $conflict 'logs')) { throw 'Collision created partial data' }
           Write-Host 'PASS: compiled first-run setup, repeated preservation, collision refusal'
+      - name: Exercise ordinary compiled language, app checks and credits
+        shell: pwsh
+        run: ./scripts/check_community_ux.ps1 -Launcher build/Portable-VirtualBox_x64.exe
       - name: Verify build from path with spaces and Cyrillic
         shell: pwsh
         run: |
@@ -175,10 +178,10 @@ jobs:
           $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $archive).Path)
           try {
             $names = @($zip.Entries | ForEach-Object FullName | Sort-Object)
-            $expected = @('LICENSE.md','PREVIEW-NOT-A-HYPERVISOR.txt','Portable-VirtualBox.exe','README.md') | Sort-Object
+            $expected = @('LICENSE.md','PREVIEW-NOT-A-HYPERVISOR.txt','Portable-VirtualBox.exe','README.md','README.ru.md','CHANGELOG.md','FEATURES.md','CREDITS.md','THIRD_PARTY_NOTICES.md') | Sort-Object
             if (($names -join ';') -cne ($expected -join ';')) { throw 'Preview archive contains unexpected files' }
           } finally { $zip.Dispose() }
-          Write-Host 'PASS: preview ZIP contains only compiled launcher, README, license and conspicuous warning'
+          Write-Host 'PASS: preview ZIP contains only compiled launcher, bilingual docs, credits, license and conspicuous warning'
       - name: Verify actual unpacked preview initializes independent Cyrillic root
         shell: pwsh
         run: |
