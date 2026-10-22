@@ -81,7 +81,7 @@ try {
             -not (Test-Path -LiteralPath (Join-Path $session 'stage\sup-standalone.json'))) {
             throw 'Injected break did not leave expected protected incomplete preparation'
         }
-        $reason=@(Get-ChildItem -LiteralPath $session -Filter 'helper-error-*.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+        $reason=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Prepare-*.stderr.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
         if ($reason -notmatch ('CI_TEST_BREAK_AFTER_'+$phase.ToUpperInvariant())) { throw 'Break happened before the requested checkpoint' }
         if ($phase -eq 'Stage' -and (Get-Service VBoxSup).Status -ne 'Stopped') { throw 'Stage expected stopped VBoxSup' }
         if ($phase -ne 'Stage' -and (Get-Service VBoxSup).Status -ne 'Running') { throw 'Start expected running VBoxSup' }
