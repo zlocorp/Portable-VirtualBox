@@ -241,6 +241,7 @@ Func _LG_Show()
                         If $backupAction == "--restore-backup" Then $args = $backupAction & ' "' & $restoreSource & '" "' & $backupTarget & '"'
                         $backupWorker = _MP_Start(@ScriptFullPath, $args, @ScriptDir)
                         If $backupWorker["status"] == "STARTED" Then
+                            GUICtrlSetState($idManager, $GUI_DISABLE) ; backup is active
                             GUICtrlSetState($idBackup, $GUI_DISABLE)
                             GUICtrlSetState($idVerify, $GUI_DISABLE)
                             GUICtrlSetState($idRestore, $GUI_DISABLE)
@@ -279,6 +280,7 @@ Func _LG_Show()
                 GUICtrlSetState($idVerify, $GUI_ENABLE)
                 GUICtrlSetState($idRestore, $GUI_ENABLE)
                 GUICtrlSetState($idCancel, $GUI_DISABLE)
+                If _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) Then GUICtrlSetState($idManager, $GUI_ENABLE) ; backup finished
             ElseIf $status == "UNKNOWN" Then
                 GUICtrlSetData($idBackupStatus, _LI("backup.unknown") & @CRLF & $backupTarget)
                 ; Fail closed. Do not kill, discard or release an unknown worker.
