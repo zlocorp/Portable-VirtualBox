@@ -50,7 +50,7 @@ EndFunc
 
 Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
         $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, _
-        $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idCancel, _
+        $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, _
         $showReadiness = False)
     WinSetTitle($hGui, "", _LI("app.title"))
     GUICtrlSetData($idSubtitle, _LI("app.subtitle"))
@@ -68,6 +68,7 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     GUICtrlSetData($idAbout, _LI("gui.about"))
     GUICtrlSetData($idBackup, _LI("backup.create"))
     GUICtrlSetData($idVerify, _LI("backup.verify"))
+    GUICtrlSetData($idRestore, _LI("backup.restore"))
     GUICtrlSetData($idCancel, _LI("backup.cancel"))
     GUICtrlSetData($idSettings, _LG_SettingsText(_LS_Load(@ScriptDir)))
     If _LI_Language() == "ru" Then
@@ -117,20 +118,21 @@ Func _LG_Show()
     Local $idPrepare = GUICtrlCreateButton("", 22, 492, 634, 37)
     Local $idReady = GUICtrlCreateButton("", 22, 537, 634, 37)
     Local $idResult = GUICtrlCreateEdit("", 22, 583, 634, 56, BitOR($ES_READONLY, $WS_VSCROLL, $ES_AUTOVSCROLL))
-    Local $idBackup = GUICtrlCreateButton("", 22, 648, 206, 37)
-    Local $idVerify = GUICtrlCreateButton("", 238, 648, 206, 37)
-    Local $idCancel = GUICtrlCreateButton("", 454, 648, 202, 37)
+    Local $idBackup = GUICtrlCreateButton("", 22, 648, 150, 37)
+    Local $idVerify = GUICtrlCreateButton("", 184, 648, 150, 37)
+    Local $idRestore = GUICtrlCreateButton("", 346, 648, 150, 37)
+    Local $idCancel = GUICtrlCreateButton("", 508, 648, 148, 37)
     Local $idBackupStatus = GUICtrlCreateEdit("", 22, 694, 634, 56, BitOR($ES_READONLY, $WS_VSCROLL, $ES_AUTOVSCROLL))
     Local $idRefresh = GUICtrlCreateButton("", 22, 761, 150, 35)
     Local $idCopy = GUICtrlCreateButton("", 184, 761, 150, 35)
     Local $idAbout = GUICtrlCreateButton("", 346, 761, 150, 35)
     Local $idClose = GUICtrlCreateButton("", 508, 761, 148, 35)
     Local $checked = False
-    Local $backupWorker = _MP_New(), $backupTarget = "", $backupAction = ""
+    Local $backupWorker = _MP_New(), $backupTarget = "", $backupAction = "", $restoreSource = ""
     GUICtrlSetData($idBackupStatus, _LI("backup.hint"))
     GUICtrlSetState($idCancel, $GUI_DISABLE)
     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idCancel)
+        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel)
     GUISetState(@SW_SHOW, $hGui)
     While 1
         Local $event = GUIGetMsg()
@@ -144,7 +146,7 @@ Func _LG_Show()
                     _LI_Set("en")
                 EndIf
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idCancel, $checked)
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked)
             Case $idSave, $idAuto
                 Local $preference = _LI_Language()
                 If $event = $idAuto Then $preference = "auto"
@@ -152,7 +154,7 @@ Func _LG_Show()
                     _LI_Set(_LS_Select($preference, @OSLang))
                     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
                         $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, _
-                        $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idCancel, $checked)
+                        $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked)
                 Else
                     GUICtrlSetData($idSettings, _LI("settings.save_failed"))
                 EndIf
@@ -171,24 +173,35 @@ Func _LG_Show()
                 GUICtrlSetData($idResult, $readiness["message"])
             Case $idRefresh
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idCancel, $checked)
-            Case $idBackup, $idVerify
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked)
+            Case $idBackup, $idVerify, $idRestore
                 If $backupWorker["handle"] = 0 Then
                     Local $chosen = FileSelectFolder(_LI("backup.choose"), "", 2)
                     If $chosen <> "" Then
                         If StringRight($chosen, 1) == "\" Then $chosen = StringTrimRight($chosen, 1)
                         $backupTarget = $chosen
                         $backupAction = "--verify-backup"
+                        $restoreSource = ""
+                        If $event = $idRestore Then
+                            $restoreSource = $backupTarget
+                            Local $parent = FileSelectFolder(_LI("backup.choose"), "", 2)
+                            If $parent == "" Then ContinueLoop
+                            If StringRight($parent, 1) == "\" Then $parent = StringTrimRight($parent, 1)
+                            $backupTarget = $parent & "\PortableVBox-Restored-" & @YEAR & @MON & @MDAY & "-" & @HOUR & @MIN & @SEC
+                            $backupAction = "--restore-backup"
+                        EndIf
                         If $event = $idBackup Then
                             $backupAction = "--backup-data"
                             $backupTarget &= "\PortableVBox-Backup-" & @YEAR & @MON & @MDAY & "-" & @HOUR & @MIN & @SEC
                         EndIf
                         Local $args = $backupAction & ' "' & $backupTarget & '"'
+                        If $backupAction == "--restore-backup" Then $args = $backupAction & ' "' & $restoreSource & '" "' & $backupTarget & '"'
                         $backupWorker = _MP_Start(@ScriptFullPath, $args, @ScriptDir)
                         If $backupWorker["status"] == "STARTED" Then
                             GUICtrlSetState($idBackup, $GUI_DISABLE)
                             GUICtrlSetState($idVerify, $GUI_DISABLE)
-                            If $backupAction == "--backup-data" Then GUICtrlSetState($idCancel, $GUI_ENABLE)
+                            GUICtrlSetState($idRestore, $GUI_DISABLE)
+                            If $backupAction == "--backup-data" Or $backupAction == "--restore-backup" Then GUICtrlSetState($idCancel, $GUI_ENABLE)
                             GUICtrlSetData($idBackupStatus, _LI("backup.running") & @CRLF & $backupTarget)
                         Else
                             GUICtrlSetData($idBackupStatus, _LI("backup.failed") & @CRLF & $backupTarget)
@@ -196,7 +209,7 @@ Func _LG_Show()
                     EndIf
                 EndIf
             Case $idCancel
-                If $backupWorker["handle"] <> 0 And $backupAction == "--backup-data" Then
+                If $backupWorker["handle"] <> 0 And ($backupAction == "--backup-data" Or $backupAction == "--restore-backup") Then
                     Local $cancel = FileOpen($backupTarget & ".cancel-request", 1)
                     If $cancel <> -1 Then
                         FileWrite($cancel, "cancel")
@@ -212,12 +225,16 @@ Func _LG_Show()
             Local $status = _MP_Poll($backupWorker)
             If $status == "EXITED" Then
                 Local $message = _LI("backup.failed")
-                If $backupWorker["exit_code"] = 0 Then $message = _LI("backup.verified")
+                If $backupWorker["exit_code"] = 0 Then
+                    $message = _LI("backup.verified")
+                    If $backupAction == "--restore-backup" Then $message = _LI("backup.restored")
+                EndIf
                 If $backupWorker["exit_code"] = 2 Then $message = _LI("backup.blocked")
                 GUICtrlSetData($idBackupStatus, $message & @CRLF & $backupTarget)
                 _MP_Release($backupWorker)
                 GUICtrlSetState($idBackup, $GUI_ENABLE)
                 GUICtrlSetState($idVerify, $GUI_ENABLE)
+                GUICtrlSetState($idRestore, $GUI_ENABLE)
                 GUICtrlSetState($idCancel, $GUI_DISABLE)
             ElseIf $status == "UNKNOWN" Then
                 GUICtrlSetData($idBackupStatus, _LI("backup.unknown") & @CRLF & $backupTarget)

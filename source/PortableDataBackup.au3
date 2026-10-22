@@ -250,3 +250,37 @@ Func _PBK_Verify($dir)
     _Crypt_Shutdown()
     Return $r
 EndFunc
+
+; Restore verified backup into a NEW, otherwise nonexistent root. Never merge
+; with an existing VM/profile, overwrite a launcher or touch live Oracle files.
+; Caller must separately install an approved launcher and Oracle app64 later.
+Func _PBK_Restore($backup, $target)
+    If Not _PBK_ValidPath($backup, $target) Then Return 2
+    If _PBK_IsUnder($target, @ScriptDir) Or _PBK_IsUnder(@ScriptDir, $target) Then Return 2
+    If Not _PBK_Verify($backup) Then Return 2
+    Local $lock = _PBK_GrabSessionLock()
+    If $lock = 0 Then Return 2
+    Local $result = 3
+    If _PBK_Offline() And _PBK_ValidPath($backup, $target) Then
+        Local $pending = $target & ".pending"
+        If DirCreate($pending & "\data") Then
+            Local $manifest = FileOpen($pending & "\SHA256SUMS.txt", 2 + 256)
+            If $manifest <> -1 Then
+                FileWrite($manifest, $g_PBK_Header & @LF)
+                Local $rows[], $count = 0
+                _Crypt_Startup()
+                Local $ok = _PBK_Scan($backup, "data", $rows, $count, $pending, $target, $manifest)
+                FileClose($manifest)
+                If $ok And _PBK_VerifyInternal($pending) And _PBK_VerifyInternal($backup) And _PBK_Offline() And Not _PBK_CancelRequested($target) Then
+                    Local $m = DllCall("kernel32.dll", "bool", "MoveFileExW", "wstr", $pending, "wstr", $target, "dword", 8)
+                    If Not @error And IsArray($m) Then
+                        If $m[0] Then $result = 0
+                    EndIf
+                EndIf
+                _Crypt_Shutdown()
+            EndIf
+        EndIf
+    EndIf
+    _PBK_ReleaseSessionLock($lock)
+    Return $result
+EndFunc

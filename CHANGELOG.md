@@ -6,10 +6,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ### Added · 2026-10-22 offline portable-data safeguard (public preview)
 
-- User-facing backup and independent verification for the entire portable `data/` tree (configuration, VM folders and snapshots stored there) through GUI and `--backup-data` / `--verify-backup` CLI, **without requiring VirtualBox, Python, elevation or hidden CI modes**.
+- User-facing backup, independent verification and fresh-root restoration for the entire portable `data/` tree (configuration, VM folders and snapshots stored there) through GUI and `--backup-data` / `--verify-backup` / `--restore-backup` CLI, **without requiring VirtualBox, Python, elevation or hidden CI modes**.
 - Backup creation refuses active/unknown VBox activity, a competing launcher session, unsafe/reparse paths, nested destinations and existing outputs; it hashes originals and copies using SHA-256, rescans source and publishes a completed folder only after verification.
-- Long backups run in a separate ordinary-user process; GUI remains responsive and supports cooperative cancellation. Failed/interrupted work stays in `.pending` for inspection; no destructive cleanup or backup overwrite. The independent verifier checks hashes and rejects missing/extra/corrupt files.
-- **Scope:** this is an offline **file copy** of `data/`, not an Oracle snapshot, media in external paths, VSS capture or automatic restore. The manifest is not signed. Existing VM launcher/UAC acceptance remains blocked.
+- Long backups run in a separate ordinary-user process; GUI remains responsive and supports cooperative cancellation. Failed/interrupted work stays in `.pending` for inspection; no destructive cleanup or backup overwrite. The independent verifier checks hashes and rejects missing/extra/corrupt files. Restoring accepts only a verified backup and writes to a nonexistent destination; it never merges with or overwrites an existing user VM.
+- **Scope:** this is an offline **file copy** of `data/`, not an Oracle snapshot, media in external paths, VSS capture or automatic re-registration of VMs. The manifest is not signed. Existing VM launcher/UAC acceptance remains blocked.
 
 
 ### Verified privilege separation experiment · 2026-10-21

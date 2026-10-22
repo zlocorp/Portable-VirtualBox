@@ -20,9 +20,17 @@ Invoke-Backup '--backup-data' 0
 if (-not (Test-Path (Join-Path $dest 'data\Machines\Переносимая ВМ\Snapshots\Snapshot 1.vdi') -PathType Leaf)) { throw 'Missing copied VM byte fixture' }
 if (Test-Path -LiteralPath ($dest+'.pending')) { throw 'Successful copy left stale staging' }
 Invoke-Backup '--verify-backup' 0
+$restored=Join-Path $env:RUNNER_TEMP ('Restored VM Тест '+[guid]::NewGuid().ToString('N'))
+$p=Start-Process -FilePath $exe -ArgumentList ('--restore-backup "'+$dest+'" "'+$restored+'"') -PassThru -Wait -NoNewWindow
+if ($p.ExitCode -ne 0) { throw "Restore into fresh root returned $($p.ExitCode)" }
+if (-not (Test-Path (Join-Path $restored 'data\Machines\Переносимая ВМ\Snapshots\Snapshot 1.vdi') -PathType Leaf)) { throw 'Restored snapshot bytes absent' }
+$p=Start-Process -FilePath $exe -ArgumentList ('--verify-backup "'+$restored+'"') -PassThru -Wait -NoNewWindow
+if ($p.ExitCode -ne 0) { throw 'Restored tree did not verify' }
+$p=Start-Process -FilePath $exe -ArgumentList ('--restore-backup "'+$dest+'" "'+$restored+'"') -PassThru -Wait -NoNewWindow
+if ($p.ExitCode -ne 2) { throw 'Restore overwrote existing user root' }
 Invoke-Backup '--backup-data' 2
 $backup=Join-Path $dest 'data\Machines\Переносимая ВМ\Snapshots\Snapshot 1.vdi'
 [IO.File]::WriteAllText($backup,'corrupted')
 Invoke-Backup '--verify-backup' 3
 if ((Get-Content -LiteralPath (Join-Path $profile 'Snapshot 1.vdi') -AsByteStream).Count -ne 256) { throw 'Source fixture was modified' }
-Write-Host 'PASS: compiled ordinary UI data-backup engine copied Unicode VM tree, verified SHA-256 and refused overwrite/corruption without requiring Oracle or elevation'
+Write-Host 'PASS: compiled ordinary UI data-backup engine copied and restored Unicode VM tree to a new root, verified SHA-256 and refused overwrite/corruption without requiring Oracle or elevation'

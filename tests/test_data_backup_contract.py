@@ -14,7 +14,9 @@ class DataBackupContract(unittest.TestCase):
         self.assertIn('Case "--backup-data", "--verify-backup"', entry)
         self.assertIn('_PBK_Create(@ScriptDir, $backupPath)', entry)
         self.assertIn('_PBK_Verify($backupPath)', entry)
-        self.assertIn('Case $idBackup, $idVerify', gui)
+        self.assertIn('Case "--restore-backup"', entry)
+        self.assertIn('_PBK_Restore($CmdLine[$iFirst + 1], $CmdLine[$iFirst + 2])', entry)
+        self.assertIn('Case $idBackup, $idVerify, $idRestore', gui)
         self.assertIn('_MP_Start(@ScriptFullPath, $args, @ScriptDir)', gui)
         self.assertIn('Case $idCancel', gui)
         for marker in ('_PBK_Offline()', '_PBK_GrabSessionLock()',
@@ -41,6 +43,7 @@ class DataBackupContract(unittest.TestCase):
         self.assertIn('Offline portable data backup', workflow)
         fixture = (ROOT/'scripts/check_offline_backup.ps1').read_text(encoding='utf-8')
         self.assertIn('--verify-backup', fixture)
+        self.assertIn('--restore-backup', fixture)
         self.assertIn('--backup-data', fixture)
 
 
