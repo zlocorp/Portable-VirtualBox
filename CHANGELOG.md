@@ -4,6 +4,15 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added / verified · 2026-10-22 abandoned Manager session recovery (CI-only)
+
+- A separately compiled, fixed-action elevated helper accepts an **explicit** `Recover` request for one old `PID + cycle`, with a new medium-token controller. It independently checks protected original controller/session receipts, same user and pinned launcher/runtime, expired controller PID, service/driver identity and **zero running VirtualBox processes** before removal. No unknown path or user-supplied shell commands are accepted.
+- Added a **Recover abandoned session** action in the non-distributed RU/EN Manager GUI. Recovery can be requested even after a blocked normal Start. It is never automatic and still requires UAC consent on a real interactive machine.
+- Added one-shot `RecoverySession` proof to the existing signed `VBoxSup`/`VBoxSDS` teardown. Unknown, missing, partial or replayed records **refuse cleanup** and preserve resources for inspection. It does not unlock arbitrary driver deletion.
+- [Actual Windows driver/empty-VM acceptance 39761908190](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39761908190) **passed**: refuse with original controller live, refuse with test VM still running after controller exit, power off VM, recover only own resources, prove all services/INF/driver files gone, preserve original VM configuration, and refuse replay. The downloaded proof explicitly reports `cleanup_basis=RecoverySession`, `cleanup_verified=true`, `driver_package_removed=true`, `interactive_uac_verified=false`.
+- **Scope:** This validates a *complete, prepared, abandoned* session on a disposable Windows Server 2022 host. Not a simulated power cut, partial driver install, interrupted cleanup, a real guest OS with disk or interactive Windows 11/UAC acceptance. No user release, no automatic cleanup and no master change.
+
+
 ### Added · 2026-10-22 offline portable-data safeguard (public preview)
 
 - User-facing backup, independent verification and fresh-root restoration for the entire portable `data/` tree (configuration, VM folders and snapshots stored there) through GUI and `--backup-data` / `--verify-backup` / `--restore-backup` CLI, **without requiring VirtualBox, Python, elevation or hidden CI modes**.

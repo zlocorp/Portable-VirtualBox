@@ -2,6 +2,10 @@
 
 Date: 2026-10-20. User explicitly requests **large integrated functional packages**, not a series of tiny unrelated steps. This plan governs the next development work. Clean original `vboxme/Portable-VirtualBox` is the only upstream base; do not use historical `zlocorp` changes. Maintain existing draft PR #7 against `work/upstream-baseline-2026`; no master merge, release or user-PC testing.
 
+## New Batch A checkpoint: explicit orphan recovery (2026-10-22)
+
+The fixed privileged helper and separated Manager GUI now have an **explicit, CI-only orphan recovery** flow. [Windows run 39761908190](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39761908190) validated rejection while the old controller or VM was alive, and exact-owned cleanup after both exited, retaining the VM's UUID/configuration. Guarded old receipt + pinned driver identity are mandatory. This is a meaningful restoration capability, but **not** recovery from partially applied effects, a reboot, real UAC consent, or Windows 11 product acceptance. Do not enable it in the normal ZIP yet. [Detailed evidence](../EXECUTION-2026-10-22-orphan-recovery.md).
+
 ## Current evidence to preserve
 
 - Signed Oracle VirtualBox **7.2.22** MSI/CAB → signed/hashes-verified 185-file app64 (247834716 bytes); earlier 7.2.20 proofs remain historical.
