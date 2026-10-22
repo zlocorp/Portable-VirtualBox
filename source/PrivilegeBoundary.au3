@@ -34,12 +34,66 @@ EndFunc
 
 Func _PB_Start($root, $action, $cycle)
     Local $p = _MP_New()
+    If Not _PB_Medium() Or Not _PP_RootSafe($root) Or StringLower($root) <> StringLower(@ScriptDir) Then Return $p
+    If $action <> "Prepare" And $action <> "Finish" Then Return $p
+    If Not IsInt($cycle) Or $cycle < 1 Or $cycle > 999 Then Return $p
+    If Not FileExists($root & "\Portable-VirtualBox-Helper-Test.exe") Then Return $p
+    ; A same-binary medium worker waits for Windows consent off the GUI thread.
+    Return _MP_Start(@ScriptFullPath, "--elevation-worker " & $action & " " & @AutoItPID & " " & $cycle, $root)
+EndFunc
+
+Func _PB_RunRequest($root, $action, $controller, $cycle)
+    If Not _PB_Medium() Or Not IsInt($controller) Or $controller < 1 Or $controller = @AutoItPID Then Return 64
+    If $action <> "Prepare" And $action <> "Finish" Then Return 64
+    If Not IsInt($cycle) Or $cycle < 1 Or $cycle > 999 Then Return 64
+    Local $token = _WinObsProcessOpen($controller)
+    If $token = 0 Then Return 70
+    Local $parent = _WinObsProcessRead($token)
+    If $parent["status"] <> "PRESENT" Or StringLower($parent["image"]) <> StringLower(@ScriptFullPath) Then
+        _WinObsProcessClose($token)
+        Return 70
+    EndIf
+    Local $init = DllCall("ole32.dll", "long", "CoInitializeEx", "ptr", 0, "dword", 2)
+    If @error Then
+        _WinObsProcessClose($token)
+        Return 70
+    EndIf
+    If $init[0] <> 0 And $init[0] <> 1 Then
+        _WinObsProcessClose($token)
+        Return 70
+    EndIf
+    Local $p = _PB_RequestBlocking($root, $action, $controller, $cycle), $result = 70
+    If $p["status"] == "CANCELLED" Then
+        $result = 1223
+    ElseIf $p["status"] == "STARTED" Then
+        Local $clock = TimerInit()
+        While TimerDiff($clock) < 180000
+            Local $status = _PB_PollHelper($p)
+            If $status == "EXITED" Then
+                If $p["exit_code"] = 0 Then $result = 0
+                ExitLoop
+            EndIf
+            If $status <> "PRESENT" Then ExitLoop
+            $parent = _WinObsProcessRead($token)
+            If $parent["status"] <> "PRESENT" Then ExitLoop
+            Sleep(50)
+        WEnd
+    EndIf
+    If $p["handle"] <> 0 Then _MP_Release($p)
+    DllCall("ole32.dll", "none", "CoUninitialize")
+    _WinObsProcessClose($token)
+    Return $result
+EndFunc
+
+; ShellExecuteExW itself can wait for UAC, so only the request worker calls it.
+Func _PB_RequestBlocking($root, $action, $controller, $cycle)
+    Local $p = _MP_New()
     If Not _PB_Medium() Or Not _PP_RootSafe($root) Then Return $p
     If $action <> "Prepare" And $action <> "Finish" Then Return $p
     If Not IsInt($cycle) Or $cycle < 1 Or $cycle > 999 Then Return $p
     Local $exe = $root & "\Portable-VirtualBox-Helper-Test.exe"
     If Not FileExists($exe) Then Return $p
-    Local $args = $action & " " & @AutoItPID & " " & $cycle
+    Local $args = $action & " " & $controller & " " & $cycle
     Local $s = DllStructCreate("dword size;ulong mask;hwnd window;ptr verb;ptr file;ptr parameters;ptr directory;int show;handle instance;ptr idlist;ptr class;handle key;dword hotkey;handle icon;handle process")
     Local $verb = DllStructCreate("wchar[6]"), $file = DllStructCreate("wchar[" & (StringLen($exe)+1) & "]")
     Local $parameters = DllStructCreate("wchar[" & (StringLen($args)+1) & "]"), $directory = DllStructCreate("wchar[" & (StringLen($root)+1) & "]")
@@ -80,4 +134,18 @@ Func _PB_Store()
     Local $a = DllCall("shell32.dll", "long", "SHGetFolderPathW", "hwnd", 0, "int", 35, "handle", 0, "dword", 0, "struct*", $path)
     If @error Or $a[0] <> 0 Then Return ""
     Return DllStructGetData($path, 1) & "\PortableVirtualBox.Experiment"
+EndFunc
+
+; Elevated helper identity is checked by its own fixed-action protocol.
+; The lower-integrity worker only waits on the retained ShellExecuteEx handle.
+Func _PB_PollHelper(ByRef $p)
+    If Not IsMap($p) Or $p["handle"] = 0 Then Return "UNKNOWN"
+    Local $a = DllCall("kernel32.dll", "dword", "WaitForSingleObject", "handle", $p["handle"], "dword", 0)
+    If @error Then Return "UNKNOWN"
+    If $a[0] = 258 Then Return "PRESENT"
+    If $a[0] <> 0 Then Return "UNKNOWN"
+    $a = DllCall("kernel32.dll", "bool", "GetExitCodeProcess", "handle", $p["handle"], "dword*", 0)
+    If @error Or Not $a[0] Then Return "UNKNOWN"
+    $p["exit_code"] = $a[2]
+    Return "EXITED"
 EndFunc

@@ -58,7 +58,6 @@ Func _MS_New($root, $workspace)
     $s["session"] = ""
     $s["separated"] = $g_MS_Separated
     $s["cycle"] = 0
-    $s["elevation_cancelled"] = False
     $s["app_system"] = $root & "\app64"
     $s["worker"] = _MP_New()
     $s["manager"] = _MP_New()
@@ -99,11 +98,9 @@ EndFunc
 
 Func _MS_Worker(ByRef $s, $action)
     If $action <> "Prepare" And $action <> "Finish" Then Return False
-    $s["elevation_cancelled"] = False
     If $s["separated"] Then
         Local $privileged = _PB_Start($s["root"], $action, $s["cycle"])
         $s["worker"] = $privileged
-        $s["elevation_cancelled"] = $privileged["status"] == "CANCELLED"
         Return $privileged["status"] == "STARTED"
     EndIf
     Local $exe = @ProgramFilesDir & "\PowerShell\7\pwsh.exe"
@@ -179,14 +176,7 @@ Func _MS_Start(ByRef $s)
     $s["window_clock"] = TimerInit()
     $s["quiet"] = 0
     If FileExists($s["session"]) Or Not _MS_Worker($s, "Prepare") Then
-        If $s["elevation_cancelled"] Then
-            DllCall("kernel32.dll", "bool", "ReleaseMutex", "handle", $s["mutex"])
-            DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $s["mutex"])
-            $s["mutex"] = 0
-            _MS_State($s, "IDLE", "elevation-cancelled-no-system-changes")
-        Else
-            _MS_State($s, "FAILED", "prepare-worker-not-started")
-        EndIf
+        _MS_State($s, "FAILED", "prepare-worker-not-started")
         Return False
     EndIf
     _MS_State($s, "PREPARING")
@@ -246,12 +236,32 @@ Func _MS_Tick(ByRef $s)
             If TimerDiff($s["clock"]) > 180000 Then _MS_State($s, "FAILED", "worker-timeout-no-guessed-cleanup")
             Return
         EndIf
-        If $status <> "EXITED" Or $worker["exit_code"] <> 0 Then
+        If $status <> "EXITED" Then
             _MS_State($s, "FAILED", "worker-failed-no-guessed-cleanup")
             Return
         EndIf
         _MP_Release($worker)
         $s["worker"] = $worker
+        If $s["separated"] And $worker["exit_code"] = 1223 Then
+            If $state == "CLEANING" Then
+                _MS_State($s, "CLEANUP_DECLINED", "click-finish-to-retry-elevation")
+            Else
+                Local $installed = _PortableInstalledVBoxDetected()
+                If Not IsBool($installed) Or $installed Or FileExists($s["session"]) Or _PortableCountExistingServices() <> 0 Or _PortableCountVirtualBoxProcesses() <> 0 Then
+                    _MS_State($s, "FAILED", "cancelled-but-host-state-not-clear")
+                    Return
+                EndIf
+                DllCall("kernel32.dll", "bool", "ReleaseMutex", "handle", $s["mutex"])
+                DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $s["mutex"])
+                $s["mutex"] = 0
+                _MS_State($s, "IDLE", "elevation-cancelled-no-system-changes")
+            EndIf
+            Return
+        EndIf
+        If $worker["exit_code"] <> 0 Then
+            _MS_State($s, "FAILED", "worker-failed-no-guessed-cleanup")
+            Return
+        EndIf
         If $state == "CLEANING" Then
             If _PortableCountExistingServices() <> 0 Or _PortableCountVirtualBoxProcesses() <> 0 Then
                 _MS_State($s, "FAILED", "host-not-clean")
@@ -341,11 +351,7 @@ Func _MS_Tick(ByRef $s)
         _MS_State($s, "READY_TO_CLEAN")
         If TimerDiff($s["quiet"]) < 1500 Then Return
         If Not _MS_Worker($s, "Finish") Then
-            If $s["elevation_cancelled"] Then
-                _MS_State($s, "CLEANUP_DECLINED", "click-finish-to-retry-elevation")
-            Else
-                _MS_State($s, "FAILED", "cleanup-worker-not-started")
-            EndIf
+            _MS_State($s, "FAILED", "cleanup-worker-not-started")
         Else
             _MS_State($s, "CLEANING")
         EndIf

@@ -8,6 +8,11 @@ If Not _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) Then
     ConsoleWriteError("Manager session experiment is restricted to a disposable hosted Windows root." & @CRLF)
     Exit 9
 EndIf
+If $CmdLine[0] > 0 And $CmdLine[1] == "--elevation-worker" Then
+    If $CmdLine[0] <> 4 Then Exit 64
+    If Not StringRegExp($CmdLine[3], "^[1-9][0-9]{0,8}$") Or Not StringRegExp($CmdLine[4], "^[1-9][0-9]{0,2}$") Then Exit 64
+    Exit _PB_RunRequest(@ScriptDir, $CmdLine[2], Int($CmdLine[3]), Int($CmdLine[4]))
+EndIf
 Local $preferences = _LS_Load(@ScriptDir)
 _LI_Set(_LS_Select($preferences["language"], @OSLang))
 Local $arg = 1
