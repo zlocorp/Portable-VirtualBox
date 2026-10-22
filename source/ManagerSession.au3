@@ -197,7 +197,7 @@ EndFunc
 
 ; Explicit, CI-only orphan cleanup with a fresh non-admin controller.
 Func _MS_Recover(ByRef $s)
-    If $s["state"] <> "IDLE" Or Not $s["separated"] Or Not _MS_Allowed($s["root"], $s["workspace"]) Or Not _PB_Medium() Then Return False
+    If ($s["state"] <> "IDLE" And $s["state"] <> "BLOCKED") Or Not $s["separated"] Or Not _MS_Allowed($s["root"], $s["workspace"]) Or Not _PB_Medium() Then Return False
     Local $choice = _MS_FindRecoverable($s["root"])
     If $choice["status"] <> "FOUND" Then
         _MS_State($s, "BLOCKED", "recovery-candidate-" & $choice["status"])

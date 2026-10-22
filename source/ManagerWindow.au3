@@ -130,7 +130,7 @@ Func _MSW_Show($root, $workspace)
             GUICtrlSetState($start, ($canStart ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($stop, ($canStop ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($reopen, ($canReopen ? $GUI_ENABLE : $GUI_DISABLE))
-            GUICtrlSetState($recover, (($s["state"] == "IDLE" And $s["separated"]) ? $GUI_ENABLE : $GUI_DISABLE))
+            GUICtrlSetState($recover, ((($s["state"] == "IDLE" Or $s["state"] == "BLOCKED") And $s["separated"]) ? $GUI_ENABLE : $GUI_DISABLE))
             $last = $display
         EndIf
         Sleep(15)

@@ -37,6 +37,7 @@ class OrphanRecovery(unittest.TestCase):
         self.assertIn('Func _MS_Recover', src)
         self.assertIn('Func _MS_FindRecoverable', src)
         self.assertIn('CONSENT_RECOVER', src)
+        self.assertIn('$s["state"] <> "BLOCKED"', src)
         self.assertIn('RECOVERING', src)
         gui = read('source/ManagerWindow.au3')
         self.assertIn('Recover abandoned session', gui)
