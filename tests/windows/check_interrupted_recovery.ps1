@@ -23,7 +23,7 @@ $old=$null;$new=$null
 $proof=[ordered]@{source_commit=$env:GITHUB_SHA;interactive_uac_verified=$false;
     guest_os_booted=$false;validated_checkpoints=@();original_data_preserved=$false;
     two_copies=$false;live_owner_denied=$false;missing_receipt_denied=$false;
-    all_owned_services_removed=$false;unauthorized_cleanups=0}
+    all_owned_services_removed=$false;forged_receipts_denied=$false;unauthorized_cleanups=0}
 function Start-Medium([string]$Image,[string]$Label) {
     $p=[MediumProcess]::Start($Image,'--lang en --separate-privileges',$root,
         (Join-Path $out ($Label+'.stdout.txt')),(Join-Path $out ($Label+'.stderr.txt')))
@@ -106,6 +106,44 @@ try {
                 if ((Get-Service VBoxSup).Status -ne 'Running') { throw 'Missing proof altered driver' }
             } finally { [IO.File]::WriteAllBytes($stagePath,$stageBytes) }
         }
+        if ($phase -eq 'Stage') {
+            # A privileged test-only modification of the protected stage receipt
+            # simulates a corrupt/forged record. Refusal must leave the real
+            # installed driver/package untouched, not perform guessed cleanup.
+            $stagePath=Join-Path $session 'stage\sup-standalone.json'
+            $stageBytes=[IO.File]::ReadAllBytes($stagePath)
+            try {
+                $record=Get-Content -LiteralPath $stagePath -Raw | ConvertFrom-Json
+                $record.system_driver_sha256='0000000000000000000000000000000000000000000000000000000000000000'
+                $record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $stagePath -Encoding utf8
+                Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 'forged-stage-receipt-denied'
+                if ((Get-Service VBoxSup).Status -ne 'Stopped') { throw 'Forged stage receipt changed service state' }
+                $evidence=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.stderr.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+                if ($evidence -notmatch 'No exact exclusive VBoxSup staging receipt') {
+                    throw 'Stage receipt refusal did not reach exact ownership check'
+                }
+            } finally { [IO.File]::WriteAllBytes($stagePath,$stageBytes) }
+        }
+        if ($phase -eq 'Sds') {
+            # A changed protected marker must never authorize deregistration.
+            $markerPath=Join-Path $session 'sds-registered.json'
+            $markerBytes=[IO.File]::ReadAllBytes($markerPath)
+            try {
+                $record=Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+                $record.registered=$false
+                $record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $markerPath -Encoding utf8
+                Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 'forged-sds-marker-denied'
+                if ((Get-Service VBoxSup).Status -ne 'Running' -or
+                    -not (Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) {
+                    throw 'Forged SDS marker changed real driver or SDS service'
+                }
+                $evidence=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.stderr.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+                if ($evidence -notmatch 'SDS marker owner differs') {
+                    throw 'SDS marker refusal did not reach exact ownership check'
+                }
+            } finally { [IO.File]::WriteAllBytes($markerPath,$markerBytes) }
+            $proof.forged_receipts_denied=$true
+        }
         Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 0 ('recover-'+$label)
         Assert-Clean ('after-recovery-clean-'+$label)
         $result=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw | ConvertFrom-Json
@@ -127,7 +165,7 @@ try {
     }
     $proof.original_data_preserved=$true
     $proof.all_owned_services_removed=$true
-    Write-Host 'PASS: protected PartialRecovery at Stage, Start, Sds checkpoints; old owner refused, missing-receipt-denied, after-recovery-clean, two_copies original_data_preserved; UAC NOT VERIFIED'
+    Write-Host 'PASS: protected PartialRecovery at Stage, Start, Sds checkpoints; old owner refused, missing-receipt-denied, forged-receipt-denied, after-recovery-clean, two_copies original_data_preserved; UAC NOT VERIFIED'
 } catch { $proof.error=$_.Exception.Message;throw }
 finally {
     $proof | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $out 'interrupted-recovery-proof.json') -Encoding utf8

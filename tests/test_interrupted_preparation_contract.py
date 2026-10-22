@@ -61,6 +61,14 @@ class InterruptedPreparation(unittest.TestCase):
         self.assertEqual(len(MEMBERS), 6)
         self.assertFalse(any('Helper' in f for f in MEMBERS))
 
+    def test_cannot_forge_checked_driver_or_sds_receipts_in_recovery_fixture(self):
+        check = source('tests/windows/check_interrupted_recovery.ps1')
+        for marker in ('forged-stage-receipt-denied', 'forged-sds-marker-denied',
+                       'forged_receipts_denied',
+                       'No exact exclusive VBoxSup staging receipt',
+                       'SDS marker owner differs'):
+            self.assertIn(marker, check)
+
     def test_real_host_breaks_after_three_actual_checkpoints(self):
         check = source('tests/windows/check_interrupted_recovery.ps1')
         workflow = source('.github/workflows/interrupted-recovery.yml')
