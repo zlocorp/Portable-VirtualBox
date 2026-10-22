@@ -5,6 +5,7 @@
 #include "LauncherReadiness.au3"
 #include "LauncherSettings.au3"
 #include "LauncherAbout.au3"
+#include "PortableVmInventory.au3"
 #include "ManagedProcess.au3"
 #include <GUIConstantsEx.au3>
 #include <EditConstants.au3>
@@ -49,13 +50,17 @@ Func _LG_SettingsText($s)
 EndFunc
 
 Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, _
+        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, _
         $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, _
-        $showReadiness = False)
+        $showReadiness = False, $showInventory = False)
     WinSetTitle($hGui, "", _LI("app.title"))
     GUICtrlSetData($idSubtitle, _LI("app.subtitle"))
     GUICtrlSetData($idWarning, _LI("app.disabled"))
-    GUICtrlSetData($idSection, _LI("gui.diagnostics"))
+    If $showInventory Then
+        GUICtrlSetData($idSection, _LI("vm.header"))
+    Else
+        GUICtrlSetData($idSection, _LI("gui.diagnostics"))
+    EndIf
     GUICtrlSetData($idRefresh, _LI("gui.refresh"))
     GUICtrlSetData($idCopy, _LI("gui.copy"))
     GUICtrlSetData($idClose, _LI("gui.exit"))
@@ -63,6 +68,7 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     GUICtrlSetData($idEn, _LI("gui.english"))
     GUICtrlSetData($idPrepare, _LI("gui.prepare"))
     GUICtrlSetData($idReady, _LI("gui.readiness"))
+    GUICtrlSetData($idVmAudit, _LI("gui.vm_audit"))
     GUICtrlSetData($idSave, _LI("gui.save_language"))
     GUICtrlSetData($idAuto, _LI("gui.auto_language"))
     GUICtrlSetData($idAbout, _LI("gui.about"))
@@ -81,7 +87,12 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     Local $p = _PP_Inspect(@ScriptDir)
     GUICtrlSetData($idProfile, _LG_ProfileMessage($p))
     Local $diagnostic = _PortableDiagnosticCollect()
-    GUICtrlSetData($idReport, $diagnostic["text"])
+    If $showInventory Then
+        Local $inventory = _PVI_Inspect(@ScriptDir)
+        GUICtrlSetData($idReport, $inventory["report"])
+    Else
+        GUICtrlSetData($idReport, $diagnostic["text"])
+    EndIf
     ; Never retain a Russian status in English UI (or vice versa).
     ; Refresh a previously requested readiness probe after locale/preflight changes.
     If $showReadiness Then
@@ -116,7 +127,8 @@ Func _LG_Show()
     Local $idPath = GUICtrlCreateLabel("", 22, 410, 634, 28)
     Local $idProfile = GUICtrlCreateLabel("", 22, 445, 634, 42)
     Local $idPrepare = GUICtrlCreateButton("", 22, 492, 634, 37)
-    Local $idReady = GUICtrlCreateButton("", 22, 537, 634, 37)
+    Local $idReady = GUICtrlCreateButton("", 22, 537, 310, 37)
+    Local $idVmAudit = GUICtrlCreateButton("", 346, 537, 310, 37)
     Local $idResult = GUICtrlCreateEdit("", 22, 583, 634, 56, BitOR($ES_READONLY, $WS_VSCROLL, $ES_AUTOVSCROLL))
     Local $idBackup = GUICtrlCreateButton("", 22, 648, 150, 37)
     Local $idVerify = GUICtrlCreateButton("", 184, 648, 150, 37)
@@ -127,12 +139,12 @@ Func _LG_Show()
     Local $idCopy = GUICtrlCreateButton("", 184, 761, 150, 35)
     Local $idAbout = GUICtrlCreateButton("", 346, 761, 150, 35)
     Local $idClose = GUICtrlCreateButton("", 508, 761, 148, 35)
-    Local $checked = False
+    Local $checked = False, $showInventory = False
     Local $backupWorker = _MP_New(), $backupTarget = "", $backupAction = "", $restoreSource = ""
     GUICtrlSetData($idBackupStatus, _LI("backup.hint"))
     GUICtrlSetState($idCancel, $GUI_DISABLE)
     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel)
+        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel)
     GUISetState(@SW_SHOW, $hGui)
     While 1
         Local $event = GUIGetMsg()
@@ -146,15 +158,15 @@ Func _LG_Show()
                     _LI_Set("en")
                 EndIf
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked)
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
             Case $idSave, $idAuto
                 Local $preference = _LI_Language()
                 If $event = $idAuto Then $preference = "auto"
                 If _LS_Save(@ScriptDir, $preference) Then
                     _LI_Set(_LS_Select($preference, @OSLang))
                     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, _
-                        $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked)
+                        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, _
+                        $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
                 Else
                     GUICtrlSetData($idSettings, _LI("settings.save_failed"))
                 EndIf
@@ -171,9 +183,14 @@ Func _LG_Show()
                 $checked = True
                 Local $readiness = _LR_Inspect(@ScriptDir)
                 GUICtrlSetData($idResult, $readiness["message"])
+            Case $idVmAudit
+                $showInventory = True
+                Local $inventory = _PVI_Inspect(@ScriptDir)
+                GUICtrlSetData($idSection, _LI("vm.header"))
+                GUICtrlSetData($idReport, $inventory["report"])
             Case $idRefresh
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked)
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
             Case $idBackup, $idVerify, $idRestore
                 If $backupWorker["handle"] = 0 Then
                     Local $chosen = FileSelectFolder(_LI("backup.choose"), "", 2)

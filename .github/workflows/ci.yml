@@ -148,6 +148,9 @@ jobs:
           }
           if (Test-Path -LiteralPath (Join-Path $conflict 'logs')) { throw 'Collision created partial data' }
           Write-Host 'PASS: compiled first-run setup, repeated preservation, collision refusal'
+      - name: Audit real VM XML references from compiled ordinary RU/EN launcher
+        shell: pwsh
+        run: ./scripts/check_vm_inventory.ps1 -Launcher build/Portable-VirtualBox_x64.exe
       - name: Offline portable data backup with SHA-256, Unicode paths and corruption refusal
         shell: pwsh
         run: ./scripts/check_offline_backup.ps1 -Launcher build/Portable-VirtualBox_x64.exe

@@ -15,6 +15,7 @@
 #include "LauncherI18n.au3"
 #include "LauncherGui.au3"
 #include "PortableDataBackup.au3"
+#include "PortableVmInventory.au3"
 #include "PortableProfile.au3"
 #include "LauncherSettings.au3"
 #include "PortableApp.au3"
@@ -53,7 +54,7 @@ If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
             _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
-                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --about  --help" & @CRLF & _
+                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --about  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
         Case "--ci-service-smoke"
@@ -122,6 +123,18 @@ If $CmdLine[0] >= $iFirst Then
                     Exit 2
                 Case Else
                     _LI_Write(_LI("backup.failed") & " " & $backupPath & ".pending" & @CRLF, True)
+                    Exit 3
+            EndSwitch
+        Case "--audit-vms"
+            If $CmdLine[0] <> $iFirst Then Exit 64
+            Local $audit = _PVI_Inspect(@ScriptDir)
+            _LI_Write($audit["report"])
+            Switch $audit["status"]
+                Case "CLEAN"
+                    Exit 0
+                Case "EMPTY", "REVIEW"
+                    Exit 2
+                Case Else
                     Exit 3
             EndSwitch
         Case "--app-status"
