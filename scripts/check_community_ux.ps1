@@ -22,7 +22,7 @@ function Invoke-Checked([string]$Root, [string]$Arguments, [int]$Expected, [stri
     return [string](Get-Content -LiteralPath $out -Raw -Encoding utf8)
 }
 $about = Invoke-Checked $root '--lang en --about' 0 'about'
-foreach ($credit in @('Portable-VirtualBox','CC BY-NC-SA 3.0','CREDITS.md','startup is currently disabled')) {
+foreach ($credit in @('Portable-VirtualBox','CC BY-NC-SA 3.0','CREDITS.md','VM startup is disabled')) {
     if (-not $about.Contains($credit)) { throw "Missing compiled credit/boundary: $credit" }
 }
 if ($about.Length -ge 400 -or $about.Contains('Deac2')) { throw 'About contains unnecessary contributor detail' }
