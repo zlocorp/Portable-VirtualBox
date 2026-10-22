@@ -1,6 +1,6 @@
 # Features and differences from the original
 
-Updated **2026-10-21**. The comparison baseline is upstream `vboxme/Portable-VirtualBox` at `5b58dbbe701c3e2eb348942a9059708063b0cb96`, not every community fork. This branch is still a **diagnostic development preview**, not a replacement for an existing working launcher.
+Updated **2026-10-22**. The comparison baseline is upstream `vboxme/Portable-VirtualBox` at `5b58dbbe701c3e2eb348942a9059708063b0cb96`, not every community fork. This branch is still a **diagnostic development preview**, not a replacement for an existing working launcher.
 
 | Capability | Current status | What that means / evidence |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ Updated **2026-10-21**. The comparison baseline is upstream `vboxme/Portable-Vir
 | Controlled powered-off root/drive relocation | CI-only | Fixture UUID/data preservation; not general cross-host/snapshot migration |
 | Manager Start / Finish / Reopen and guest-aware cleanup | **Integrated experiment, CI verified** | Real compiled GUI + Oracle Manager; live VM preserved, second controller refused, two clean sessions/same UUID; separate non-distributed EXE, not production UAC |
 | Production Manager/VM Start/Stop | **Not yet enabled for ordinary users** | Integrated experimental frontend now works; the privileged adapter and Windows 11 standard-user acceptance remain open |
-| Separate elevated helper / normal-user UAC | **Partial, CI-only** | Fixed helper plus protected Oracle runtime: medium-privilege Manager/guest, forged-input refusal, denied protected writes and two clean cycles verified in [39649261984](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261984). Interactive `ShellExecuteExW runas` delivery remains **unverified**: [39649261666](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261666) failed with the frontend still `IDLE`. Not a production UAC approval. |
+| Separate elevated helper / normal-user UAC | **Partial, CI-only** | Fixed helper, protected Oracle runtime and medium-privilege Manager/VM: [two cycles and protected-write refusal passed](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39737034920). **Async UAC waiting UI passed** [unattended CI](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39737034711), but **real UAC consent/cancellation on interactive Windows 11 is not verified**. Non-distributed experiment only. |
 | Existing VM import, snapshots and media-chain migration | Planned | Read-only inventory foundation exists; no automatic rewrite or unregister/delete |
 | Transactional Oracle updater / rollback | Planned | Download/extraction safeguards exist; no complete end-user updater |
 | USB passthrough / bridged-network driver management | Deferred | No automatic installation of extra drivers |
