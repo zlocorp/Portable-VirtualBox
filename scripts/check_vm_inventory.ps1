@@ -23,10 +23,24 @@ $tail='</HardDisks></MediaRegistry><Snapshots><Snapshot name="Снимок"/></S
 [IO.File]::WriteAllBytes((Join-Path $machine 'disk.vdi'),[byte[]](0..255))
 $local='<HardDisk location="disk.vdi"/>'
 [IO.File]::WriteAllText($xml,$head+$local+$tail,[Text.UTF8Encoding]::new($false))
+$registry=Join-Path $root 'data\.VirtualBox\VirtualBox.xml'
+New-Item -ItemType Directory -Path (Split-Path $registry -Parent) -ErrorAction Stop | Out-Null
+$registryHead='<VirtualBox xmlns="http://www.virtualbox.org/"><Global><MachineRegistry>'
+$registryTail='</MachineRegistry></Global></VirtualBox>'
+$registryEntry='<MachineEntry uuid="'+$uuid+'" src="..\Machines\ВМ с пробелами\Тест.vbox"/>'
+[IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$registryTail,[Text.UTF8Encoding]::new($false))
 $en=Invoke-Audit 0 'en'
 if (-not $en.Contains('VMs / snapshots / media') -or -not $en.Contains('ВМ с пробелами')) { throw 'Clean fixture did not enumerate VM and snapshot' }
 $ru=Invoke-Audit 0 'ru'
 if (-not $ru.Contains('ВМ / снимки / носители')) { throw 'Russian output missing' }
+if (-not $en.Contains('Registered machines: 1')) { throw 'Actual registry was not verified' }
+# A second, externally registered VM is not in the folder: warn rather than
+# reporting complete portability based on scanning Machines alone.
+$extra='<MachineEntry uuid="{99999999-2222-3333-4444-555555555555}" src="E:\DifferentPC\external.vbox"/>'
+[IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$extra+$registryTail,[Text.UTF8Encoding]::new($false))
+$regWarning=Invoke-Audit 2 'en'
+if (-not $regWarning.Contains('VM registered outside portable data')) { throw 'Global registry external path not surfaced' }
+[IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$registryTail,[Text.UTF8Encoding]::new($false))
 $external='<HardDisk location="D:\OtherHost\disk.vdi"/><HardDisk location="missing.vdi"/>'
 [IO.File]::WriteAllText($xml,$head+$local+$external+$tail,[Text.UTF8Encoding]::new($false))
 $report=Invoke-Audit 2 'en'
@@ -40,6 +54,9 @@ $warning=Join-Path $env:RUNNER_TEMP ('vm-backup-warning-'+[Guid]::NewGuid().ToSt
 $b=Start-Process -FilePath $exe -ArgumentList ('--lang en --backup-data "'+$backup+'"') -PassThru -Wait -NoNewWindow -RedirectStandardError $warning
 if ($b.ExitCode -ne 0 -or -not (Test-Path (Join-Path $backup 'data\Machines\ВМ с пробелами\Тест.vbox'))) { throw 'Guarded copy of data unexpectedly failed' }
 if (-not (Get-Content -LiteralPath $warning -Raw -Encoding utf8).Contains('NOT a complete backup')) { throw 'Backup of external-disk VM was silent' }
+[IO.File]::WriteAllText($registry,'<!DOCTYPE VirtualBox [<!ENTITY bad SYSTEM "file:///C:/Windows/win.ini">]>'+$registryHead+$registryEntry+$registryTail,[Text.UTF8Encoding]::new($false))
+$null=Invoke-Audit 3 'en'
+[IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$registryTail,[Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText($xml,'<!DOCTYPE VirtualBox [<!ENTITY bad SYSTEM "file:///C:/Windows/win.ini">]>'+$head+$local+$tail,[Text.UTF8Encoding]::new($false))
 $null=Invoke-Audit 3 'en'
 if (-not (Test-Path -LiteralPath (Join-Path $machine 'disk.vdi'))) { throw 'Read-only inventory mutated media' }

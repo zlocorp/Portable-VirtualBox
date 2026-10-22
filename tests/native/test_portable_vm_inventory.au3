@@ -28,9 +28,17 @@ Local $prefix = '<VirtualBox xmlns="http://www.virtualbox.org/" version="1.20-wi
 Local $suffix = '</HardDisks></MediaRegistry><Snapshots><Snapshot name="снимок"/></Snapshots></Machine></VirtualBox>'
 Local $normal = '<HardDisk location="disk.vdi"/><HardDisk location="Snapshots/snap.vdi"/>'
 Check(WriteXml($file, $prefix & $normal & $suffix), "UTF8 config written")
+Check(DirCreate($root & "\data\.VirtualBox"), "private registry directory")
+Local $registry = $root & "\data\.VirtualBox\VirtualBox.xml"
+Local $regHead = '<VirtualBox xmlns="http://www.virtualbox.org/"><Global><MachineRegistry>'
+Local $regTail = '</MachineRegistry></Global></VirtualBox>'
+Local $regEntry = '<MachineEntry uuid="' & $uuid & '" src="..\Machines\Имя ВМ\Имя ВМ.vbox"/>'
+Check(WriteXml($registry, $regHead & $regEntry & $regTail), "portable registry created")
 $r = _PVI_Inspect($root)
 Check($r["status"] == "CLEAN", "two local media and one snapshot parsed")
 Check($r["vm_count"] == 1 And $r["snapshot_count"] == 1 And $r["media_count"] == 2, "correct counts")
+Check($r["registered_count"] == 1 And $r["external_registry_count"] == 0, "global VM registry counted and in-root")
+Check(StringInStr($r["report"], _LI("vm.registered")) > 0, "registry summary displayed")
 Check($r["external_count"] == 0 And $r["missing_count"] == 0, "only local media")
 Check(StringInStr($r["report"], "Имя ВМ") > 0, "Unicode VM displayed")
 Check(_PVI_MediaLocation($machineDir, "disk.vdi") == "LOCAL", "existing relative medium")
@@ -47,6 +55,22 @@ $r = _PVI_Inspect($root)
 Check($r["status"] == "REVIEW" And $r["external_count"] == 1 And $r["missing_count"] == 1, "external/missing media require review")
 Check(StringInStr($r["report"], "D:\\OtherDrive") > 0, "external disk shown without opening it")
 Check(StringInStr($r["report"], "missing.vdi") > 0, "missing disk shown")
+; A registered VM entirely outside the copied data tree is a risk even
+; when every discovered .vbox has local media.
+Check(WriteXml($registry, $regHead & $regEntry & '<MachineEntry uuid="{99999999-2222-3333-4444-555555555555}" src="D:\Outside\VM.vbox"/>' & $regTail), "external machine registry entry")
+$r = _PVI_Inspect($root)
+Check($r["status"] == "REVIEW" And $r["external_registry_count"] == 1, "external registered VM requires review")
+Check(StringInStr($r["report"], "D:\Outside") > 0, "external registered machine path visible")
+Check(WriteXml($registry, $regHead & $regTail), "empty registry written")
+$r = _PVI_Inspect($root)
+Check($r["status"] == "REVIEW" And StringInStr($r["report"], _LI("vm.unregistered")) > 0, "saved .vbox not silently assumed registered")
+FileDelete($registry)
+$r = _PVI_Inspect($root)
+Check($r["status"] == "REVIEW" And StringInStr($r["report"], _LI("vm.registry_missing")) > 0, "missing VirtualBox.xml is a review warning")
+Check(WriteXml($registry, '<!DOCTYPE VirtualBox [<!ENTITY leak SYSTEM "file:///C:/Windows/win.ini">]>' & $regHead & $regEntry & $regTail), "registry DTD fixture")
+$r = _PVI_Inspect($root)
+Check($r["status"] == "BLOCKED", "global VirtualBox.xml DTD / XXE blocked")
+Check(WriteXml($registry, $regHead & $regEntry & $regTail), "restore clean registry")
 FileDelete($file)
 Check(WriteXml($file, '<!DOCTYPE VirtualBox [<!ENTITY x SYSTEM "file:///C:/Windows/win.ini">]>' & $prefix & $normal & $suffix), "bad-DTD fixture written")
 $r = _PVI_Inspect($root)

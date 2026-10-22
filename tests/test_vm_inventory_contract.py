@@ -21,7 +21,8 @@ class VmInventoryContract(unittest.TestCase):
             self.assertIn('Case "'+name+'"',lang)
         for marker in ('Msxml2.DOMDocument.6.0','ProhibitDTD','resolveExternals = False',
                        '_PortableSafeRelativePath','0x400','external_count','missing_count',
-                       'FileGetSize','4194304'):
+                       'FileGetSize','4194304', 'MachineEntry', 'VirtualBox.xml',
+                       '_PVI_ReadRegistry(', '_PVI_RegistryTarget('):
             self.assertIn(marker,parser)
         for unsafe in ('FileDelete(', 'DirRemove(', 'Run(', 'RunWait(', 'RegWrite(',
                        'ProcessClose(', '#RequireAdmin','VBoxManage.exe'):
