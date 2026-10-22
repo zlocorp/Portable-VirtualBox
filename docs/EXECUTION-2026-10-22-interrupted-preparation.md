@@ -53,3 +53,20 @@ A *different*, earlier run [`39776449641`](https://github.com/zlocorp/Portable-V
 The recovery is for **already committed step receipts**, not a crash in the middle of `pnputil`, an uncommitted VBoxSup activation, an ambiguous `VBoxSDS` registration or physical restart. It will refuse these situations. No actual Windows 11 interactive UAC prompt/approval, guest OS boot, hostile race-security certification, user-PС elevated helper or release is implied.
 
 The source/code effect modes remain CI/disposable-host only and excluded from the six-file diagnostic preview ZIP. Historical `master` unchanged. Exact author/license notices remain in CREDITS and LICENSE; no new external source imported.
+
+## Independent tamper-refusal extension (2026-10-22)
+
+Commit [`69ed57f5`](https://github.com/zlocorp/Portable-VirtualBox/commit/69ed57f513d815d0b77176a1ad2f81132513ab58) extends the same **real signed driver test** with a three-host matrix, not mocks.
+
+[Windows workflow 39778793621](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39778793621) **all three jobs passed**:
+
+| Dedicated disposable host | Expected result | Inspected protected evidence |
+| --- | --- | --- |
+| `normal` | Recover Stage, Start and Sds; all own services/INF removed | 94 files, `validated_checkpoints=["Stage","Start","Sds"]`, three confirmed `PartialRecovery` receipts, `unauthorized_cleanups=0` |
+| `tamper-stage` | Forged protected `sup-standalone.json.system_driver_sha256` must be denied | 26 files, `forged_receipts_denied=true`, `system_effects_retained_due_to_refusal=true`, no cleanup receipt |
+| `tamper-sds` | Forged protected `sds-registered.json.registered` must be denied | 28 files, same refusal flags, no cleanup receipt |
+
+All three saved proofs have `interactive_uac_verified=false`, `guest_os_booted=false`, `original_data_preserved=true` and `unauthorized_cleanups=0`. A refusal leaves resources intact and the one-shot protected proof consumed. We therefore **do not** attempt to repair/retry on the same host: each denial test runs on its **own** disposable Windows runner, which is discarded afterward.
+
+Artifact IDs independently downloaded and inspected: `12425846925` (normal), `12426220616` (forged Stage), `12425911770` (forged Sds). Successful source-contract/native/x64 jobs on the same head further establish this test-only change does not reenable the end-user hypervisor.
+
