@@ -40,6 +40,12 @@ jobs:
     if: github.repository == 'zlocorp/Portable-VirtualBox'
     runs-on: windows-2022
     timeout-minutes: 18
+    # Tampered receipts deliberately retain protected system resources.
+    # No cleanup after ambiguity: each negative case needs its OWN disposable host.
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [normal, tamper-stage, tamper-sds]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -85,9 +91,9 @@ jobs:
           if ($p.ExitCode -ne 9) { throw 'Experiment accepted the ordinary checkout instead of private runner root' }
           Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
           Copy-Item -LiteralPath 'build/Portable-VirtualBox-Helper-Test.exe' -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Helper-Test.exe')
-      - name: Verify three durable interrupted driver checkpoints on disposable host
+      - name: Verify exact recovered checkpoints or non-destructive tamper refusal
         shell: pwsh
-        run: ./tests/windows/check_interrupted_recovery.ps1 -PortableRoot $env:MANAGER_ROOT
+        run: ./tests/windows/check_interrupted_recovery.ps1 -PortableRoot $env:MANAGER_ROOT -Scenario '${{ matrix.scenario }}'
       - name: Collect bounded evidence only, no executable or Oracle payload
         if: always()
         shell: pwsh
@@ -113,7 +119,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: interrupted-preparation-recovery-evidence
+          name: interrupted-preparation-recovery-${{ matrix.scenario }}-evidence
           path: results/manager-session/
           retention-days: 7
           if-no-files-found: warn

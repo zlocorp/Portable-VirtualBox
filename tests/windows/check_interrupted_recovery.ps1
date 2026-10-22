@@ -2,7 +2,8 @@
 # Faults are injected AFTER recorded operations, not mid-PnP mutation.
 # This validates exactly three proven checkpoints on disposable Windows only.
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$PortableRoot)
+param([Parameter(Mandatory)][string]$PortableRoot,
+    [ValidateSet('normal','tamper-stage','tamper-sds')][string]$Scenario='normal')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -20,10 +21,11 @@ $out=Join-Path $env:RUNNER_TEMP 'partial-preparation-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 Add-Type -Path @((Join-Path $repo 'source/privilege/TokenFacts.cs'), (Join-Path $PSScriptRoot 'MediumProcess.cs'))
 $old=$null;$new=$null
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;interactive_uac_verified=$false;
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;scenario=$Scenario;interactive_uac_verified=$false;
     guest_os_booted=$false;validated_checkpoints=@();original_data_preserved=$false;
     two_copies=$false;live_owner_denied=$false;missing_receipt_denied=$false;
-    all_owned_services_removed=$false;forged_receipts_denied=$false;unauthorized_cleanups=0}
+    all_owned_services_removed=$false;forged_receipts_denied=$false;
+    system_effects_retained_due_to_refusal=$false;unauthorized_cleanups=0}
 function Start-Medium([string]$Image,[string]$Label) {
     $p=[MediumProcess]::Start($Image,'--lang en --separate-privileges',$root,
         (Join-Path $out ($Label+'.stdout.txt')),(Join-Path $out ($Label+'.stderr.txt')))
@@ -65,7 +67,13 @@ try {
     $hash2=(Get-FileHash -LiteralPath $sentinel2 -Algorithm SHA256).Hash
     $proof.two_copies=$true
     $i=0
-    foreach($phase in @('Stage','Start','Sds')) {
+    # A *denied* recovery is one-shot and MUST NOT be rearmed after tampering:
+    # each adversarial case gets an independent disposable Windows VM runner.
+    # Normal recovery validates all three phases with clean host between cycles.
+    $phases=if($Scenario -eq 'tamper-stage') { @('Stage') }
+        elseif($Scenario -eq 'tamper-sds') { @('Sds') }
+        else { @('Stage','Start','Sds') }
+    foreach($phase in $phases) {
         $i++
         $cycle=$i+20
         $label=$phase.ToLowerInvariant()
@@ -106,43 +114,49 @@ try {
                 if ((Get-Service VBoxSup).Status -ne 'Running') { throw 'Missing proof altered driver' }
             } finally { [IO.File]::WriteAllBytes($stagePath,$stageBytes) }
         }
-        if ($phase -eq 'Stage') {
-            # A privileged test-only modification of the protected stage receipt
-            # simulates a corrupt/forged record. Refusal must leave the real
-            # installed driver/package untouched, not perform guessed cleanup.
+        if ($Scenario -eq 'tamper-stage' -and $phase -eq 'Stage') {
+            # Test-only corruption of protected journal on disposable host.
+            # Once denied, DO NOT repair the journal and retry on this host:
+            # one-shot quiescence is already consumed, preserving uncertainty.
             $stagePath=Join-Path $session 'stage\sup-standalone.json'
-            $stageBytes=[IO.File]::ReadAllBytes($stagePath)
-            try {
-                $record=Get-Content -LiteralPath $stagePath -Raw | ConvertFrom-Json
-                $record.system_driver_sha256='0000000000000000000000000000000000000000000000000000000000000000'
-                $record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $stagePath -Encoding utf8
-                Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 'forged-stage-receipt-denied'
-                if ((Get-Service VBoxSup).Status -ne 'Stopped') { throw 'Forged stage receipt changed service state' }
-                $evidence=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.stderr.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
-                if ($evidence -notmatch 'No exact exclusive VBoxSup staging receipt') {
-                    throw 'Stage receipt refusal did not reach exact ownership check'
-                }
-            } finally { [IO.File]::WriteAllBytes($stagePath,$stageBytes) }
-        }
-        if ($phase -eq 'Sds') {
-            # A changed protected marker must never authorize deregistration.
-            $markerPath=Join-Path $session 'sds-registered.json'
-            $markerBytes=[IO.File]::ReadAllBytes($markerPath)
-            try {
-                $record=Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-                $record.registered=$false
-                $record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $markerPath -Encoding utf8
-                Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 'forged-sds-marker-denied'
-                if ((Get-Service VBoxSup).Status -ne 'Running' -or
-                    -not (Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) {
-                    throw 'Forged SDS marker changed real driver or SDS service'
-                }
-                $evidence=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.stderr.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
-                if ($evidence -notmatch 'SDS marker owner differs') {
-                    throw 'SDS marker refusal did not reach exact ownership check'
-                }
-            } finally { [IO.File]::WriteAllBytes($markerPath,$markerBytes) }
+            $record=Get-Content -LiteralPath $stagePath -Raw | ConvertFrom-Json
+            $record.system_driver_sha256='0000000000000000000000000000000000000000000000000000000000000000'
+            $record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $stagePath -Encoding utf8
+            Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 'forged-stage-receipt-denied'
+            if ((Get-Service VBoxSup).Status -ne 'Stopped') { throw 'Forged stage receipt changed service state' }
+            $evidence=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.stderr.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+            if ($evidence -notmatch 'No exact exclusive VBoxSup staging receipt') {
+                throw 'Stage receipt refusal did not reach exact ownership check'
+            }
+            if ((Get-FileHash -LiteralPath $sentinel1 -Algorithm SHA256).Hash -ne $hash1 -or
+                (Get-FileHash -LiteralPath $sentinel2 -Algorithm SHA256).Hash -ne $hash2) { throw 'Corrupt stage changed VM data' }
             $proof.forged_receipts_denied=$true
+            $proof.original_data_preserved=$true
+            $proof.system_effects_retained_due_to_refusal=$true
+            Write-Host 'PASS: forged-stage-receipt-denied; protected resources retained, manual inspection required, hosted runner discarded'
+            return
+        }
+        if ($Scenario -eq 'tamper-sds' -and $phase -eq 'Sds') {
+            $markerPath=Join-Path $session 'sds-registered.json'
+            $record=Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+            $record.registered=$false
+            $record | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $markerPath -Encoding utf8
+            Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 'forged-sds-marker-denied'
+            if ((Get-Service VBoxSup).Status -ne 'Running' -or
+                -not (Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) {
+                throw 'Forged SDS marker changed real driver or SDS service'
+            }
+            $evidence=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.stderr.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+            if ($evidence -notmatch 'SDS marker owner differs') {
+                throw 'SDS marker refusal did not reach exact ownership check'
+            }
+            if ((Get-FileHash -LiteralPath $sentinel1 -Algorithm SHA256).Hash -ne $hash1 -or
+                (Get-FileHash -LiteralPath $sentinel2 -Algorithm SHA256).Hash -ne $hash2) { throw 'Corrupt SDS marker changed VM data' }
+            $proof.forged_receipts_denied=$true
+            $proof.original_data_preserved=$true
+            $proof.system_effects_retained_due_to_refusal=$true
+            Write-Host 'PASS: forged-sds-marker-denied; protected resources retained, manual inspection required, hosted runner discarded'
+            return
         }
         Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 0 ('recover-'+$label)
         Assert-Clean ('after-recovery-clean-'+$label)

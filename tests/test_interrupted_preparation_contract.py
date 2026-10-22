@@ -68,6 +68,14 @@ class InterruptedPreparation(unittest.TestCase):
                        'No exact exclusive VBoxSup staging receipt',
                        'SDS marker owner differs'):
             self.assertIn(marker, check)
+        # Once a recovery attests quiescence, a failed verification is one-shot:
+        # do not resume or repair it on the SAME machine. Use separate hosts.
+        workflow = source('.github/workflows/interrupted-recovery.yml')
+        for scenario in ('normal', 'tamper-stage', 'tamper-sds'):
+            self.assertIn(scenario, workflow)
+        self.assertIn('matrix.scenario', workflow)
+        self.assertIn('-Scenario', workflow)
+        self.assertIn('system_effects_retained_due_to_refusal', check)
 
     def test_real_host_breaks_after_three_actual_checkpoints(self):
         check = source('tests/windows/check_interrupted_recovery.ps1')
