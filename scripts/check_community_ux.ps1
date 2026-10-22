@@ -27,7 +27,7 @@ foreach ($credit in @('Portable-VirtualBox','CC BY-NC-SA 3.0','CREDITS.md','VM s
 }
 if ($about.Length -ge 400 -or $about.Contains('Deac2')) { throw 'About contains unnecessary contributor detail' }
 $aboutRu = Invoke-Checked $root '--lang ru --about' 0 'about-ru'
-if ($aboutRu.Length -ge 400 -or $aboutRu.Contains('Deac2') -or -not $aboutRu.Contains('Запуск виртуальных машин')) { throw 'Russian About is not compact/localized' }
+if ($aboutRu.Length -ge 400 -or $aboutRu.Contains('Deac2') -or -not $aboutRu.Contains('Запуск ВМ')) { throw 'Russian About is not compact/localized' }
 Write-Host ('About RU (' + $aboutRu.Trim().Length + ' characters):' + [Environment]::NewLine + $aboutRu.Trim())
 $missing = Invoke-Checked $root '--lang ru --app-status' 2 'missing-app'
 if (-not $missing.Contains('app64')) { throw 'Missing-app explanation absent' }
