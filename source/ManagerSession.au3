@@ -174,7 +174,11 @@ Func _MS_FindRecoverable($root)
             $out["status"] = "UNKNOWN"
             ExitLoop
         EndIf
-        If Not FileExists($folder & "\session.json") Or Not FileExists($folder & "\controller.json") Then ContinueLoop
+        ; An interrupted preparation has protected intent but no final
+        ; session.json. Discovery proposes it; only the elevated helper can
+        ; authenticate the exact old generation and stage checkpoints.
+        If Not FileExists($folder & "\controller.json") Then ContinueLoop
+        If Not FileExists($folder & "\session.json") And Not FileExists($folder & "\prepare-intent.json") Then ContinueLoop
         If FileExists($folder & "\payload-removed.json") Then ContinueLoop
         Local $parts = StringRegExp($name, "^pvbox-manager-([1-9][0-9]{0,8})-([1-9][0-9]{0,2})$", 1)
         If Not IsArray($parts) Then
@@ -248,6 +252,13 @@ Func _MS_Start(ByRef $s)
         Return False
     EndIf
     Local $installed = _PortableInstalledVBoxDetected()
+    If $s["separated"] Then
+        Local $abandoned = _MS_FindRecoverable($s["root"])
+        If $abandoned["status"] <> "NONE" Then
+            _MS_State($s, "BLOCKED", "inspect-previous-protected-session-" & $abandoned["status"])
+            Return False
+        EndIf
+    EndIf
     If Not IsBool($installed) Or $installed Or _PortableCountExistingServices() <> 0 Or _PortableCountVirtualBoxProcesses() <> 0 Then
         _MS_State($s, "BLOCKED", "existing-or-unknown-VirtualBox")
         Return False

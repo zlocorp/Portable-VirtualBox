@@ -17,7 +17,7 @@ $pin=Join-Path $out 'SessionBuildPin.cs'
 [IO.File]::WriteAllText($pin,('namespace PortableVBox { internal static class PinnedBuild { internal const string FrontendSha256="'+$hash+'"; internal const string InventorySha256="'+$inventory.manifest_rows_sha256+'"; } }'))
 $target=Join-Path $out 'Portable-VirtualBox-Helper-Test.exe'
 $arguments=@('/nologo','/target:winexe','/platform:x64','/optimize+','/reference:System.Web.Extensions.dll',('/out:'+ $target))
-foreach($name in @('privileged_session_worker.ps1','vbox_sup_standalone.ps1','vbox_sup_start_owned.ps1','vbox_sup_cleanup.ps1')) {
+foreach($name in @('privileged_session_worker.ps1','vbox_sup_standalone.ps1','vbox_sup_start_owned.ps1','vbox_sup_cleanup.ps1','vbox_sup_partial_cleanup.ps1')) {
     $arguments+=('/resource:'+(Join-Path $repo ('scripts\'+$name))+','+$name)
 }
 $arguments+=@((Join-Path $repo 'source\privilege\TokenFacts.cs'),(Join-Path $repo 'source\privilege\SessionHelper.cs'),(Join-Path $repo 'source\privilege\SessionHelper.Main.cs'),$pin)

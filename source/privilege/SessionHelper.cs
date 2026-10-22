@@ -19,7 +19,7 @@ using System.Web.Script.Serialization;
 using Microsoft.Win32.SafeHandles;
 namespace PortableVBox {
     public static partial class SessionHelper {
-        static readonly string[] Scripts={"privileged_session_worker.ps1","vbox_sup_standalone.ps1","vbox_sup_start_owned.ps1","vbox_sup_cleanup.ps1"};
+        static readonly string[] Scripts={"privileged_session_worker.ps1","vbox_sup_standalone.ps1","vbox_sup_start_owned.ps1","vbox_sup_cleanup.ps1","vbox_sup_partial_cleanup.ps1"};
         static readonly SecurityIdentifier Admins=new SecurityIdentifier("S-1-5-32-544"),SystemSid=new SecurityIdentifier("S-1-5-18");
         static readonly JavaScriptSerializer Json=new JavaScriptSerializer { MaxJsonLength=262144 };
         static readonly List<IDisposable> Locks=new List<IDisposable>();

@@ -1,0 +1,119 @@
+name: Guarded rollback after interrupted VBox driver preparation (disposable host)
+
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - .github/workflows/interrupted-recovery.yml
+      - source/ManagedProcess.au3
+      - source/ManagerSession.au3
+      - source/PrivilegeBoundary.au3
+      - source/PortableApp.au3
+      - source/PortableProfile.au3
+      - source/privilege/**
+      - scripts/build_session_helper.ps1
+      - scripts/privileged_session_worker.ps1
+      - tests/windows/**
+      - source/ManagerWindow.au3
+      - source/Portable-VirtualBox-Session-Test.au3
+      - scripts/manager_session_worker.ps1
+      - scripts/check_manager_session_gui.ps1
+      - scripts/snapshot_manager_windows.ps1
+      - scripts/vbox_sup_cleanup.ps1
+      - scripts/build.ps1
+      - tests/test_manager_session_contract.py
+      - tests/test_orphan_recovery_contract.py
+      - tests/windows/check_interrupted_recovery.ps1
+      - scripts/vbox_sup_partial_cleanup.ps1
+      - tests/test_interrupted_preparation_contract.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interrupted-recovery-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  interrupted-recovery:
+    if: github.repository == 'zlocorp/Portable-VirtualBox'
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Source contracts and PowerShell syntax
+        shell: pwsh
+        run: |
+          python -X utf8 -m unittest tests.test_manager_session_contract tests.test_sup_cleanup_contract tests.test_privilege_boundary_contract tests.test_orphan_recovery_contract tests.test_interrupted_preparation_contract -v
+          if ($LASTEXITCODE -ne 0) { throw 'Manager contracts failed' }
+          foreach ($file in @('scripts/manager_session_worker.ps1','scripts/check_manager_session_gui.ps1','scripts/vbox_sup_cleanup.ps1','scripts/privileged_session_worker.ps1','scripts/build_session_helper.ps1','tests/windows/check_interrupted_recovery.ps1','scripts/vbox_sup_partial_cleanup.ps1')) {
+            $tokens=$null; $errors=$null
+            [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $file),[ref]$tokens,[ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw ("PowerShell syntax $file : " + ($errors -join '; ')) }
+          }
+      - name: Verify pinned Oracle distribution and prepare files without installing
+        shell: pwsh
+        run: |
+          $work=Join-Path $env:RUNNER_TEMP 'manager-oracle'
+          ./scripts/inspect_oracle.ps1 -WorkDirectory $work
+          $root=Join-Path $env:RUNNER_TEMP 'Portable Privilege Тест'
+          New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
+          python -X utf8 scripts/prepare_app64.py (Join-Path $work 'VirtualBox-7.2.22-175245-Win.exe') (Join-Path $root 'app64') --sha256 afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f --version 7.2.22
+          if ($LASTEXITCODE -ne 0) { throw 'File preparation failed' }
+          # Arrange user-owned INPUT data only. No access is granted to the
+          # separate ProgramData helper cache, whose write denial is tested.
+          ./tests/windows/Set-PortableFixtureOwner.ps1 -PortableRoot $root
+          "MANAGER_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Compile separate session frontend with official signed AutoIt
+        shell: pwsh
+        run: |
+          $archive=Join-Path $env:RUNNER_TEMP 'manager-autoit.zip'
+          Invoke-WebRequest -Uri 'https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.18.0.zip' -OutFile $archive
+          $target=Join-Path $env:RUNNER_TEMP 'manager-autoit'
+          Expand-Archive -LiteralPath $archive -DestinationPath $target
+          $bins=@(Get-ChildItem -LiteralPath $target -Recurse -File -Filter Aut2exe_x64.exe)
+          if ($bins.Count -ne 1) { throw 'Ambiguous compiler' }
+          $sig=Get-AuthenticodeSignature -LiteralPath $bins[0].FullName
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'Untrusted compiler' }
+          $toolchain=Split-Path (Split-Path $bins[0].FullName -Parent) -Parent
+          ./scripts/build.ps1 -AutoItRoot $toolchain -SessionExperiment
+          $exe=(Resolve-Path 'build/Portable-VirtualBox-Session-Test.exe').Path
+          $p=Start-Process -FilePath $exe -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 9) { throw 'Experiment accepted the ordinary checkout instead of private runner root' }
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
+          Copy-Item -LiteralPath 'build/Portable-VirtualBox-Helper-Test.exe' -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Helper-Test.exe')
+      - name: Verify three durable interrupted driver checkpoints on disposable host
+        shell: pwsh
+        run: ./tests/windows/check_interrupted_recovery.ps1 -PortableRoot $env:MANAGER_ROOT
+      - name: Collect bounded evidence only, no executable or Oracle payload
+        if: always()
+        shell: pwsh
+        run: |
+          $dest='results/manager-session'
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          $proof=Join-Path $env:RUNNER_TEMP 'partial-preparation-proof'
+          if (Test-Path -LiteralPath $proof) {
+            Get-ChildItem -LiteralPath $proof -File | Where-Object { $_.Extension -in @('.txt','.json','.png') -and $_.Length -lt 2097152 } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+          }
+          Get-ChildItem -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Experiment') -Directory -Filter 'pvbox-manager-*' -ErrorAction SilentlyContinue | ForEach-Object {
+            $folder=$_
+            $target=Join-Path $dest $folder.Name
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+            foreach ($relative in @('session.json','payload-removed.json','controller.json','quiescent-session.json','recovery-quiescent.json','partial-recovery-quiescent.json','prepare-intent.json','sds-registered.json','error-Prepare.txt','error-Finish.txt','machinefolder.stderr.txt','stage/sup-standalone.json','start/sup-start-results.json','cleanup/cleanup-results.json')) {
+              $path=Join-Path $folder.FullName $relative
+              if (Test-Path -LiteralPath $path -PathType Leaf) { Copy-Item -LiteralPath $path -Destination $target }
+            }
+            Get-ChildItem -LiteralPath $folder.FullName -File -Filter 'helper-*' | Where-Object { $_.Length -lt 262144 } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target }
+          }
+      - name: Upload evidence, not runnable experimental distribution
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: interrupted-preparation-recovery-evidence
+          path: results/manager-session/
+          retention-days: 7
+          if-no-files-found: warn

@@ -74,6 +74,43 @@ namespace PortableVBox {
                 throw new InvalidOperationException("Invalid former owner generation");
             return filetime;
         }
+        // A durable intent created BEFORE the first effect enables recovery
+        // of a *verified* incomplete preparation, not arbitrary service rescue.
+        // Missing original owner, missing report or changed SID/root always deny.
+        static long VerifyInterruptedSession(string session,string root,string sid,int oldPid,int cycle) {
+            if(!OrphanControllerAbsent(oldPid)) throw new InvalidOperationException("Original controller still present");
+            if(File.Exists(Path.Combine(session,"session.json")) ||
+               File.Exists(Path.Combine(session,"partial-recovery-quiescent.json")) ||
+               File.Exists(Path.Combine(session,"recovery-quiescent.json")) ||
+               File.Exists(Path.Combine(session,"quiescent-session.json")) ||
+               Directory.Exists(Path.Combine(session,"cleanup")) ||
+               File.Exists(Path.Combine(session,"payload-removed.json")))
+                throw new InvalidOperationException("Untrusted or replayed incomplete session");
+            var original=ProtectedJson(Path.Combine(session,"controller.json"));
+            var intent=ProtectedJson(Path.Combine(session,"prepare-intent.json"));
+            string formerImage=Path.Combine(root,"Portable-VirtualBox-Session-Test.exe");
+            string created=ReadProtectedField(original,"created");
+            if(ReadProtectedField(original,"pid")!=oldPid.ToString(CultureInfo.InvariantCulture) ||
+               ReadProtectedField(original,"cycle")!=cycle.ToString(CultureInfo.InvariantCulture) ||
+               ReadProtectedField(original,"sid")!=sid ||
+               !String.Equals(ReadProtectedField(original,"root"),root,StringComparison.OrdinalIgnoreCase) ||
+               !String.Equals(ReadProtectedField(original,"image"),formerImage,StringComparison.OrdinalIgnoreCase) ||
+               ReadProtectedField(intent,"schema")!="1" ||
+               ReadProtectedField(intent,"phase")!="pre-system-effects" ||
+               ReadProtectedField(intent,"controller_pid")!=oldPid.ToString(CultureInfo.InvariantCulture) ||
+               ReadProtectedField(intent,"controller_created_filetime")!=created ||
+               ReadProtectedField(intent,"cycle")!=cycle.ToString(CultureInfo.InvariantCulture) ||
+               ReadProtectedField(intent,"sid")!=sid ||
+               ReadProtectedField(intent,"frontend_sha256")!=PinnedBuild.FrontendSha256 ||
+               !String.Equals(ReadProtectedField(intent,"portable_root"),root,StringComparison.OrdinalIgnoreCase) ||
+               !String.Equals(ReadProtectedField(intent,"protected_app"),Path.Combine(session,"app64"),StringComparison.OrdinalIgnoreCase) ||
+               !OrphanControllerAbsent(oldPid))
+                throw new InvalidOperationException("Untrusted or ambiguous interrupted preparation");
+            long filetime;
+            if(!long.TryParse(created,NumberStyles.None,CultureInfo.InvariantCulture,out filetime) || filetime<=0)
+                throw new InvalidOperationException("Invalid interrupted owner generation");
+            return filetime;
+        }
         static string Quote(string s) { if(s.IndexOfAny(new[]{'"','\r','\n','\0'})>=0) throw new InvalidOperationException("Invalid argument");return "\""+s+"\""; }
         [STAThread]
         public static int Main(string[] args) {
@@ -118,8 +155,11 @@ namespace PortableVBox {
                 ValidateAndStage(Path.Combine(root,"app64"),app,caller.Sid,prepare);
                 string binding=Path.Combine(session,"controller.json");
                 long originalCreated=0;
+                bool incomplete=recovery && !File.Exists(Path.Combine(session,"session.json"));
                 if(recovery) {
-                    originalCreated=VerifyOriginalSession(session,root,caller.Sid,oldPid,cycle);
+                    originalCreated=incomplete?
+                        VerifyInterruptedSession(session,root,caller.Sid,oldPid,cycle):
+                        VerifyOriginalSession(session,root,caller.Sid,oldPid,cycle);
                 } else {
                     var current=new Dictionary<string,object>{{"pid",pid},{"created",caller.Created.ToString(CultureInfo.InvariantCulture)},{"image",caller.Image},{"sid",caller.Sid},{"cycle",cycle},{"root",root}};
                     if(prepare) WriteNew(binding,Encoding.UTF8.GetBytes(Json.Serialize(current)));
@@ -128,10 +168,28 @@ namespace PortableVBox {
                         foreach(var pair in current) if(!original.ContainsKey(pair.Key) || Convert.ToString(original[pair.Key],CultureInfo.InvariantCulture)!=Convert.ToString(pair.Value,CultureInfo.InvariantCulture)) throw new InvalidOperationException("Stale controller generation");
                     }
                 }
+                if(prepare) {
+                    // Durable one-shot intent is committed before any driver,
+                    // service or guest effect can start. Stale paths fail closed.
+                    string intent=Path.Combine(session,"prepare-intent.json");
+                    WriteNew(intent,Encoding.UTF8.GetBytes(Json.Serialize(new {
+                        schema=1,phase="pre-system-effects",controller_pid=pid,
+                        controller_created_filetime=caller.Created.ToString(CultureInfo.InvariantCulture),
+                        cycle=cycle,sid=caller.Sid,portable_root=root,protected_app=app,
+                        frontend_sha256=PinnedBuild.FrontendSha256
+                    })));
+                }
                 string powershell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"PowerShell","7","pwsh.exe");
                 LockParents(Path.GetDirectoryName(powershell));
                 string working=Path.Combine(session,"code");
-                string extra=recovery?" -OriginalControllerPid "+oldPid+" -OriginalControllerCreated "+originalCreated:"";
+                string extra=recovery?" -OriginalControllerPid "+oldPid+" -OriginalControllerCreated "+originalCreated+(incomplete?" -IncompletePreparation":""):"";
+                // These single-word injections are exclusively for the
+                // GitHub-hosted disposable fixture. They never enable rescue,
+                // change inputs, or disable any ownership/publisher checks.
+                string testBreak=prepare?(Environment.GetEnvironmentVariable("PVBOX_TEST_BREAK_AT")??""):"";
+                if(testBreak=="Stage" || testBreak=="Start" || testBreak=="Sds")
+                    extra+=" -TestBreakAfter "+testBreak;
+                else if(testBreak.Length>0) throw new InvalidOperationException("Unknown controlled test breakpoint");
                 var info=new ProcessStartInfo(powershell,"-NoLogo -NoProfile -NonInteractive -File "+Quote(Path.Combine(working,"privileged_session_worker.ps1"))+" -Action "+args[0]+" -PortableRoot "+Quote(root)+" -SessionDir "+Quote(session)+" -ControllerPid "+pid+" -ControllerCreated "+caller.Created+extra);
                 info.UseShellExecute=false;info.CreateNoWindow=true;info.WorkingDirectory=working;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
                 // Never inherit low-user module search paths, PS profiles, PATH,

@@ -8,7 +8,9 @@ param(
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][long]$ControllerCreated,
     [ValidateRange(0,2147483647)][int]$OriginalControllerPid = 0,
-    [ValidateRange(0,9223372036854775807)][long]$OriginalControllerCreated = 0
+    [ValidateRange(0,9223372036854775807)][long]$OriginalControllerCreated = 0,
+    [switch]$IncompletePreparation,
+    [ValidateSet('None','Stage','Start','Sds')][string]$TestBreakAfter = 'None'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -46,17 +48,67 @@ function Run-Sds([string]$Argument,[string]$Label) {
 }
 try {
     if ($Action -eq 'Prepare') {
+        # Helper created and fsync'd protected prepare-intent.json BEFORE
+        # launching any system action. This worker only emits post-effect proof.
+        if (-not (Test-Path -LiteralPath (Join-Path $session 'prepare-intent.json') -PathType Leaf)) {
+            throw 'Missing durable protected pre-effect intent'
+        }
         & (Join-Path $PSScriptRoot 'vbox_sup_standalone.ps1') -AppDir $app -OutputDirectory (Join-Path $session 'stage')
+        if ($TestBreakAfter -eq 'Stage') { throw 'CI_TEST_BREAK_AFTER_STAGE: protected installation report committed' }
         & (Join-Path $PSScriptRoot 'vbox_sup_start_owned.ps1') -StandaloneReport (Join-Path $session 'stage\sup-standalone.json') -OutputDirectory (Join-Path $session 'start')
+        if ($TestBreakAfter -eq 'Start') { throw 'CI_TEST_BREAK_AFTER_START: protected driver start report committed' }
         if (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS') { throw 'SDS appeared before our explicit registration' }
         Run-Sds '--regservice' 'sds-register'
         $sds=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS' -ErrorAction Stop
         if (([string]$sds.ImagePath).Trim().Trim('"') -ine (Join-Path $app 'VBoxSDS.exe') -or
             $sds.Type -ne 16 -or $sds.Start -ne 3 -or $sds.ObjectName -ne 'LocalSystem') { throw 'SDS registration identity differs' }
+        # The final SDS effect is recorded independently BEFORE the final
+        # prepared session receipt. A crash between registration and this marker
+        # remains ambiguous and requires manual handling, not guessed cleanup.
+        [ordered]@{schema=1;registered=$true;protected_app=$app;
+            controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();
+            sds_image=(Join-Path $app 'VBoxSDS.exe');source_commit=$env:GITHUB_SHA} |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $session 'sds-registered.json') -Encoding utf8
+        if ($TestBreakAfter -eq 'Sds') { throw 'CI_TEST_BREAK_AFTER_SDS: protected service registration marker committed' }
         [ordered]@{schema=1;portable_root=$root;protected_app=$app;controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();controller_image=$controllerImage;prepared=$true;source_commit=$env:GITHUB_SHA} |
             ConvertTo-Json | Set-Content -LiteralPath (Join-Path $session 'session.json') -Encoding utf8
         Write-Host 'PRIVILEGED_PREPARED_WITHOUT_USER_PROFILE_EXECUTION'
     } else {
+        if ($Action -eq 'Recover' -and $IncompletePreparation) {
+            # A protected intent alone is not a driver ownership receipt. Stage
+            # result must have committed; earlier and uncertain phases refuse.
+            if (-not (Test-Path -LiteralPath (Join-Path $session 'stage\sup-standalone.json') -PathType Leaf)) {
+                throw 'Incomplete preparation has no exclusive driver staging proof'
+            }
+            if (Test-Path -LiteralPath (Join-Path $session 'session.json')) { throw 'Completed session is not an interrupted preparation' }
+            $intent=Get-Content -LiteralPath (Join-Path $session 'prepare-intent.json') -Raw | ConvertFrom-Json
+            if ($intent.schema -ne 1 -or $intent.phase -ne 'pre-system-effects' -or
+                $intent.portable_root -ine $root -or $intent.protected_app -ine $app -or
+                $intent.controller_pid -ne $OriginalControllerPid -or
+                $intent.controller_created_filetime -ne $OriginalControllerCreated.ToString() -or
+                $OriginalControllerPid -le 0 -or $OriginalControllerPid -eq $ControllerPid -or
+                -not (Test-OriginalControllerAbsent $OriginalControllerPid) -or
+                (Test-Path -LiteralPath (Join-Path $session 'cleanup')) -or
+                (Test-Path -LiteralPath (Join-Path $session 'partial-recovery-quiescent.json'))) {
+                throw 'Incomplete preparation protected owner mismatch or replay'
+            }
+            if (@(VBox-Processes).Count -ne 0) { throw 'Active VBox activity; partial preparation recovery denied' }
+            $partialProof=Join-Path $session 'partial-recovery-quiescent.json'
+            [ordered]@{schema=1;experiment='partial-protected-manager-quiescent';portable_root=$root;
+                protected_app=$app;original_controller_pid=$OriginalControllerPid;
+                original_controller_created_filetime=$OriginalControllerCreated.ToString();
+                controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();
+                controller_image=$controllerImage;no_vbox_processes_verified=$true;source_commit=$env:GITHUB_SHA} |
+                ConvertTo-Json | Set-Content -LiteralPath $partialProof -Encoding utf8
+            if (-not (Test-OriginalControllerAbsent $OriginalControllerPid)) { throw 'Old owner reappeared before partial recovery' }
+            & (Join-Path $PSScriptRoot 'vbox_sup_partial_cleanup.ps1') -AppDir $app -SessionDir $session -PartialRecoveryReport $partialProof -OutputDirectory (Join-Path $session 'cleanup') -OriginalControllerCreated $OriginalControllerCreated
+            $clean=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw | ConvertFrom-Json
+            if (-not $clean.cleanup_verified -or -not $clean.driver_package_removed -or @(VBox-Processes).Count -ne 0) {
+                throw 'Partial preparation teardown unconfirmed'
+            }
+            Write-Host 'PRIVILEGED_INCOMPLETE_PREPARATION_RECOVERED'
+            exit 0
+        }
         $receipt=Get-Content -LiteralPath (Join-Path $session 'session.json') -Raw | ConvertFrom-Json
         if ($receipt.schema -ne 1 -or -not $receipt.prepared -or $receipt.portable_root -ine $root -or $receipt.protected_app -ine $app) {
             throw 'Not our protected session'
