@@ -7,11 +7,13 @@
 #include "LauncherAbout.au3"
 #include "PortableVmInventory.au3"
 #include "ManagedProcess.au3"
+#include "ManagerWindow.au3"
 #include <GUIConstantsEx.au3>
 #include <EditConstants.au3>
 #include <WindowsStylesConstants.au3>
 
-; Non-privileged user-facing preview: no Oracle VM launch or driver mutation.
+; The standard GUI includes real session controls. Privileged effects remain
+; disabled outside the disposable-host acceptance boundary until Windows 11 signoff.
 Func _LG_ProfileText($status)
     Switch $status
         Case "READY"
@@ -50,7 +52,7 @@ Func _LG_SettingsText($s)
 EndFunc
 
 Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, _
+        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idManager, $idReady, $idVmAudit, $idResult, _
         $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, _
         $showReadiness = False, $showInventory = False)
     WinSetTitle($hGui, "", _LI("app.title"))
@@ -67,6 +69,7 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     GUICtrlSetData($idRu, _LI("gui.russian"))
     GUICtrlSetData($idEn, _LI("gui.english"))
     GUICtrlSetData($idPrepare, _LI("gui.prepare"))
+    GUICtrlSetData($idManager, _LI("gui.manager"))
     GUICtrlSetData($idReady, _LI("gui.readiness"))
     GUICtrlSetData($idVmAudit, _LI("gui.vm_audit"))
     GUICtrlSetData($idSave, _LI("gui.save_language"))
@@ -126,7 +129,8 @@ Func _LG_Show()
     GUICtrlSetFont($idReport, 10, 400, 0, "Consolas")
     Local $idPath = GUICtrlCreateLabel("", 22, 410, 634, 28)
     Local $idProfile = GUICtrlCreateLabel("", 22, 445, 634, 42)
-    Local $idPrepare = GUICtrlCreateButton("", 22, 492, 634, 37)
+    Local $idPrepare = GUICtrlCreateButton("", 22, 492, 310, 37)
+    Local $idManager = GUICtrlCreateButton("", 346, 492, 310, 37)
     Local $idReady = GUICtrlCreateButton("", 22, 537, 310, 37)
     Local $idVmAudit = GUICtrlCreateButton("", 346, 537, 310, 37)
     Local $idResult = GUICtrlCreateEdit("", 22, 583, 634, 56, BitOR($ES_READONLY, $WS_VSCROLL, $ES_AUTOVSCROLL))
@@ -143,8 +147,14 @@ Func _LG_Show()
     Local $backupWorker = _MP_New(), $backupTarget = "", $backupAction = "", $restoreSource = ""
     GUICtrlSetData($idBackupStatus, _LI("backup.hint"))
     GUICtrlSetState($idCancel, $GUI_DISABLE)
+    ; Hosted disposable-root only until helper/UAC production acceptance.
+    ; A disabled button is deliberate: never make an enabled, inert Start.
+    If Not _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) Then
+        GUICtrlSetState($idManager, $GUI_DISABLE)
+        GUICtrlSetTip($idManager, _LI("gui.manager_blocked"))
+    EndIf
     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel)
+        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idManager, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel)
     GUISetState(@SW_SHOW, $hGui)
     While 1
         Local $event = GUIGetMsg()
@@ -158,20 +168,30 @@ Func _LG_Show()
                     _LI_Set("en")
                 EndIf
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idManager, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
             Case $idSave, $idAuto
                 Local $preference = _LI_Language()
                 If $event = $idAuto Then $preference = "auto"
                 If _LS_Save(@ScriptDir, $preference) Then
                     _LI_Set(_LS_Select($preference, @OSLang))
                     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, _
+                        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idManager, $idReady, $idVmAudit, $idResult, _
                         $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
                 Else
                     GUICtrlSetData($idSettings, _LI("settings.save_failed"))
                 EndIf
             Case $idAbout
                 MsgBox(64, _LI("gui.about"), _LA_Text(), 0, $hGui)
+            Case $idManager
+                If _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) And $backupWorker["handle"] = 0 Then
+                    GUISetState(@SW_HIDE, $hGui)
+                    _MSW_Show(@ScriptDir, EnvGet("GITHUB_WORKSPACE"))
+                    GUISetState(@SW_SHOW, $hGui)
+                    ; Previous services and activity are not assumed clean.
+                    _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
+                        $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idManager, $idReady, $idVmAudit, $idResult, _
+                        $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
+                EndIf
             Case $idPrepare
                 Local $result = _PP_Ensure(@ScriptDir)
                 GUICtrlSetData($idProfile, _LG_ProfileMessage($result))
@@ -190,7 +210,7 @@ Func _LG_Show()
                 GUICtrlSetData($idReport, $inventory["report"])
             Case $idRefresh
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
-                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
+                    $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idManager, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
             Case $idBackup, $idVerify, $idRestore
                 If $event == $idBackup Then
                     Local $risk = _PVI_Inspect(@ScriptDir)

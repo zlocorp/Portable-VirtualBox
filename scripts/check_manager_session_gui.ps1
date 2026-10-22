@@ -1,7 +1,7 @@
 # End-to-end exercise of the actual compiled buttons and Oracle Manager.
 # Test fixture commands operate only on the freshly created, empty, named VM.
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$PortableRoot,[switch]$SeparatePrivileges,[switch]$UnattendedConsentProbe)
+param([Parameter(Mandatory)][string]$PortableRoot,[switch]$SeparatePrivileges,[switch]$UnattendedConsentProbe,[switch]$MainLauncher)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -10,9 +10,10 @@ $root=(Resolve-Path -LiteralPath $PortableRoot).Path
 $runner=(Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path.TrimEnd('\')+'\'
 if (-not $root.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase)) { throw 'Root outside temporary host' }
 if ($UnattendedConsentProbe -and -not $SeparatePrivileges) { throw 'Consent probe requires a medium frontend' }
+if ($MainLauncher -and $SeparatePrivileges) { throw 'Public entrypoint is not yet a verified production privileged helper' }
 $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
-$exe=Join-Path $root 'Portable-VirtualBox-Session-Test.exe'
+$exe=Join-Path $root $(if($MainLauncher){'Portable-VirtualBox.exe'}else{'Portable-VirtualBox-Session-Test.exe'})
 $runtime=Join-Path $root 'app64'
 $cli=Join-Path $runtime 'VBoxManage.exe'
 $protectedStore=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Experiment'
@@ -94,6 +95,14 @@ function Click-Button([Diagnostics.Process]$Process,[string]$Caption) {
     if ($button -eq [IntPtr]::Zero -or -not [ManagerUiProbe]::IsWindowEnabled($button)) { throw "Button unavailable: $Caption" }
     if (-not [ManagerUiProbe]::PostMessageW($button,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero)) { throw "Cannot click $Caption" }
 }
+# The ordinary compiled EXE owns its normal GUI. Opening the Manager session
+# is a genuine user click on its own primary window, not a separate test EXE.
+function Open-SessionWindow([Diagnostics.Process]$Process) {
+    if ($MainLauncher) {
+        Click-Button $Process 'Start / Stop VirtualBox'
+    }
+    Await-State $Process 'IDLE' 20
+}
 function Oracle([string]$Arguments,[string]$Label) {
     $log=Join-Path $out ($Label+'.stdout.txt'); $err=Join-Path $out ($Label+'.stderr.txt')
     $old=[Environment]::GetEnvironmentVariable('VBOX_USER_HOME','Process')
@@ -136,7 +145,7 @@ function Start-Controller([string]$Label) {
     return Start-Process -FilePath $exe -ArgumentList '--lang en' -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
 }
 $front=$null; $other=$null; $badFront=$null
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
 try {
     Assert-Clean 'initial baseline'
     if ($SeparatePrivileges) {
@@ -154,7 +163,7 @@ try {
             $row.sha256=(Get-FileHash -LiteralPath $payload).Hash.ToLowerInvariant()
             $forged | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $manifestPath -Encoding utf8
             $badFront=Start-Controller 'tampered-payload'
-            Await-State $badFront 'IDLE' 20
+            Open-SessionWindow $badFront
             Click-Button $badFront 'Start VirtualBox'
             if ($UnattendedConsentProbe) {
                 # Hosted Windows cannot supply a human response on UAC's secure
@@ -180,7 +189,7 @@ try {
         }
     }
     $front=Start-Controller 'controller'
-    Await-State $front 'IDLE' 20
+    Open-SessionWindow $front
     Click-Button $front 'Start VirtualBox'
     Await-State $front 'MANAGER_OPEN'
     if ($SeparatePrivileges) {
@@ -200,12 +209,13 @@ try {
     }
     # The second controller must not mutate another live session.
     $other=Start-Controller 'second-controller'
-    Await-State $other 'IDLE' 20
+    Open-SessionWindow $other
     Click-Button $other 'Start VirtualBox'
     Await-State $other 'BLOCKED' 20
     if ((Observe-Manager) -ne $manager1) { throw 'Refused controller changed the live Manager' }
     Click-Button $other 'Close'
-    if (-not $other.WaitForExit(10000) -or $other.ExitCode -ne 0) { throw 'Refused controller did not exit normally' }
+    if ($MainLauncher) { Start-Sleep -Milliseconds 250;Click-Button $other 'Close' }
+    if (-not $other.WaitForExit(10000) -or $other.ExitCode -ne $(if($MainLauncher){2}else{0})) { throw 'Refused controller did not exit normally' }
     $proof.second_controller_refused=$true
     $created=Oracle 'createvm --name pvbox_manager_gui_fixture --ostype Other --register' 'create'
     if ($created -notmatch '(?im)^UUID:\s*([0-9a-f-]{36})\s*$') { throw 'No exact fixture UUID' }
@@ -281,7 +291,8 @@ try {
         $proof["interactive_uac_consent_verified"]=$false
     }
     Click-Button $front 'Close'
-    if (-not $front.WaitForExit(10000) -or $front.ExitCode -ne 0) { throw 'Completed frontend did not exit cleanly' }
+    if ($MainLauncher) { Start-Sleep -Milliseconds 250;Click-Button $front 'Close' }
+    if (-not $front.WaitForExit(10000) -or $front.ExitCode -ne $(if($MainLauncher){2}else{0})) { throw 'Completed frontend did not exit cleanly' }
     Write-Host 'PASS: real compiled GUI Start/Finish/Reopen, real Oracle Manager, live guest preserved, second controller refused, two exact-owned cleanups, same UUID retained'
 } catch {
     $proof.error=$_.Exception.Message
