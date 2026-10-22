@@ -20,9 +20,11 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('_LI("gui.manager")',gui)
         self.assertIn('Case "gui.manager"',lang)
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
-        w=(R/'.github/workflows/main-launcher-session.yml').read_text(encoding='utf-8')
+        w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
         self.assertIn('build/Portable-VirtualBox_x64.exe',w)
+        self.assertIn("ArgumentList '--version'",w)
+        self.assertNotIn("$p=Start-Process -FilePath $exe -PassThru -Wait -NoNewWindow",w)
         self.assertIn('-MainLauncher',w)
         self.assertIn('[switch]$MainLauncher',s)
         self.assertIn('Open-SessionWindow',s)

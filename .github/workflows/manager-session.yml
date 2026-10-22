@@ -1,10 +1,14 @@
-name: Compiled Manager GUI session (disposable Windows only)
+name: Main launcher Manager GUI runtime (disposable Windows only)
 
 on:
   push:
     branches: [dev/modernization-2026]
     paths:
       - .github/workflows/manager-session.yml
+      - source/LauncherGui.au3
+      - source/LauncherI18n.au3
+      - source/Portable-VirtualBox.au3
+      - tests/test_main_manager_wiring.py
       - source/ManagedProcess.au3
       - source/ManagerSession.au3
       - source/ManagerWindow.au3
@@ -21,11 +25,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: manager-session-${{ github.ref }}
+  group: main-manager-session-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  manager-gui:
+  main-launcher-manager:
     if: github.repository == 'zlocorp/Portable-VirtualBox'
     runs-on: windows-2022
     timeout-minutes: 18
@@ -36,7 +40,7 @@ jobs:
       - name: Source contracts and PowerShell syntax
         shell: pwsh
         run: |
-          python -X utf8 -m unittest tests.test_manager_session_contract tests.test_sup_cleanup_contract -v
+          python -X utf8 -m unittest tests.test_main_manager_wiring tests.test_manager_session_contract tests.test_sup_cleanup_contract -v
           if ($LASTEXITCODE -ne 0) { throw 'Manager contracts failed' }
           foreach ($file in @('scripts/manager_session_worker.ps1','scripts/check_manager_session_gui.ps1','scripts/vbox_sup_cleanup.ps1')) {
             $tokens=$null; $errors=$null
@@ -53,7 +57,7 @@ jobs:
           python -X utf8 scripts/prepare_app64.py (Join-Path $work 'VirtualBox-7.2.22-175245-Win.exe') (Join-Path $root 'app64') --sha256 afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f --version 7.2.22
           if ($LASTEXITCODE -ne 0) { throw 'File preparation failed' }
           "MANAGER_ROOT=$root" >> $env:GITHUB_ENV
-      - name: Compile separate session frontend with official signed AutoIt
+      - name: Compile ordinary public frontend with official signed AutoIt
         shell: pwsh
         run: |
           $archive=Join-Path $env:RUNNER_TEMP 'manager-autoit.zip'
@@ -65,16 +69,16 @@ jobs:
           $sig=Get-AuthenticodeSignature -LiteralPath $bins[0].FullName
           if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'Untrusted compiler' }
           $toolchain=Split-Path (Split-Path $bins[0].FullName -Parent) -Parent
-          ./scripts/build.ps1 -AutoItRoot $toolchain -SessionExperiment
-          $exe=(Resolve-Path 'build/Portable-VirtualBox-Session-Test.exe').Path
-          $p=Start-Process -FilePath $exe -PassThru -Wait -NoNewWindow
-          if ($p.ExitCode -ne 9) { throw 'Experiment accepted the ordinary checkout instead of private runner root' }
-          Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
+          ./scripts/build.ps1 -AutoItRoot $toolchain
+          $exe=(Resolve-Path 'build/Portable-VirtualBox_x64.exe').Path
+          $p=Start-Process -FilePath $exe -ArgumentList '--version' -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw 'Read-only public version probe failed' }
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox.exe')
       - name: Exercise real buttons, Manager, live guest, refusal and two-cycle cleanup
         shell: pwsh
         run: |
           try {
-            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT
+            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher
           } catch {
             # Capture before the step's process tree is released by the runner.
             ./scripts/snapshot_manager_windows.ps1 -PortableRoot $env:MANAGER_ROOT
