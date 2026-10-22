@@ -4,6 +4,13 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Verified privilege separation experiment · 2026-10-21
+
+- Added a fixed-purpose elevated helper, protected validated Oracle runtime copy and ordinary-integrity Manager/guest execution to the **non-distributed** session experiment. Tested exact-input refusal, protected-write denial, live-guest cleanup refusal and two complete owned cleanup cycles: [Windows Server 2022 run 39649261984](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261984) **passed**.
+- Kept the actual GUI `ShellExecuteExW runas` consent path separate. [Run 39649261666](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261666) **failed** at the tampered-payload step: frontend remained `IDLE` after logging `Elevation request: Prepare cycle=1`. This is consistent with an unavailable interactive consent desktop but **does not prove that as root cause**. UAC cancellation/consent, progress while elevation is pending, and production Windows 11 end-to-end remain open.
+- Direct helper invocation by the elevated disposable harness is **not equivalent to UAC delivery**. No production launcher or ZIP includes these experimental effects. Do not downgrade this acceptance requirement or replace `runas` with silent elevation.
+
+
 ### Added / fixed · 2026-10-21 integrated Manager session
 
 - Adapted the Manager/guest lifecycle flow from ThatAdminGuy and upstream PR #90 into actual **Start / Finish session / Reopen Manager** buttons in a separate experimental frontend, using the existing signed VBoxSup/VBoxSDS operations rather than duplicating an installer.

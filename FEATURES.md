@@ -16,7 +16,7 @@ Updated **2026-10-21**. The comparison baseline is upstream `vboxme/Portable-Vir
 | Controlled powered-off root/drive relocation | CI-only | Fixture UUID/data preservation; not general cross-host/snapshot migration |
 | Manager Start / Finish / Reopen and guest-aware cleanup | **Integrated experiment, CI verified** | Real compiled GUI + Oracle Manager; live VM preserved, second controller refused, two clean sessions/same UUID; separate non-distributed EXE, not production UAC |
 | Production Manager/VM Start/Stop | **Not yet enabled for ordinary users** | Integrated experimental frontend now works; the privileged adapter and Windows 11 standard-user acceptance remain open |
-| Separate elevated helper / normal-user UAC | **Not implemented** | Must precede safe user-facing driver operations |
+| Separate elevated helper / normal-user UAC | **Partial, CI-only** | Fixed helper plus protected Oracle runtime: medium-privilege Manager/guest, forged-input refusal, denied protected writes and two clean cycles verified in [39649261984](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261984). Interactive `ShellExecuteExW runas` delivery remains **unverified**: [39649261666](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261666) failed with the frontend still `IDLE`. Not a production UAC approval. |
 | Existing VM import, snapshots and media-chain migration | Planned | Read-only inventory foundation exists; no automatic rewrite or unregister/delete |
 | Transactional Oracle updater / rollback | Planned | Download/extraction safeguards exist; no complete end-user updater |
 | USB passthrough / bridged-network driver management | Deferred | No automatic installation of extra drivers |
