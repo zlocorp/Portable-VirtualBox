@@ -25,6 +25,23 @@ Func _MS_Decide($manager, $seen, $total, $guests, $owned)
     Return "READY_TO_CLEAN"
 EndFunc
 
+; A completed cleanup receipt is not sufficient to reopen Manager: Oracle
+; can briefly reappear while COM/Qt background teardown finishes. Require a
+; stable, known empty host before releasing the session lock. Never attempt
+; driver cleanup a second time or hide a truly foreign process.
+Func _MS_HostClean($installed, $services, $processes)
+    Return IsBool($installed) And Not $installed And IsInt($services) And IsInt($processes) And _
+        $services = 0 And $processes = 0
+EndFunc
+
+; An explicit retry may re-run preflight after a transient observation; this
+; does not override the preflight, lock, path or service ownership checks.
+Func _MS_RetryAllowed($state, $detail)
+    If Not IsString($state) Or Not IsString($detail) Then Return False
+    Return $state == "IDLE" Or $state == "CLEAN" Or _
+        ($state == "BLOCKED" And $detail == "existing-or-unknown-VirtualBox")
+EndFunc
+
 ; Oracle's Manager persists geometry on a deferred timer. Closing immediately
 ; after first visibility can race that timer with COM teardown (observed in
 ; the real 7.2.22 GUI). Wait for an enabled, stable window, without sleeping
@@ -237,7 +254,7 @@ Func _MS_Recover(ByRef $s)
 EndFunc
 
 Func _MS_Start(ByRef $s)
-    If $s["state"] <> "IDLE" And $s["state"] <> "CLEAN" Then Return False
+    If Not _MS_RetryAllowed($s["state"], $s["detail"]) Or $s["mutex"] <> 0 Then Return False
     If Not _MS_Allowed($s["root"], $s["workspace"]) Then
         _MS_State($s, "BLOCKED", "disposable-host-only")
         Return False
@@ -359,6 +376,32 @@ EndFunc
 
 Func _MS_Tick(ByRef $s)
     Local $state = $s["state"]
+    If $state == "VERIFYING_CLEAN" Then
+        ; Hold the cross-root lock until the host remains genuinely empty for
+        ; 2.5s. A transient process/unknown read resets the quiet interval.
+        ; Never claim CLEAN on a negative count, foreign service or installed VBox.
+        Local $installed = _PortableInstalledVBoxDetected()
+        Local $services = _PortableCountExistingServices()
+        Local $processes = _PortableCountVirtualBoxProcesses()
+        If _MS_HostClean($installed, $services, $processes) Then
+            If $s["quiet"] = 0 Then $s["quiet"] = TimerInit()
+            If TimerDiff($s["quiet"]) > 2500 Then
+                $s["owned"] = False
+                Local $manager = $s["manager"]
+                If $manager["handle"] <> 0 Then _MP_Release($manager)
+                $s["manager"] = $manager
+                DllCall("kernel32.dll", "bool", "ReleaseMutex", "handle", $s["mutex"])
+                DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $s["mutex"])
+                $s["mutex"] = 0
+                _MS_State($s, "CLEAN")
+            EndIf
+        Else
+            $s["quiet"] = 0
+        EndIf
+        If $s["state"] == "VERIFYING_CLEAN" And TimerDiff($s["clock"]) > 45000 Then _
+            _MS_State($s, "FAILED", "clean-host-never-stabilized-resources-retained")
+        Return
+    EndIf
     If $state == "PREPARING" Or $state == "CLEANING" Or $state == "CONFIGURING" Or _
             _MS_ConsentPending($state) Or $state == "RECOVERING" Then
         Local $worker = $s["worker"], $status = _MP_Poll($worker)
@@ -402,18 +445,11 @@ Func _MS_Tick(ByRef $s)
             Return
         EndIf
         If $state == "CLEANING" Or $state == "CONSENT_FINISH" Or $state == "CONSENT_RECOVER" Or $state == "RECOVERING" Then
-            If _PortableCountExistingServices() <> 0 Or _PortableCountVirtualBoxProcesses() <> 0 Then
-                _MS_State($s, "FAILED", "host-not-clean")
-                Return
-            EndIf
-            $s["owned"] = False
-            Local $manager = $s["manager"]
-            If $manager["handle"] <> 0 Then _MP_Release($manager)
-            $s["manager"] = $manager
-            DllCall("kernel32.dll", "bool", "ReleaseMutex", "handle", $s["mutex"])
-            DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $s["mutex"])
-            $s["mutex"] = 0
-            _MS_State($s, "CLEAN")
+            ; The helper has confirmed exact-owned teardown. Wait for any
+            ; delayed Oracle COM background work to disappear *stably* before
+            ; reporting CLEAN and allowing another Start.
+            $s["quiet"] = 0
+            _MS_State($s, "VERIFYING_CLEAN")
             Return
         EndIf
         If $state == "CONFIGURING" Then

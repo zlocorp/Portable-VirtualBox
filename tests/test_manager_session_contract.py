@@ -40,6 +40,17 @@ class ManagerSessionContract(unittest.TestCase):
         self.assertIn('session-lock-create-failed',source)
         self.assertIn('session-lock-result-unknown',source)
 
+    def test_delayed_oracle_background_never_claims_clean_early(self):
+        source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
+        gui=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
+        for marker in ('Func _MS_HostClean(', 'Func _MS_RetryAllowed(',
+                       'VERIFYING_CLEAN', 'TimerDiff($s["quiet"]) > 2500',
+                       'clean-host-never-stabilized-resources-retained',
+                       'existing-or-unknown-VirtualBox'):
+            self.assertIn(marker,source)
+        self.assertIn('VERIFYING_CLEAN',gui)
+        self.assertIn('_MS_RetryAllowed($s["state"], $s["detail"])',gui)
+
     def test_diagnostic_package_does_not_ship_experimental_system_worker(self):
         import sys
         sys.path.insert(0,str(ROOT/'scripts'))

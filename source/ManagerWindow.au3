@@ -74,6 +74,9 @@ Func _MSW_Text($key)
         Case "CLEANING"
             If $ru Then Return "Удаление только созданных этой сессией служб и драйвера."
             Return "Removing only services and the driver created by this session."
+        Case "VERIFYING_CLEAN"
+            If $ru Then Return "Проверка стабильного завершения процессов VirtualBox перед новым запуском."
+            Return "Verifying stable absence of VirtualBox processes before another start."
         Case "CLEAN"
             If $ru Then Return "Сессия завершена. Системные ресурсы очищены, данные ВМ сохранены."
             Return "Session finished. System resources are clean; VM data is preserved."
@@ -124,7 +127,7 @@ Func _MSW_Show($root, $workspace)
         Local $display = $s["state"] & @CRLF & _MSW_Text($s["state"]) & @CRLF & $s["detail"]
         If $last <> $display Then
             GUICtrlSetData($status, $display)
-            Local $canStart = $s["state"] == "IDLE" Or $s["state"] == "CLEAN"
+            Local $canStart = _MS_RetryAllowed($s["state"], $s["detail"])
             Local $canStop = $s["state"] == "MANAGER_OPEN" Or $s["state"] == "OPENING" Or $s["state"] == "CLEANUP_DECLINED"
             Local $canReopen = $s["state"] == "WAIT_GUESTS" Or $s["state"] == "WAIT_BACKGROUND"
             GUICtrlSetState($start, ($canStart ? $GUI_ENABLE : $GUI_DISABLE))
