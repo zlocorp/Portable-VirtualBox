@@ -47,6 +47,8 @@ For `--audit-vms`, exit code **0** means no detected portability flags, **2** me
 
 A damaged `launcher.ini` is left intact and the launcher falls back to the Windows language. Inspect a stale `launcher.ini.pending` before removing it; it can be evidence of an interrupted write. Do not overwrite a working VirtualBox installation with this preview.
 
+The 2026-10-22 VM audit extension passed [compiled x64 RU/EN and file-only backup regressions](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670380), [23 native AutoIt harnesses](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670330) and [actual Oracle 7.2.22 machine-registry/VM boot/teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670384). These tests ran on disposable Windows Server, **not interactive Windows 11**.
+
 ## Manager session integration (experimental)
 
 **Recovery after interrupted driver preparation (experimental):** Protected, owner-bound checkpoints now also allow exact-owned rollback after VBoxSup **Stage**, **Start** or VBoxSDS **registration**, *before* the normal session receipt exists. [Three clean-host rollback and forged-receipt CI scenarios](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39778793621) demonstrated all three phases, rejected live-owner/missing-receipt/replayed operations and refused both a forged VBoxSup stage receipt and a forged VBoxSDS registration marker without changing services or VM data. No speculative cleanup if a system operation was interrupted *before* the corresponding receipt. This is CI-only, not approved end-user recovery; no interactive Windows 11/UAC acceptance.
