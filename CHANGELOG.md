@@ -4,6 +4,14 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added / fixed · 2026-10-22 VM portability and safer repeat start
+
+- Ordinary RU/EN GUI and `--audit-vms` now read `.vbox` configurations, count snapshots and identify local, missing or external virtual-disk paths. The extended inventory checks `data/.VirtualBox/VirtualBox.xml`: it flags registered VMs outside portable data, locally saved but unregistered machines, and invalid/missing registration information. XML DTD/external entities and reparse points are rejected; no VM files are rewritten.
+- File-only `data` backup now prompts in the GUI or warns in the CLI when an audit indicates potentially incomplete VM data. External VM disks remain excluded and success does not certify complete VM backup.
+- Fixed experimental Manager repeat-start race after verified cleanup: retain the session lock until 2.5 seconds of known-empty host state; retry a temporary existing-VBox blocker only through explicit full preflight. [Real Manager GUI regression 39791350463](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39791350463) passed two cycles with the same VM UUID.
+- Initial VM inventory [native AutoIt 39790407525](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39790407525), [compiled RU/EN CLI 39790408168](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39790408168), and [actual Oracle 7.2.22 `.vbox` 39791602687](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39791602687) passed. Global-registry extension `e8732507` requires its own completed Windows check; do not mistake older results for its acceptance.
+
+
 ### Added / verified · 2026-10-22 interrupted driver preparation recovery
 
 - Implemented **protected one-shot prepare checkpoints** in the separate compiled helper. A prepared, pinned Oracle runtime records an original controller-bound `prepare-intent.json` before system effects; after actual signed VBoxSup INF staging, verified driver Start, and explicit VBoxSDS registration, their distinct protected receipts support a narrowly scoped `Recover` even without the usual committed `session.json`.
