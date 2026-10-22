@@ -1,4 +1,4 @@
-name: Medium frontend and elevated helper (disposable Windows)
+name: Noninteractive UAC pending (no consent acceptance)
 
 on:
   push:
@@ -81,11 +81,11 @@ jobs:
           if ($p.ExitCode -ne 9) { throw 'Experiment accepted the ordinary checkout instead of private runner root' }
           Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
           Copy-Item -LiteralPath 'build/Portable-VirtualBox-Helper-Test.exe' -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Helper-Test.exe')
-      - name: Exercise real buttons, Manager, live guest, refusal and two-cycle cleanup
+      - name: Verify medium GUI stays responsive during unattended UAC request (no consent acceptance)
         shell: pwsh
         run: |
           try {
-            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -SeparatePrivileges
+            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -SeparatePrivileges -UnattendedConsentProbe
           } catch {
             # Compare inherited fixture permissions before changing any ACL.
             $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'

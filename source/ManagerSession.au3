@@ -96,6 +96,28 @@ Func _MS_Quote($value)
     Return '"' & $value & '"'
 EndFunc
 
+; Consent waits are not bounded helper operations: ShellExecuteExW may wait
+; indefinitely for a HUMAN decision on Windows' secure desktop. The medium
+; request worker remains tracked; never mark it failed on a wall-clock timeout
+; because approval could arrive after that and mutate services asynchronously.
+Func _MS_ConsentPending($state)
+    Return IsString($state) And ($state == "CONSENT_PREPARE" Or $state == "CONSENT_FINISH")
+EndFunc
+
+Func _MS_ConsentPhase($separated, $action)
+    If Not IsBool($separated) Then Return "BLOCKED"
+    Switch $action
+        Case "Prepare"
+            If $separated Then Return "CONSENT_PREPARE"
+            Return "PREPARING"
+        Case "Finish"
+            If $separated Then Return "CONSENT_FINISH"
+            Return "CLEANING"
+        Case Else
+            Return "BLOCKED"
+    EndSwitch
+EndFunc
+
 Func _MS_Worker(ByRef $s, $action)
     If $action <> "Prepare" And $action <> "Finish" Then Return False
     If $s["separated"] Then
@@ -179,7 +201,7 @@ Func _MS_Start(ByRef $s)
         _MS_State($s, "FAILED", "prepare-worker-not-started")
         Return False
     EndIf
-    _MS_State($s, "PREPARING")
+    _MS_State($s, _MS_ConsentPhase($s["separated"], "Prepare"))
     Return True
 EndFunc
 
@@ -229,11 +251,12 @@ EndFunc
 
 Func _MS_Tick(ByRef $s)
     Local $state = $s["state"]
-    If $state == "PREPARING" Or $state == "CLEANING" Or $state == "CONFIGURING" Then
+    If $state == "PREPARING" Or $state == "CLEANING" Or $state == "CONFIGURING" Or _
+            _MS_ConsentPending($state) Then
         Local $worker = $s["worker"], $status = _MP_Poll($worker)
         $s["worker"] = $worker
         If $status == "PRESENT" Then
-            If TimerDiff($s["clock"]) > 180000 Then _MS_State($s, "FAILED", "worker-timeout-no-guessed-cleanup")
+            If Not _MS_ConsentPending($state) And TimerDiff($s["clock"]) > 180000 Then _MS_State($s, "FAILED", "worker-timeout-no-guessed-cleanup")
             Return
         EndIf
         If $status <> "EXITED" Then
@@ -243,7 +266,7 @@ Func _MS_Tick(ByRef $s)
         _MP_Release($worker)
         $s["worker"] = $worker
         If $s["separated"] And $worker["exit_code"] = 1223 Then
-            If $state == "CLEANING" Then
+            If $state == "CLEANING" Or $state == "CONSENT_FINISH" Then
                 _MS_State($s, "CLEANUP_DECLINED", "click-finish-to-retry-elevation")
             Else
                 Local $installed = _PortableInstalledVBoxDetected()
@@ -262,7 +285,7 @@ Func _MS_Tick(ByRef $s)
             _MS_State($s, "FAILED", "worker-failed-no-guessed-cleanup")
             Return
         EndIf
-        If $state == "CLEANING" Then
+        If $state == "CLEANING" Or $state == "CONSENT_FINISH" Then
             If _PortableCountExistingServices() <> 0 Or _PortableCountVirtualBoxProcesses() <> 0 Then
                 _MS_State($s, "FAILED", "host-not-clean")
                 Return
@@ -353,7 +376,7 @@ Func _MS_Tick(ByRef $s)
         If Not _MS_Worker($s, "Finish") Then
             _MS_State($s, "FAILED", "cleanup-worker-not-started")
         Else
-            _MS_State($s, "CLEANING")
+            _MS_State($s, _MS_ConsentPhase($s["separated"], "Finish"))
         EndIf
         Return
     EndIf

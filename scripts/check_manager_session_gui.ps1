@@ -1,7 +1,7 @@
 # End-to-end exercise of the actual compiled buttons and Oracle Manager.
 # Test fixture commands operate only on the freshly created, empty, named VM.
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$PortableRoot,[switch]$SeparatePrivileges)
+param([Parameter(Mandatory)][string]$PortableRoot,[switch]$SeparatePrivileges,[switch]$UnattendedConsentProbe)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -9,6 +9,7 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hoste
 $root=(Resolve-Path -LiteralPath $PortableRoot).Path
 $runner=(Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path.TrimEnd('\')+'\'
 if (-not $root.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase)) { throw 'Root outside temporary host' }
+if ($UnattendedConsentProbe -and -not $SeparatePrivileges) { throw 'Consent probe requires a medium frontend' }
 $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $exe=Join-Path $root 'Portable-VirtualBox-Session-Test.exe'
@@ -134,8 +135,8 @@ function Start-Controller([string]$Label) {
     }
     return Start-Process -FilePath $exe -ArgumentList '--lang en' -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
 }
-$front=$null; $other=$null
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false}
+$front=$null; $other=$null; $badFront=$null
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false}
 try {
     Assert-Clean 'initial baseline'
     if ($SeparatePrivileges) {
@@ -155,6 +156,18 @@ try {
             $badFront=Start-Controller 'tampered-payload'
             Await-State $badFront 'IDLE' 20
             Click-Button $badFront 'Start VirtualBox'
+            if ($UnattendedConsentProbe) {
+                # Hosted Windows cannot supply a human response on UAC's secure
+                # desktop. Assert the medium GUI remains RESPONSIVE while its
+                # separate request process waits; never call this UAC acceptance.
+                Await-State $badFront 'CONSENT_PREPARE' 25
+                Start-Sleep -Seconds 2
+                if ((State-Of $badFront) -ne 'CONSENT_PREPARE') { throw 'Consent state lost without user action' }
+                Assert-Clean 'no unapproved elevated effects'
+                $proof.unattended_ui_responsive=$true
+                Write-Host 'PASS: medium GUI responsive while real UAC consent is pending; UAC consent NOT verified'
+                return
+            }
             Await-State $badFront 'FAILED' 90
             Assert-Clean 'tampered DLL refusal'
             Click-Button $badFront 'Close'
@@ -277,5 +290,6 @@ try {
     $proof | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $out 'manager-gui-proof.json') -Encoding utf8
     if ($null -ne $other) { $other.Dispose() }
     if ($null -ne $front) { $front.Dispose() }
+    if ($null -ne $badFront) { $badFront.Dispose() }
     # No speculative cleanup or global kills on failure. Disposable host only.
 }

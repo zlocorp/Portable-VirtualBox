@@ -91,6 +91,24 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn('$profile["profile"]', s)
         self.assertIn('$profile["machines"]', s)
 
+    def test_async_uac_pending_is_not_mistaken_for_a_timed_out_helper(self):
+        session = self.text('source/ManagerSession.au3')
+        for marker in ('Func _MS_ConsentPhase(', 'Func _MS_ConsentPending(',
+                       'CONSENT_PREPARE', 'CONSENT_FINISH',
+                       '_MS_ConsentPhase($s["separated"], "Prepare")',
+                       '_MS_ConsentPhase($s["separated"], "Finish")',
+                       'Not _MS_ConsentPending($state) And TimerDiff'):
+            self.assertIn(marker, session)
+        gui = self.text('source/ManagerWindow.au3')
+        for marker in ('Case "CONSENT_PREPARE"', 'Case "CONSENT_FINISH"'):
+            self.assertIn(marker, gui)
+        script = self.text('scripts/check_manager_session_gui.ps1')
+        for marker in ('UnattendedConsentProbe', "Await-State $badFront 'CONSENT_PREPARE'",
+                       'interactive_uac_consent_verified=$false',
+                       'unattended_ui_responsive=$true'):
+            self.assertIn(marker, script)
+        self.assertNotIn('EnableLUA', script)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
