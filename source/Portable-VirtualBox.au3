@@ -14,6 +14,7 @@
 #include "HostDiagnostics.au3"
 #include "LauncherI18n.au3"
 #include "LauncherGui.au3"
+#include "PortableDataBackup.au3"
 #include "PortableProfile.au3"
 #include "LauncherSettings.au3"
 #include "PortableApp.au3"
@@ -52,7 +53,7 @@ If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
             _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
-                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --app-status  --check-readiness  --save-language ru|en|auto  --about  --help" & @CRLF & _
+                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --about  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
         Case "--ci-service-smoke"
@@ -81,6 +82,32 @@ If $CmdLine[0] >= $iFirst Then
             _LI_Set(_LS_Select($CmdLine[$iFirst + 1], @OSLang))
             _LI_Write(_LI("settings.saved") & $CmdLine[$iFirst + 1] & @CRLF)
             Exit 0
+        Case "--backup-data", "--verify-backup"
+            If $CmdLine[0] <> $iFirst + 1 Then
+                _LI_Write(_LI("backup.syntax") & @CRLF, True)
+                Exit 64
+            EndIf
+            Local $backupPath = $CmdLine[$iFirst + 1]
+            If $CmdLine[$iFirst] == "--verify-backup" Then
+                If _PBK_Verify($backupPath) Then
+                    _LI_Write(_LI("backup.verified") & " " & $backupPath & @CRLF)
+                    Exit 0
+                EndIf
+                _LI_Write(_LI("backup.invalid") & " " & $backupPath & @CRLF, True)
+                Exit 3
+            EndIf
+            Local $backupResult = _PBK_Create(@ScriptDir, $backupPath)
+            Switch $backupResult
+                Case 0
+                    _LI_Write(_LI("backup.verified") & " " & $backupPath & @CRLF)
+                    Exit 0
+                Case 2
+                    _LI_Write(_LI("backup.blocked") & @CRLF, True)
+                    Exit 2
+                Case Else
+                    _LI_Write(_LI("backup.failed") & " " & $backupPath & ".pending" & @CRLF, True)
+                    Exit 3
+            EndSwitch
         Case "--app-status"
             Local $app = _PA_Inspect(@ScriptDir)
             _LI_Write(_PA_Message($app) & @CRLF)

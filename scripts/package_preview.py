@@ -21,8 +21,9 @@ NOTICE = """Portable-VirtualBox development diagnostic preview
 This is NOT a usable virtual machine hypervisor.
 The ordinary user interface does not launch virtual machines,
 install drivers, register Oracle services, or redistribute VirtualBox.
-Normal use remains read-only except explicit portable-folder preparation
-and saving the launcher language to data/launcher.ini.
+Normal use remains read-only except explicit portable-folder preparation,
+saving the launcher language to data/launcher.ini, and offline data/ backup
+to a directory chosen by the user. Backup never installs VirtualBox.
 An isolated GitHub Actions-only internal research command can exercise
 Oracle VBoxSDS registration/cleanup; do not use it on a personal PC.
 
@@ -30,6 +31,7 @@ What works:
 - RU/EN diagnostics, explicit saved language, completeness checks and built-in help
 - concise About dialog; original license and consolidated notices included
 - explicit first-run setup of data/.VirtualBox, data/Machines and logs
+- offline, copy-and-verify data/ backup without deleting any source files
 - repeat setup without overwriting existing user files
 
 To work with VirtualBox you still need a separately verified Oracle

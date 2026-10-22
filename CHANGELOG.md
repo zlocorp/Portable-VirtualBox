@@ -4,19 +4,18 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
-### Fixed / verified · 2026-10-22 asynchronous Windows consent
+### Added · 2026-10-22 offline portable-data safeguard (public preview)
 
-- The **non-distributed** Manager experiment now distinguishes `CONSENT_PREPARE` and `CONSENT_FINISH` from actual driver work. `ShellExecuteExW runas` remains in a separate medium-token worker; the GUI is responsive while Windows waits for human approval.
-- A pending UAC prompt no longer causes a speculative 180-second worker failure: a late approval could otherwise perform system changes after the frontend had incorrectly abandoned the request. Denial continues to require a confirmed worker outcome; cleanup stays fail-closed and user-retryable.
-- [Unattended UAC-pending GUI CI 39737034711](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39737034711) verified the compiled GUI changes state and responds, without installing anything during the pending test. **It did not confirm UAC** or claim interactive Windows 11 acceptance.
-- Regression proof: [21 compiled AutoIt harnesses 39737034839](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39737034839), [real Manager start/close/reopen plus two owned cleanups 39737034865](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39737034865), [medium-token Manager/guest with separate helper 39737034920](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39737034920). Oracle 7.2.22/x64 core checks still pass.
-- Real `runas` approve/cancel, interactive UAC secure desktop, crash/reboot recovery, real guest OS and Windows 11 standard-user end-to-end remain acceptance blockers. Ordinary preview ZIP remains diagnostic-only.
+- User-facing backup and independent verification for the entire portable `data/` tree (configuration, VM folders and snapshots stored there) through GUI and `--backup-data` / `--verify-backup` CLI, **without requiring VirtualBox, Python, elevation or hidden CI modes**.
+- Backup creation refuses active/unknown VBox activity, a competing launcher session, unsafe/reparse paths, nested destinations and existing outputs; it hashes originals and copies using SHA-256, rescans source and publishes a completed folder only after verification.
+- Long backups run in a separate ordinary-user process; GUI remains responsive and supports cooperative cancellation. Failed/interrupted work stays in `.pending` for inspection; no destructive cleanup or backup overwrite. The independent verifier checks hashes and rejects missing/extra/corrupt files.
+- **Scope:** this is an offline **file copy** of `data/`, not an Oracle snapshot, media in external paths, VSS capture or automatic restore. The manifest is not signed. Existing VM launcher/UAC acceptance remains blocked.
 
 
 ### Verified privilege separation experiment · 2026-10-21
 
 - Added a fixed-purpose elevated helper, protected validated Oracle runtime copy and ordinary-integrity Manager/guest execution to the **non-distributed** session experiment. Tested exact-input refusal, protected-write denial, live-guest cleanup refusal and two complete owned cleanup cycles: [Windows Server 2022 run 39649261984](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261984) **passed**.
-- Kept the actual GUI `ShellExecuteExW runas` consent path separate. [Run 39649261666](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261666) **failed** at the tampered-payload step: frontend remained `IDLE` after logging `Elevation request: Prepare cycle=1`. This is consistent with an unavailable interactive consent desktop but **does not prove that as root cause**. UAC cancellation/consent and production Windows 11 end-to-end remain open; the pending-state UI test was added on 2026-10-22.
+- Kept the actual GUI `ShellExecuteExW runas` consent path separate. [Run 39649261666](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261666) **failed** at the tampered-payload step: frontend remained `IDLE` after logging `Elevation request: Prepare cycle=1`. This is consistent with an unavailable interactive consent desktop but **does not prove that as root cause**. UAC cancellation/consent, progress while elevation is pending, and production Windows 11 end-to-end remain open.
 - Direct helper invocation by the elevated disposable harness is **not equivalent to UAC delivery**. No production launcher or ZIP includes these experimental effects. Do not downgrade this acceptance requirement or replace `runas` with silent elevation.
 
 

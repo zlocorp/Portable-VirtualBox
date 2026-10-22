@@ -148,6 +148,9 @@ jobs:
           }
           if (Test-Path -LiteralPath (Join-Path $conflict 'logs')) { throw 'Collision created partial data' }
           Write-Host 'PASS: compiled first-run setup, repeated preservation, collision refusal'
+      - name: Offline portable data backup with SHA-256, Unicode paths and corruption refusal
+        shell: pwsh
+        run: ./scripts/check_offline_backup.ps1 -Launcher build/Portable-VirtualBox_x64.exe
       - name: Exercise ordinary compiled language, app checks and credits
         shell: pwsh
         run: ./scripts/check_community_ux.ps1 -Launcher build/Portable-VirtualBox_x64.exe

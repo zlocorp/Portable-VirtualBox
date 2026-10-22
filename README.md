@@ -8,6 +8,8 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 ## What is different
 
+**Offline portable-data backups.** The ordinary GUI now offers an asynchronous backup/verification action for the entire `data/` tree, with cancellation, SHA-256 checks for each copied file and a non-overwriting `.pending` staging folder. The backup never touches drivers, VM processes or Oracle configuration. Copying is blocked while VirtualBox is active. **This is a backup of files under `data/`, not a live VM snapshot:** disk images/media outside `data/` are not included. Interrupted stages are preserved for inspection; use a separate drive for important backups.
+
 **A usable diagnostic shell.** Native Russian/English GUI and UTF-8 CLI, remembered language with an explicit “Save language” action, a return to Windows language selection, readable failure reasons, copyable diagnostics and a concise About window. A temporary `--lang` selection never overwrites the saved preference.
 
 **No bundled obsolete executables.** Old AutoIt compilers, 7za, DevCon, SnetCfg, fourteen legacy translation INIs and the old splash were removed. The build uses official external AutoIt **3.3.18.0**. The tested Oracle package is pinned to **7.2.22 r175245**, with exact hashes, publisher checks and file-only MSI/CAB preparation rather than silently running an installer.
@@ -31,6 +33,8 @@ Portable-VirtualBox.exe --app-status
 Portable-VirtualBox.exe --check-readiness
 Portable-VirtualBox.exe --diagnose
 Portable-VirtualBox.exe --about
+Portable-VirtualBox.exe --backup-data "D:\Backups\PortableVBox-2026-10-22"
+Portable-VirtualBox.exe --verify-backup "D:\Backups\PortableVBox-2026-10-22"
 ```
 
 `--save-language ru|en|auto` explicitly creates portable data folders when needed. Other inspection commands do not create them. `--app-status` returns 0 for required nonempty files present, 2 for absent `app64`, and 3 for incomplete/unsafe files. `--check-readiness` returns 3 for a blocker or 2 when preflight is clear but this build's runtime is disabled. Neither exit code enables a VM.
@@ -42,6 +46,9 @@ A damaged `launcher.ini` is left intact and the launcher falls back to the Windo
 A separate compiled test frontend now has working **Start VirtualBox / Finish session / Reopen Manager** controls. [Windows GUI acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39567202279) opened the real Oracle Manager, kept an empty VM running after Manager closed, reopened Manager, refused a second controller, and completed two cleanups with the same VM UUID. This is **not included in the diagnostic ZIP**: its system adapter still requires an already elevated disposable runner, not a production UAC flow. [Evidence and limitations](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-manager-session.md).
 
 ## Evidence and limits
+
+Data backups are folders containing `data/` plus `SHA256SUMS.txt`; failed/cancelled operations leave `*.pending` in place, not a misleading finished copy. SHA-256 detects accidental corruption but the manifest is not cryptographically signed. Only **offline** files in the portable `data/` directory are included. Do not infer that VMs with external disks are fully backed up or automatically restorable.
+
 
 [FEATURES.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/FEATURES.md) is the current capability matrix: **public preview**, **CI-only**, **planned**. [CHANGELOG.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/CHANGELOG.md) records user-relevant changes under **Unreleased**, not fictional product releases.
 
