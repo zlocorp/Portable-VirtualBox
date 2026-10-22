@@ -23,7 +23,7 @@ For $i = 0 To UBound($keys) - 1
     Check(StringLen($ru) > 2 And $ru <> $keys[$i], $keys[$i] & " RU coverage")
     Check($ru <> $en, $keys[$i] & " different translations")
 Next
-Check(StringInStr(_LI("app.disabled","ru"), "виртуаль") > 0, "Russian runtime disclaimer")
+Check(StringInStr(_LI("app.disabled","ru"), "Запуск ВМ") > 0 And StringInStr(_LI("app.disabled","ru"), "копирование") > 0, "Russian runtime disclaimer and offline backups")
 Check(_LI("missing.unused.key","ru") == "missing.unused.key", "unknown key explicit")
 Check(_LI_Blocker("Unsupported architecture (x64 required)","ru") <> "Unsupported architecture (x64 required)", "preflight reason localized")
 Check(_LI_Blocker("Unexpected reason","ru") == "Unexpected reason", "unrecognized preflight result preserved")
