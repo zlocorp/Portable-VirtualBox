@@ -33,6 +33,13 @@ $report=Invoke-Audit 2 'en'
 if (-not $report.Contains('External/ambiguous medium path') -or -not $report.Contains('Missing local medium')) { throw 'External/missing medium not surfaced' }
 $report=Invoke-Audit 2 'ru'
 if (-not $report.Contains('Внешний или неоднозначный') -or -not $report.Contains('Отсутствует локальный')) { throw 'RU external/missing diagnostics absent' }
+# Backup of an incomplete VM is allowed as a FILE copy, but never silently
+# described as a complete VM backup. Verify real compiled CLI warning.
+$backup=Join-Path $env:RUNNER_TEMP ('Incomplete VM backup '+[Guid]::NewGuid().ToString('N'))
+$warning=Join-Path $env:RUNNER_TEMP ('vm-backup-warning-'+[Guid]::NewGuid().ToString('N')+'.txt')
+$b=Start-Process -FilePath $exe -ArgumentList ('--lang en --backup-data "'+$backup+'"') -PassThru -Wait -NoNewWindow -RedirectStandardError $warning
+if ($b.ExitCode -ne 0 -or -not (Test-Path (Join-Path $backup 'data\Machines\ВМ с пробелами\Тест.vbox'))) { throw 'Guarded copy of data unexpectedly failed' }
+if (-not (Get-Content -LiteralPath $warning -Raw -Encoding utf8).Contains('NOT a complete backup')) { throw 'Backup of external-disk VM was silent' }
 [IO.File]::WriteAllText($xml,'<!DOCTYPE VirtualBox [<!ENTITY bad SYSTEM "file:///C:/Windows/win.ini">]>'+$head+$local+$tail,[Text.UTF8Encoding]::new($false))
 $null=Invoke-Audit 3 'en'
 if (-not (Test-Path -LiteralPath (Join-Path $machine 'disk.vdi'))) { throw 'Read-only inventory mutated media' }

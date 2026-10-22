@@ -113,6 +113,8 @@ If $CmdLine[0] >= $iFirst Then
                 _LI_Write(_LI("backup.invalid") & " " & $backupPath & @CRLF, True)
                 Exit 3
             EndIf
+            Local $risk = _PVI_Inspect(@ScriptDir)
+            If $risk["status"] == "REVIEW" Or $risk["status"] == "BLOCKED" Then _LI_Write(_LI("vm.backup_warning") & @CRLF, True)
             Local $backupResult = _PBK_Create(@ScriptDir, $backupPath)
             Switch $backupResult
                 Case 0

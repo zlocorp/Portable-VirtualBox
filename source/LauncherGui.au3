@@ -192,6 +192,12 @@ Func _LG_Show()
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
                     $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
             Case $idBackup, $idVerify, $idRestore
+                If $event == $idBackup Then
+                    Local $risk = _PVI_Inspect(@ScriptDir)
+                    If $risk["status"] == "REVIEW" Or $risk["status"] == "BLOCKED" Then
+                        If MsgBox(0x34, _LI("vm.header"), _LI("vm.backup_warning"), 0, $hGui) <> 6 Then ContinueLoop
+                    EndIf
+                EndIf
                 If $backupWorker["handle"] = 0 Then
                     Local $chosen = FileSelectFolder(_LI("backup.choose"), "", 2)
                     If $chosen <> "" Then

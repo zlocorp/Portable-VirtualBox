@@ -14,6 +14,8 @@ class VmInventoryContract(unittest.TestCase):
         self.assertIn('Case "--audit-vms"', entry)
         self.assertIn('_PVI_Inspect(@ScriptDir)', entry)
         self.assertIn('Case $idVmAudit', gui)
+        self.assertIn('_LI("vm.backup_warning")',gui)
+        self.assertIn('_LI("vm.backup_warning")',entry)
         self.assertIn('_PVI_Inspect(@ScriptDir)', gui)
         for name in ('gui.vm_audit','vm.header','vm.external','vm.missing','vm.blocked'):
             self.assertIn('Case "'+name+'"',lang)
