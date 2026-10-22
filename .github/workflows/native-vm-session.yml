@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/native-vm-session.yml
       - source/PortableCIVM.au3
+      - source/PortableVmInventory.au3
       - source/PortableCIIntegrated.au3
       - source/PortableCommand.au3
       - source/Aut2Exe/**
@@ -85,6 +86,22 @@ jobs:
       - name: Compiled AutoIt orders driver, native VM, independent check and exact cleanup
         shell: pwsh
         run: ./scripts/integrated_native_vm_smoke.ps1 -PortableRoot $env:NATIVE_VM_ROOT -RuntimeTimeoutSeconds 600
+      - name: Audit real Oracle-created .vbox with ordinary compiled read-only launcher
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=Join-Path $env:NATIVE_VM_ROOT 'Portable-VirtualBox_x64.exe'
+          $out=Join-Path $env:RUNNER_TEMP 'real-vm-inventory.txt'
+          $err=Join-Path $env:RUNNER_TEMP 'real-vm-inventory.stderr.txt'
+          $p=Start-Process -FilePath $exe -ArgumentList '--lang en --audit-vms' -PassThru -Wait -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+          if ($p.ExitCode -ne 0) { throw "Real Oracle VM inventory returned $($p.ExitCode): $(Get-Content $err -Raw)" }
+          $report=Get-Content -LiteralPath $out -Raw -Encoding utf8
+          if (-not $report.Contains('pvbox_compiled_native_fixture') -or
+              -not $report.Contains('VMs / snapshots / media / external / missing: 1 / 0 / 0 / 0 / 0')) {
+            throw 'Real Oracle .vbox XML could not be audited as an in-root VM'
+          }
+          if (@(Get-Process -Name VBoxSVC,VBoxSDS,VBoxHeadless,VirtualBoxVM -ErrorAction SilentlyContinue).Count -ne 0) { throw 'Read-only audit started Oracle processes' }
+          Write-Host 'PASS: actual Oracle 7.2.22 VM configuration parsed with ordinary compiled read-only RU/EN catalog'
       - name: Collect only bounded logs and metadata (never Oracle binaries, VM data, drivers)
         if: always()
         shell: pwsh
