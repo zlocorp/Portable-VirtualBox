@@ -9,6 +9,7 @@ param(
     [Parameter(Mandatory,ParameterSetName="Boot")][string]$BootReport,
     [Parameter(Mandatory,ParameterSetName="Session")][string]$QuiescentReport,
     [Parameter(Mandatory,ParameterSetName="PrivilegedSession")][string]$PrivilegedReport,
+    [Parameter(Mandatory,ParameterSetName="RecoverySession")][string]$RecoveryReport,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [ValidateRange(5,90)][int]$TimeoutSeconds = 45
 )
@@ -25,7 +26,7 @@ function Under-Runner([string]$Value) {
     $full=[IO.Path]::GetFullPath($Value)
     return $full.StartsWith($runner, [StringComparison]::OrdinalIgnoreCase)
 }
-$proofPath=if ($PSCmdlet.ParameterSetName -eq "Session") { $QuiescentReport } elseif ($PSCmdlet.ParameterSetName -eq "PrivilegedSession") { $PrivilegedReport } else { $BootReport }
+$proofPath=if ($PSCmdlet.ParameterSetName -eq "Session") { $QuiescentReport } elseif ($PSCmdlet.ParameterSetName -eq "PrivilegedSession") { $PrivilegedReport } elseif ($PSCmdlet.ParameterSetName -eq "RecoverySession") { $RecoveryReport } else { $BootReport }
 foreach ($candidate in @($AppDir,$StandaloneReport,$DriverStartReport,$proofPath,$OutputDirectory)) {
     if (-not (Under-Runner $candidate)) { throw 'All input/output paths must be in RUNNER_TEMP' }
 }
@@ -90,6 +91,43 @@ if ($PSCmdlet.ParameterSetName -eq "PrivilegedSession") {
     } finally { $controller.Dispose() }
     if (@(Get-Process -ErrorAction Stop | Where-Object ProcessName -match '^(VBox|VirtualBox)').Count -ne 0) {
         throw 'Activity prohibits privileged-session cleanup'
+    }
+}
+if ($PSCmdlet.ParameterSetName -eq "RecoverySession") {
+    # Explicit manual recovery: two different controller generations, same
+    # pinned launcher image, and the old PID must be ABSENT, not recycled.
+    function Test-OriginalControllerAbsent([int]$OldPid) {
+        if ($OldPid -le 0) { return $false }
+        $observed=Get-CimInstance Win32_Process -Filter "ProcessId=$OldPid" -ErrorAction Stop
+        return $null -eq $observed
+    }
+    if ($proof.experiment -ne 'orphan-manager-quiescent' -or
+        $proof.protected_app -ine $app -or
+        $proof.stage_report -ine $StandaloneReport -or
+        $proof.driver_start_report -ine $DriverStartReport -or
+        $proof.no_vbox_processes_verified -ne $true -or
+        $proof.original_controller_pid -le 0 -or $proof.controller_pid -le 0 -or
+        $proof.original_controller_pid -eq $proof.controller_pid -or
+        $proof.original_controller_created_filetime -notmatch '^[1-9][0-9]{10,19}$' -or
+        $proof.controller_image -ine (Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe')) {
+        throw 'Protected cleanup recovery proof is missing or mismatched'
+    }
+    $old=Get-Content -LiteralPath (Join-Path (Split-Path $app -Parent) 'session.json') -Raw -ErrorAction Stop | ConvertFrom-Json
+    if ($old.schema -ne 1 -or -not $old.prepared -or
+        $old.controller_pid -ne $proof.original_controller_pid -or
+        $old.controller_created_filetime -ne $proof.original_controller_created_filetime -or
+        $old.controller_image -ine $proof.controller_image -or
+        $old.portable_root -ine $proof.portable_root -or $old.protected_app -ine $app -or
+        -not (Test-OriginalControllerAbsent ([int]$proof.original_controller_pid))) {
+        throw 'Original protected owner is live, missing or mismatched'
+    }
+    $current=[Diagnostics.Process]::GetProcessById([int]$proof.controller_pid)
+    try {
+        if ($current.StartTime.ToFileTimeUtc().ToString() -ne $proof.controller_created_filetime -or
+            $current.MainModule.FileName -ine $proof.controller_image) { throw 'Recovery controller generation changed' }
+    } finally { $current.Dispose() }
+    if (@(Get-Process -ErrorAction Stop | Where-Object ProcessName -match '^(VBox|VirtualBox)').Count -ne 0) {
+        throw 'Activity prohibits abandoned-session recovery'
     }
 }
 if ((Test-Path -LiteralPath 'HKLM:\SOFTWARE\Oracle\VirtualBox') -or

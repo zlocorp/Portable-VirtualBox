@@ -42,10 +42,22 @@ Func _PB_Start($root, $action, $cycle)
     Return _MP_Start(@ScriptFullPath, "--elevation-worker " & $action & " " & @AutoItPID & " " & $cycle, $root)
 EndFunc
 
-Func _PB_RunRequest($root, $action, $controller, $cycle)
+; Recovery has an explicit former PID and cycle only, never a path. The
+; elevated helper validates protected receipts and the departed owner.
+Func _PB_StartRecover($root, $formerPid, $cycle)
+    Local $p = _MP_New()
+    If Not _PB_Medium() Or Not _PP_RootSafe($root) Or StringLower($root) <> StringLower(@ScriptDir) Then Return $p
+    If Not IsInt($formerPid) Or $formerPid < 1 Or $formerPid = @AutoItPID Then Return $p
+    If Not IsInt($cycle) Or $cycle < 1 Or $cycle > 999 Then Return $p
+    If Not FileExists($root & "\Portable-VirtualBox-Helper-Test.exe") Then Return $p
+    Return _MP_Start(@ScriptFullPath, "--elevation-worker Recover " & @AutoItPID & " " & $formerPid & " " & $cycle, $root)
+EndFunc
+
+Func _PB_RunRequest($root, $action, $controller, $cycle, $formerPid = 0)
     If Not _PB_Medium() Or Not IsInt($controller) Or $controller < 1 Or $controller = @AutoItPID Then Return 64
-    If $action <> "Prepare" And $action <> "Finish" Then Return 64
+    If $action <> "Prepare" And $action <> "Finish" And $action <> "Recover" Then Return 64
     If Not IsInt($cycle) Or $cycle < 1 Or $cycle > 999 Then Return 64
+    If $action == "Recover" And (Not IsInt($formerPid) Or $formerPid < 1 Or $formerPid == $controller) Then Return 64
     Local $token = _WinObsProcessOpen($controller)
     If $token = 0 Then Return 70
     Local $parent = _WinObsProcessRead($token)
@@ -62,7 +74,7 @@ Func _PB_RunRequest($root, $action, $controller, $cycle)
         _WinObsProcessClose($token)
         Return 70
     EndIf
-    Local $p = _PB_RequestBlocking($root, $action, $controller, $cycle), $result = 70
+    Local $p = _PB_RequestBlocking($root, $action, $controller, $cycle, $formerPid), $result = 70
     If $p["status"] == "CANCELLED" Then
         $result = 1223
     ElseIf $p["status"] == "STARTED" Then
@@ -86,14 +98,16 @@ Func _PB_RunRequest($root, $action, $controller, $cycle)
 EndFunc
 
 ; ShellExecuteExW itself can wait for UAC, so only the request worker calls it.
-Func _PB_RequestBlocking($root, $action, $controller, $cycle)
+Func _PB_RequestBlocking($root, $action, $controller, $cycle, $formerPid = 0)
     Local $p = _MP_New()
     If Not _PB_Medium() Or Not _PP_RootSafe($root) Then Return $p
-    If $action <> "Prepare" And $action <> "Finish" Then Return $p
+    If $action <> "Prepare" And $action <> "Finish" And $action <> "Recover" Then Return $p
     If Not IsInt($cycle) Or $cycle < 1 Or $cycle > 999 Then Return $p
+    If $action == "Recover" And (Not IsInt($formerPid) Or $formerPid < 1 Or $formerPid == $controller) Then Return $p
     Local $exe = $root & "\Portable-VirtualBox-Helper-Test.exe"
     If Not FileExists($exe) Then Return $p
     Local $args = $action & " " & $controller & " " & $cycle
+    If $action == "Recover" Then $args = $action & " " & $controller & " " & $formerPid & " " & $cycle
     Local $s = DllStructCreate("dword size;ulong mask;hwnd window;ptr verb;ptr file;ptr parameters;ptr directory;int show;handle instance;ptr idlist;ptr class;handle key;dword hotkey;handle icon;handle process")
     Local $verb = DllStructCreate("wchar[6]"), $file = DllStructCreate("wchar[" & (StringLen($exe)+1) & "]")
     Local $parameters = DllStructCreate("wchar[" & (StringLen($args)+1) & "]"), $directory = DllStructCreate("wchar[" & (StringLen($root)+1) & "]")

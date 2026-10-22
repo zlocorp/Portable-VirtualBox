@@ -28,14 +28,67 @@ namespace PortableVBox {
             using(var f=OpenLocked(user.Image)) if(Hash(f)!=PinnedBuild.FrontendSha256) throw new InvalidOperationException("Controller build hash rejected");
             return user;
         }
+        // A recovery target is ALWAYS a previously protected session, never a
+        // user-selected path. The old owner must be absent; PID reuse, access
+        // denial and every ambiguous state refuse recovery rather than guessing.
+        static bool OrphanControllerAbsent(int oldPid) {
+            if(oldPid<1) return false;
+            try { using(var old=Process.GetProcessById(oldPid)) return false; }
+            catch(ArgumentException) { return true; }
+        }
+        static string ReadProtectedField(Dictionary<string,object> row,string field) {
+            object value;
+            if(!row.TryGetValue(field,out value) || value==null) throw new InvalidOperationException("Missing protected recovery evidence");
+            return Convert.ToString(value,CultureInfo.InvariantCulture);
+        }
+        static Dictionary<string,object> ProtectedJson(string path) {
+            using(var f=OpenLocked(path)) {
+                if(f.Length<1 || f.Length>16384) throw new InvalidOperationException("Untrusted or ambiguous recovery target");
+                using(var r=new StreamReader(f,Encoding.UTF8)) return Json.Deserialize<Dictionary<string,object>>(r.ReadToEnd());
+            }
+        }
+        static long VerifyOriginalSession(string session,string root,string sid,int oldPid,int cycle) {
+            if(!OrphanControllerAbsent(oldPid) || oldPid<1) throw new InvalidOperationException("Untrusted or ambiguous recovery target");
+            var original=ProtectedJson(Path.Combine(session,"controller.json"));
+            var receipt=ProtectedJson(Path.Combine(session,"session.json"));
+            string formerImage=Path.Combine(root,"Portable-VirtualBox-Session-Test.exe");
+            string created=ReadProtectedField(original,"created");
+            if(ReadProtectedField(original,"pid")!=oldPid.ToString(CultureInfo.InvariantCulture) ||
+               ReadProtectedField(original,"cycle")!=cycle.ToString(CultureInfo.InvariantCulture) ||
+               ReadProtectedField(original,"sid")!=sid ||
+               !String.Equals(ReadProtectedField(original,"root"),root,StringComparison.OrdinalIgnoreCase) ||
+               !String.Equals(ReadProtectedField(original,"image"),formerImage,StringComparison.OrdinalIgnoreCase) ||
+               ReadProtectedField(receipt,"schema")!="1" || ReadProtectedField(receipt,"prepared")!="True" ||
+               ReadProtectedField(receipt,"controller_pid")!=oldPid.ToString(CultureInfo.InvariantCulture) ||
+               ReadProtectedField(receipt,"controller_created_filetime")!=created ||
+               !String.Equals(ReadProtectedField(receipt,"portable_root"),root,StringComparison.OrdinalIgnoreCase) ||
+               !String.Equals(ReadProtectedField(receipt,"protected_app"),Path.Combine(session,"app64"),StringComparison.OrdinalIgnoreCase) ||
+               !String.Equals(ReadProtectedField(receipt,"controller_image"),formerImage,StringComparison.OrdinalIgnoreCase) ||
+               File.Exists(Path.Combine(session,"recovery-quiescent.json")) ||
+               Directory.Exists(Path.Combine(session,"cleanup")) ||
+               File.Exists(Path.Combine(session,"payload-removed.json")) ||
+               !OrphanControllerAbsent(oldPid))
+                throw new InvalidOperationException("Untrusted or ambiguous recovery target");
+            long filetime;
+            if(!long.TryParse(created,NumberStyles.None,CultureInfo.InvariantCulture,out filetime) || filetime<=0)
+                throw new InvalidOperationException("Invalid former owner generation");
+            return filetime;
+        }
         static string Quote(string s) { if(s.IndexOfAny(new[]{'"','\r','\n','\0'})>=0) throw new InvalidOperationException("Invalid argument");return "\""+s+"\""; }
         [STAThread]
         public static int Main(string[] args) {
             string evidenceId=Guid.NewGuid().ToString("N");
             string session=null,safeSession=null;IntPtr controller=IntPtr.Zero;int result=70;System.Threading.Mutex effectMutex=null;bool held=false;
             try {
-                int pid,cycle;
-                if(args.Length!=3 || (args[0]!="Prepare" && args[0]!="Finish") || !int.TryParse(args[1],out pid) || pid<1 || !int.TryParse(args[2],out cycle) || cycle<1 || cycle>999) return 64;
+                int pid,cycle,oldPid=0;
+                bool recovery=args.Length==4 && args[0]=="Recover";
+                if(recovery) {
+                    if(!int.TryParse(args[1],out pid) || pid<1 ||
+                       !int.TryParse(args[2],out oldPid) || oldPid<1 || oldPid==pid ||
+                       !int.TryParse(args[3],out cycle) || cycle<1 || cycle>999) return 64;
+                } else if(args.Length!=3 || (args[0]!="Prepare" && args[0]!="Finish") ||
+                          !int.TryParse(args[1],out pid) || pid<1 ||
+                          !int.TryParse(args[2],out cycle) || cycle<1 || cycle>999) return 64;
                 // Not a production distribution. These markers do not authenticate anything.
                 if(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")!="true" || Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT")!="github-hosted" || Environment.GetEnvironmentVariable("GITHUB_REPOSITORY")!="zlocorp/Portable-VirtualBox" || Environment.GetEnvironmentVariable("RUNNER_OS")!="Windows") return 9;
                 string root=Full(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location));
@@ -53,24 +106,33 @@ namespace PortableVBox {
                 if(!held) throw new InvalidOperationException("Another privileged operation is active");
                 string store=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"PortableVirtualBox.Experiment");
                 LockParents(Path.GetDirectoryName(store));CreateProtectedDirectory(store,caller.Sid,true);
-                session=Path.Combine(store,"pvbox-manager-"+pid+"-"+cycle);
+                session=Path.Combine(store,"pvbox-manager-"+(recovery?oldPid:pid)+"-"+cycle);
                 bool prepare=args[0]=="Prepare";
+                if(recovery && (!Directory.Exists(session) || !Directory.Exists(Path.Combine(session,"app64")) ||
+                                !Directory.Exists(Path.Combine(session,"code"))))
+                    throw new InvalidOperationException("Untrusted or ambiguous recovery target");
                 CreateProtectedDirectory(session,caller.Sid,!prepare);safeSession=session;
                 string app=Path.Combine(session,"app64"),code=Path.Combine(session,"code");
                 CreateProtectedDirectory(app,caller.Sid,!prepare);CreateProtectedDirectory(code,caller.Sid,!prepare);
                 InstallScripts(session,prepare);
                 ValidateAndStage(Path.Combine(root,"app64"),app,caller.Sid,prepare);
                 string binding=Path.Combine(session,"controller.json");
-                var current=new Dictionary<string,object>{{"pid",pid},{"created",caller.Created.ToString(CultureInfo.InvariantCulture)},{"image",caller.Image},{"sid",caller.Sid},{"cycle",cycle},{"root",root}};
-                if(prepare) WriteNew(binding,Encoding.UTF8.GetBytes(Json.Serialize(current)));
-                using(var f=OpenLocked(binding)) using(var reader=new StreamReader(f,Encoding.UTF8)) {
-                    var original=Json.Deserialize<Dictionary<string,object>>(reader.ReadToEnd());
-                    foreach(var pair in current) if(!original.ContainsKey(pair.Key) || Convert.ToString(original[pair.Key],CultureInfo.InvariantCulture)!=Convert.ToString(pair.Value,CultureInfo.InvariantCulture)) throw new InvalidOperationException("Stale controller generation");
+                long originalCreated=0;
+                if(recovery) {
+                    originalCreated=VerifyOriginalSession(session,root,caller.Sid,oldPid,cycle);
+                } else {
+                    var current=new Dictionary<string,object>{{"pid",pid},{"created",caller.Created.ToString(CultureInfo.InvariantCulture)},{"image",caller.Image},{"sid",caller.Sid},{"cycle",cycle},{"root",root}};
+                    if(prepare) WriteNew(binding,Encoding.UTF8.GetBytes(Json.Serialize(current)));
+                    using(var f=OpenLocked(binding)) using(var reader=new StreamReader(f,Encoding.UTF8)) {
+                        var original=Json.Deserialize<Dictionary<string,object>>(reader.ReadToEnd());
+                        foreach(var pair in current) if(!original.ContainsKey(pair.Key) || Convert.ToString(original[pair.Key],CultureInfo.InvariantCulture)!=Convert.ToString(pair.Value,CultureInfo.InvariantCulture)) throw new InvalidOperationException("Stale controller generation");
+                    }
                 }
                 string powershell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"PowerShell","7","pwsh.exe");
                 LockParents(Path.GetDirectoryName(powershell));
                 string working=Path.Combine(session,"code");
-                var info=new ProcessStartInfo(powershell,"-NoLogo -NoProfile -NonInteractive -File "+Quote(Path.Combine(working,"privileged_session_worker.ps1"))+" -Action "+args[0]+" -PortableRoot "+Quote(root)+" -SessionDir "+Quote(session)+" -ControllerPid "+pid+" -ControllerCreated "+caller.Created);
+                string extra=recovery?" -OriginalControllerPid "+oldPid+" -OriginalControllerCreated "+originalCreated:"";
+                var info=new ProcessStartInfo(powershell,"-NoLogo -NoProfile -NonInteractive -File "+Quote(Path.Combine(working,"privileged_session_worker.ps1"))+" -Action "+args[0]+" -PortableRoot "+Quote(root)+" -SessionDir "+Quote(session)+" -ControllerPid "+pid+" -ControllerCreated "+caller.Created+extra);
                 info.UseShellExecute=false;info.CreateNoWindow=true;info.WorkingDirectory=working;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
                 // Never inherit low-user module search paths, PS profiles, PATH,
                 // temp dirs or .NET startup/profiler variables into elevated effects.
@@ -94,7 +156,7 @@ namespace PortableVBox {
                     if(process.ExitCode!=0) throw new InvalidOperationException("Fixed effect worker rejected operation");
                 }
                 if(TokenFacts.WaitForSingleObject(controller,0)!=258) throw new InvalidOperationException("Controller exited during privileged operation");
-                if(args[0]=="Finish") {
+                if(args[0]=="Finish" || recovery) {
                     foreach(var item in Locks) item.Dispose();Locks.Clear();LockedDirs.Clear();
                     RemoveVerifiedPayload(session);
                 }

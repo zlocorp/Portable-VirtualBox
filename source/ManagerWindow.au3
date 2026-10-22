@@ -1,4 +1,4 @@
-﻿#include-once
+#include-once
 #include "ManagerSession.au3"
 #include "LauncherSettings.au3"
 #include <GUIConstantsEx.au3>
@@ -20,6 +20,9 @@ Func _MSW_Text($key)
         Case "stop"
             If $ru Then Return "Завершить сессию"
             Return "Finish session"
+        Case "recover"
+            If $ru Then Return "Восстановить после сбоя"
+            Return "Recover abandoned session"
         Case "reopen"
             If $ru Then Return "Открыть Manager"
             Return "Reopen Manager"
@@ -32,6 +35,12 @@ Func _MSW_Text($key)
         Case "CONSENT_PREPARE"
             If $ru Then Return "Ожидание UAC Windows для подготовки драйвера. Подтвердите или отмените запрос в Windows."
             Return "Waiting for Windows UAC approval to prepare the driver. Approve or cancel in Windows."
+        Case "CONSENT_RECOVER"
+            If $ru Then Return "Ожидание разрешения UAC на восстановление заброшенной сессии. ВМ не завершаются автоматически."
+            Return "Waiting for UAC consent to recover an abandoned session. VMs will not be stopped automatically."
+        Case "RECOVERING"
+            If $ru Then Return "Проверка старого контроллера, служб и документов владения перед очисткой."
+            Return "Verifying old controller, services and ownership receipts before cleanup."
         Case "CONSENT_FINISH"
             If $ru Then Return "Ожидание UAC Windows для очистки. Драйверы сохраняются до подтверждённого завершения."
             Return "Waiting for Windows UAC approval to clean up. Drivers remain until cleanup is verified."
@@ -87,6 +96,7 @@ Func _MSW_Show($root, $workspace)
     Local $start = GUICtrlCreateButton(_MSW_Text("start"), 20, 232, 228, 38)
     Local $stop = GUICtrlCreateButton(_MSW_Text("stop"), 266, 232, 228, 38)
     Local $reopen = GUICtrlCreateButton(_MSW_Text("reopen"), 512, 232, 228, 38)
+    Local $recover = GUICtrlCreateButton(_MSW_Text("recover"), 20, 294, 228, 36)
     Local $close = GUICtrlCreateButton(_MSW_Text("close"), 512, 294, 228, 36)
     Local $s = _MS_New($root, $workspace), $last = "", $tick = TimerInit()
     GUISetState(@SW_SHOW, $h)
@@ -99,6 +109,10 @@ Func _MSW_Show($root, $workspace)
                 _MS_Stop($s)
             Case $reopen
                 _MS_Reopen($s)
+            Case $recover
+                ; Never auto-delete services or guests. Every recovery needs
+                ; an explicit click AND a separate Windows consent action.
+                _MS_Recover($s)
             Case $close, $GUI_EVENT_CLOSE
                 If $s["state"] == "IDLE" Or $s["state"] == "CLEAN" Or $s["state"] == "BLOCKED" Or $s["state"] == "FAILED" Then ExitLoop
                 _MS_Stop($s) ; do not abandon a live normal session on window close
@@ -116,6 +130,7 @@ Func _MSW_Show($root, $workspace)
             GUICtrlSetState($start, ($canStart ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($stop, ($canStop ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($reopen, ($canReopen ? $GUI_ENABLE : $GUI_DISABLE))
+            GUICtrlSetState($recover, (($s["state"] == "IDLE" And $s["separated"]) ? $GUI_ENABLE : $GUI_DISABLE))
             $last = $display
         EndIf
         Sleep(15)

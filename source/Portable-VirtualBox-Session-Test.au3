@@ -9,8 +9,14 @@ If Not _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) Then
     Exit 9
 EndIf
 If $CmdLine[0] > 0 And $CmdLine[1] == "--elevation-worker" Then
-    If $CmdLine[0] <> 4 Then Exit 64
-    If Not StringRegExp($CmdLine[3], "^[1-9][0-9]{0,8}$") Or Not StringRegExp($CmdLine[4], "^[1-9][0-9]{0,2}$") Then Exit 64
+    If $CmdLine[0] < 4 Or $CmdLine[0] > 5 Then Exit 64
+    If Not StringRegExp($CmdLine[3], "^[1-9][0-9]{0,8}$") Then Exit 64
+    If $CmdLine[2] == "Recover" Then
+        If $CmdLine[0] <> 5 Then Exit 64
+        If Not StringRegExp($CmdLine[4], "^[1-9][0-9]{0,8}$") Or Not StringRegExp($CmdLine[5], "^[1-9][0-9]{0,2}$") Then Exit 64
+        Exit _PB_RunRequest(@ScriptDir, "Recover", Int($CmdLine[3]), Int($CmdLine[5]), Int($CmdLine[4]))
+    EndIf
+    If $CmdLine[0] <> 4 Or Not StringRegExp($CmdLine[4], "^[1-9][0-9]{0,2}$") Then Exit 64
     Exit _PB_RunRequest(@ScriptDir, $CmdLine[2], Int($CmdLine[3]), Int($CmdLine[4]))
 EndIf
 Local $preferences = _LS_Load(@ScriptDir)

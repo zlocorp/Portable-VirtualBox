@@ -58,6 +58,7 @@ Func _MS_New($root, $workspace)
     $s["session"] = ""
     $s["separated"] = $g_MS_Separated
     $s["cycle"] = 0
+    $s["former_pid"] = 0
     $s["app_system"] = $root & "\app64"
     $s["worker"] = _MP_New()
     $s["manager"] = _MP_New()
@@ -101,7 +102,7 @@ EndFunc
 ; request worker remains tracked; never mark it failed on a wall-clock timeout
 ; because approval could arrive after that and mutate services asynchronously.
 Func _MS_ConsentPending($state)
-    Return IsString($state) And ($state == "CONSENT_PREPARE" Or $state == "CONSENT_FINISH")
+    Return IsString($state) And ($state == "CONSENT_PREPARE" Or $state == "CONSENT_FINISH" Or $state == "CONSENT_RECOVER")
 EndFunc
 
 Func _MS_ConsentPhase($separated, $action)
@@ -113,15 +114,23 @@ Func _MS_ConsentPhase($separated, $action)
         Case "Finish"
             If $separated Then Return "CONSENT_FINISH"
             Return "CLEANING"
+        Case "Recover"
+            If $separated Then Return "CONSENT_RECOVER"
+            Return "BLOCKED"
         Case Else
             Return "BLOCKED"
     EndSwitch
 EndFunc
 
 Func _MS_Worker(ByRef $s, $action)
-    If $action <> "Prepare" And $action <> "Finish" Then Return False
+    If $action <> "Prepare" And $action <> "Finish" And $action <> "Recover" Then Return False
     If $s["separated"] Then
-        Local $privileged = _PB_Start($s["root"], $action, $s["cycle"])
+        Local $privileged = _MP_New()
+        If $action == "Recover" Then
+            $privileged = _PB_StartRecover($s["root"], $s["former_pid"], $s["cycle"])
+        Else
+            $privileged = _PB_Start($s["root"], $action, $s["cycle"])
+        EndIf
         $s["worker"] = $privileged
         Return $privileged["status"] == "STARTED"
     EndIf
@@ -133,6 +142,94 @@ Func _MS_Worker(ByRef $s, $action)
     Local $p = _MP_Start($exe, $args, $s["workspace"])
     $s["worker"] = $p
     Return $p["status"] == "STARTED"
+EndFunc
+
+; Read-only candidate discovery is a convenience to propose ONE old protected
+; session. It is NEVER cleanup authority: the helper revalidates the exact
+; protected original receipt, SID, driver and service identities. Multiple
+; candidates, live owner, unreadable directory or reparse paths always block.
+Func _MS_FindRecoverable($root)
+    Local $out[]
+    $out["status"] = "NONE"
+    $out["old_pid"] = 0
+    $out["cycle"] = 0
+    Local $store = _PB_Store()
+    If $store == "" Then
+        $out["status"] = "UNKNOWN"
+        Return $out
+    EndIf
+    If Not FileExists($store) Then Return $out
+    If _PP_DirectoryState($store) <> 1 Then
+        $out["status"] = "UNKNOWN"
+        Return $out
+    EndIf
+    Local $h = FileFindFirstFile($store & "\pvbox-manager-*")
+    If $h = -1 Then Return $out
+    While 1
+        Local $name = FileFindNextFile($h)
+        If @error Then ExitLoop
+        If Not StringRegExp($name, "^pvbox-manager-[1-9][0-9]{0,8}-[1-9][0-9]{0,2}$") Then ContinueLoop
+        Local $folder = $store & "\" & $name
+        If _PP_DirectoryState($folder) <> 1 Then
+            $out["status"] = "UNKNOWN"
+            ExitLoop
+        EndIf
+        If Not FileExists($folder & "\session.json") Or Not FileExists($folder & "\controller.json") Then ContinueLoop
+        If FileExists($folder & "\payload-removed.json") Then ContinueLoop
+        Local $parts = StringRegExp($name, "^pvbox-manager-([1-9][0-9]{0,8})-([1-9][0-9]{0,2})$", 1)
+        If Not IsArray($parts) Then
+            $out["status"] = "UNKNOWN"
+            ExitLoop
+        EndIf
+        Local $former = Int($parts[0]), $cycle = Int($parts[1])
+        If $former == @AutoItPID Or ProcessExists($former) Then ContinueLoop
+        If $out["status"] == "FOUND" Then
+            $out["status"] = "AMBIGUOUS"
+            ExitLoop
+        EndIf
+        $out["status"] = "FOUND"
+        $out["old_pid"] = $former
+        $out["cycle"] = $cycle
+    WEnd
+    FileClose($h)
+    Return $out
+EndFunc
+
+; Explicit, CI-only orphan cleanup with a fresh non-admin controller.
+Func _MS_Recover(ByRef $s)
+    If $s["state"] <> "IDLE" Or Not $s["separated"] Or Not _MS_Allowed($s["root"], $s["workspace"]) Or Not _PB_Medium() Then Return False
+    Local $choice = _MS_FindRecoverable($s["root"])
+    If $choice["status"] <> "FOUND" Then
+        _MS_State($s, "BLOCKED", "recovery-candidate-" & $choice["status"])
+        Return False
+    EndIf
+    Local $installed = _PortableInstalledVBoxDetected(), $activity = _PortableCountVirtualBoxProcesses()
+    If Not IsBool($installed) Or $installed Or $activity <> 0 Then
+        _MS_State($s, "BLOCKED", "recovery-foreign-or-active-processes")
+        Return False
+    EndIf
+    Local $a = DllCall("kernel32.dll", "handle", "CreateMutexW", "ptr", 0, "bool", True, "wstr", "Global\PortableVirtualBox.ManagerExperiment")
+    If @error Or $a[0] = 0 Then
+        _MS_State($s, "BLOCKED", "recovery-lock-failed")
+        Return False
+    EndIf
+    Local $h = $a[0], $e = DllCall("kernel32.dll", "dword", "GetLastError")
+    If @error Or $e[0] = 183 Then
+        DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $h)
+        _MS_State($s, "BLOCKED", "another-session-or-unknown-lock")
+        Return False
+    EndIf
+    $s["mutex"] = $h
+    $s["former_pid"] = $choice["old_pid"]
+    $s["cycle"] = $choice["cycle"]
+    $s["session"] = _PB_Store() & "\pvbox-manager-" & $s["former_pid"] & "-" & $s["cycle"]
+    $s["app_system"] = $s["session"] & "\app64"
+    If Not _MS_Worker($s, "Recover") Then
+        _MS_State($s, "FAILED", "recovery-worker-not-started")
+        Return False
+    EndIf
+    _MS_State($s, "CONSENT_RECOVER")
+    Return True
 EndFunc
 
 Func _MS_Start(ByRef $s)
@@ -252,7 +349,7 @@ EndFunc
 Func _MS_Tick(ByRef $s)
     Local $state = $s["state"]
     If $state == "PREPARING" Or $state == "CLEANING" Or $state == "CONFIGURING" Or _
-            _MS_ConsentPending($state) Then
+            _MS_ConsentPending($state) Or $state == "RECOVERING" Then
         Local $worker = $s["worker"], $status = _MP_Poll($worker)
         $s["worker"] = $worker
         If $status == "PRESENT" Then
@@ -268,6 +365,14 @@ Func _MS_Tick(ByRef $s)
         If $s["separated"] And $worker["exit_code"] = 1223 Then
             If $state == "CLEANING" Or $state == "CONSENT_FINISH" Then
                 _MS_State($s, "CLEANUP_DECLINED", "click-finish-to-retry-elevation")
+            ElseIf $state == "CONSENT_RECOVER" Or $state == "RECOVERING" Then
+                ; A denied recovery does not change the old protected session.
+                If $s["mutex"] <> 0 Then
+                    DllCall("kernel32.dll", "bool", "ReleaseMutex", "handle", $s["mutex"])
+                    DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $s["mutex"])
+                    $s["mutex"] = 0
+                EndIf
+                _MS_State($s, "IDLE", "recovery-consent-cancelled-resources-retained")
             Else
                 Local $installed = _PortableInstalledVBoxDetected()
                 If Not IsBool($installed) Or $installed Or FileExists($s["session"]) Or _PortableCountExistingServices() <> 0 Or _PortableCountVirtualBoxProcesses() <> 0 Then
@@ -285,7 +390,7 @@ Func _MS_Tick(ByRef $s)
             _MS_State($s, "FAILED", "worker-failed-no-guessed-cleanup")
             Return
         EndIf
-        If $state == "CLEANING" Or $state == "CONSENT_FINISH" Then
+        If $state == "CLEANING" Or $state == "CONSENT_FINISH" Or $state == "CONSENT_RECOVER" Or $state == "RECOVERING" Then
             If _PortableCountExistingServices() <> 0 Or _PortableCountVirtualBoxProcesses() <> 0 Then
                 _MS_State($s, "FAILED", "host-not-clean")
                 Return
