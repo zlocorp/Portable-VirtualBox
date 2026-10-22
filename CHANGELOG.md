@@ -4,6 +4,15 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added / verified · 2026-10-22 interrupted driver preparation recovery
+
+- Implemented **protected one-shot prepare checkpoints** in the separate compiled helper. A prepared, pinned Oracle runtime records an original controller-bound `prepare-intent.json` before system effects; after actual signed VBoxSup INF staging, verified driver Start, and explicit VBoxSDS registration, their distinct protected receipts support a narrowly scoped `Recover` even without the usual committed `session.json`.
+- New `vbox_sup_partial_cleanup.ps1` verifies live Windows state against the exact original pinned driver, published OEM INF and signed VBoxSDS image, original-controller departure, currently authorized same-user recovery controller, no running VBox/VM processes, exact receipt ancestry, and no previous cleanup. It stops/removes only the proven-owned service/package, rejects unknown state and does not use `pnputil /force` or global process-name kills.
+- The existing **Recover after failure** action also discovers an interrupted protected preparation. A new Start refuses an abandoned protected session rather than overwriting its evidence. No automatic elevated action is performed.
+- [Real Windows Server 2022 signed-driver CI **39776758692**](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39776758692): **PASS** for actual Stage, Start and Sds interruption/recovery; old-controller/live-owner denial, missing stage receipt denial, replay denial, clean services/INF afterward and preserved user fixture data. Downloaded and independently inspected 94 evidence files: top-level proof reports `validated_checkpoints=["Stage","Start","Sds"]`, `unauthorized_cleanups=0`, `all_owned_services_removed=true`, and individual receipts report `cleanup_basis=PartialRecovery`.
+- **Not claimed:** recovery during incomplete driver installation **before** a durable verified stage receipt, arbitrary in-flight SDS registration, unexpected foreign Windows resources, physical reboot/power loss, interactive Windows 11 UAC/consent or a production build. Unknown cases continue to require manual inspection.
+
+
 ### Added / verified · 2026-10-22 abandoned Manager session recovery (CI-only)
 
 - A separately compiled, fixed-action elevated helper accepts an **explicit** `Recover` request for one old `PID + cycle`, with a new medium-token controller. It independently checks protected original controller/session receipts, same user and pinned launcher/runtime, expired controller PID, service/driver identity and **zero running VirtualBox processes** before removal. No unknown path or user-supplied shell commands are accepted.
