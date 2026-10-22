@@ -55,6 +55,8 @@ class OrphanRecovery(unittest.TestCase):
         workflow = read('.github/workflows/orphan-recovery.yml')
         self.assertIn('check_orphan_recovery.ps1', workflow)
         fixture = read('tests/windows/check_orphan_recovery.ps1')
+        self.assertIn('function Start-Medium([string]$Image,[string]$Arguments', fixture)
+        self.assertNotIn('[string]$Args,', fixture)
         for needle in ('live-owner-refusal', 'live-guest-refusal',
                        'Recover', 'cleanup_verified', 'payload-removed.json',
                        'live-owner-refusal', 'Original VM data changed during recovery'):

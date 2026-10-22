@@ -21,8 +21,8 @@ Add-Type -Path @((Join-Path $PSScriptRoot '../../source/privilege/TokenFacts.cs'
 $proof=[ordered]@{source_commit=$env:GITHUB_SHA;orphan_recovery_verified=$false;live_owner_refused=$false;live_guest_refused=$false;
     protected_payload_removed=$false;original_vm_data_preserved=$false;interactive_uac_verified=$false;automatic_cleanup=$false}
 $old=$null;$new=$null;$guest=$null
-function Start-Medium([string]$Image,[string]$Args,[string]$Label,[string]$Working=$root) {
-    $p=[MediumProcess]::Start($Image,$Args,$Working,(Join-Path $out ($Label+'.stdout.txt')),(Join-Path $out ($Label+'.stderr.txt')))
+function Start-Medium([string]$Image,[string]$Arguments,[string]$Label,[string]$Working=$root) {
+    $p=[MediumProcess]::Start($Image,$Arguments,$Working,(Join-Path $out ($Label+'.stdout.txt')),(Join-Path $out ($Label+'.stderr.txt')))
     [MediumProcess]::LastFacts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out ($Label+'-token.json')) -Encoding utf8
     return $p
 }
