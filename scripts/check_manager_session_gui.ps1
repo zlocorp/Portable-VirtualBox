@@ -95,11 +95,31 @@ function Click-Button([Diagnostics.Process]$Process,[string]$Caption) {
     if ($button -eq [IntPtr]::Zero -or -not [ManagerUiProbe]::IsWindowEnabled($button)) { throw "Button unavailable: $Caption" }
     if (-not [ManagerUiProbe]::PostMessageW($button,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero)) { throw "Cannot click $Caption" }
 }
+# Startup is asynchronous: the top-level window may exist before AutoIt
+# has assigned localized button captions. Never bypass the disabled safety gate.
+function Wait-MainButton([Diagnostics.Process]$Process,[int]$Seconds=20) {
+    $timer=[Diagnostics.Stopwatch]::StartNew()
+    while($timer.Elapsed.TotalSeconds -lt $Seconds) {
+        $window=Window-For $Process
+        if ($window -ne [IntPtr]::Zero) {
+            $button=[ManagerUiProbe]::Child($window,'Start / Stop VirtualBox',$false)
+            if ($button -ne [IntPtr]::Zero) {
+                if (-not [ManagerUiProbe]::IsWindowEnabled($button)) {
+                    throw 'Main launcher Start/Stop disabled by safety gate; no automatic override'
+                }
+                return $button
+            }
+        }
+        Start-Sleep -Milliseconds 150
+    }
+    throw ('Main launcher button not visible after '+$Seconds+'s; check GUI localization and initialization')
+}
 # The ordinary compiled EXE owns its normal GUI. Opening the Manager session
 # is a genuine user click on its own primary window, not a separate test EXE.
 function Open-SessionWindow([Diagnostics.Process]$Process) {
     if ($MainLauncher) {
-        Click-Button $Process 'Start / Stop VirtualBox'
+        $button=Wait-MainButton $Process
+        if (-not [ManagerUiProbe]::PostMessageW($button,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero)) { throw 'Cannot open main launcher Manager session' }
     }
     Await-State $Process 'IDLE' 20
 }
