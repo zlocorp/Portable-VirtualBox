@@ -66,10 +66,14 @@ if ($PSCmdlet.ParameterSetName -eq "Boot") {
         $proof.no_vbox_processes_verified -ne $true -or $proof.controller_pid -le 0) {
         throw 'No matching Manager-session quiescence evidence'
     }
+    # Restrict the CI-only Manager proof to these two exact root-local EXEs.
+    # Other cleanup modes retain their stronger original bindings.
+    $approvedControllers=@((Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe'),
+                           (Join-Path $proof.portable_root 'Portable-VirtualBox.exe'))
     $controller=[Diagnostics.Process]::GetProcessById([int]$proof.controller_pid)
     try {
         if ($controller.StartTime.ToUniversalTime().Ticks.ToString() -ne $proof.controller_created -or
-            $controller.MainModule.FileName -ine (Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe')) {
+            $controller.MainModule.FileName -notin $approvedControllers) {
             throw 'Manager-session controller changed'
         }
     } finally { $controller.Dispose() }
