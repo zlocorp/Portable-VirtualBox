@@ -1,0 +1,39 @@
+# Features and differences from the original
+
+Updated **2026-10-22**. The comparison baseline is upstream `vboxme/Portable-VirtualBox` at `5b58dbbe701c3e2eb348942a9059708063b0cb96`, not every community fork. This branch is still a **diagnostic development preview**, not a replacement for an existing working launcher.
+
+| Capability | Current status | What that means / evidence |
+| --- | --- | --- |
+| Native RU/EN shell and UTF-8 CLI | Public preview | Locale switching, diagnostics, copy report, localized readiness; `LauncherI18n.au3`, native catalog tests |
+| Remember language / restore Windows language | Public preview | Explicit save only, portable `data/launcher.ini`; Deac2-inspired independent adaptation; native + compiled public CLI tests |
+| Report all missing runtime files | Public preview | 15 required EXE/DLL/driver inputs; regular/nonempty paths; **not signature verification**; `PortableApp.au3` |
+| Identify missing portable directories | Public preview | Names `data/Machines` etc.; preparation preserves existing user data |
+| Distinguish Manager / guest / background processes | Public preview | Query-only diagnostic snapshot; not VM state or teardown permission |
+| About, authors and reuse notices | Public preview | Concise GUI/`--about`; detailed authors and component notices in one CREDITS file, also included in ZIP |
+| Legacy binary-free source/build | Implemented | Old AutoIt/7za/DevCon/SnetCfg removed; signed external compiler; source-tree guard |
+| Oracle 7.2.22 verified file-only preparation | Developer tooling / CI | Exact pinned official package, MSI/CAB extraction, hashes and publisher checks; not a user-facing installer |
+| Empty VM boot and own-resource teardown | CI-only | Actual compiled AutoIt and signed VBoxSup on disposable Windows Server; not a shipped user flow |
+| Offline portable `data/` backup, verify and fresh-root restore | **Public preview** | GUI + CLI; SHA-256 verification, non-overwriting staged publish, Unicode/snapshots subfolders, explicit cancellation and refusal during VBox activity. Restore creates only a new folder, never merges old profiles. External media are NOT copied; not a VM snapshot. |
+| VM/media/global-registry portability audit | **Public preview** | RU/EN GUI and `--audit-vms`: read-only `.vbox` snapshot/medium paths and `VirtualBox.xml` registrations; flags external/missing disks, external registered machines, unregistered VM files. Backup of `data` warns but never copies external disks. Initial [native/compiled Windows checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39790408168) and [real Oracle-created `.vbox`](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39791602687) passed; [global registry native tests 39793670330](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670330), [compiled Windows CLI 39793670380](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670380) and [actual Oracle 7.2.22 XML 39793670384](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670384) **passed**. |
+| Controlled powered-off root/drive relocation | CI-only | Fixture UUID/data preservation; not general cross-host/snapshot migration |
+| Manager Start / Finish / Reopen and guest-aware cleanup | **Integrated experiment, CI verified** | Real compiled GUI + Oracle Manager; live VM preserved, second controller refused, two clean sessions/same UUID; after cleanup waits for 2.5s stable absence of services/processes before another start; explicit transient-blocker retry with full preflight. [Real GUI run 39791350463](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39791350463). Separate non-distributed EXE, not production UAC |
+| Explicit abandoned Manager session recovery | **Integrated CI-only experiment** | A separate `Recover` verb checks original protected session receipts, departed controller, same user, no active guest/background and exact pinned services before one-shot cleanup. [Real Windows 39761908190](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39761908190) preserved VM config and cleared own VBoxSup/SDS after refusing live owner/guest. **No production UAC, reboot or arbitrary mid-operation acceptance; partial Stage/Start/Sds checkpoint rollback is now verified separately.** |
+| Protected partial VBoxSup/VBoxSDS prepare recovery | **CI-only experiment, verified** | Explicit `Recover` after prior controller departure: protected **Stage / Start / Sds** receipts, exact published OEM INF / signed pinned driver / original user proof, and one-shot fail-closed teardown. [Three real rollback phases + forged VBoxSup/SDS refusal on separate hosts 39778793621](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39778793621), independently inspected proofs; **not recovery inside an uncommitted driver operation or after power loss**. |
+| Production Manager/VM Start/Stop | **Not yet enabled for ordinary users** | Integrated experimental frontend now works; the privileged adapter and Windows 11 standard-user acceptance remain open |
+| Separate elevated helper / normal-user UAC | **Partial, CI-only** | Fixed helper plus protected Oracle runtime: medium-privilege Manager/guest, forged-input refusal, denied protected writes and two clean cycles verified in [39649261984](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261984). Interactive `ShellExecuteExW runas` delivery remains **unverified**: [39649261666](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39649261666) failed with the frontend still `IDLE`. Not a production UAC approval. |
+| Existing VM import, snapshots and media-chain migration | Planned | Read-only inventory foundation exists; no automatic rewrite or unregister/delete |
+| Transactional Oracle updater / rollback | Planned | Download/extraction safeguards exist; no complete end-user updater |
+| USB passthrough / bridged-network driver management | Deferred | No automatic installation of extra drivers |
+| New community icon/splash | Not adopted | Optional artwork/license review; old splash was removed |
+
+## Substantive architecture changes
+
+Compared with the inherited launcher/build, this branch removes bundled old executables, separates file preparation from system installation, uses explicit process observations and refuses unknown states rather than guessing. The public GUI does not request blanket administration. Ordinary data setup is explicit, and reused work is credited in CREDITS without adding contributor lists to the interface.
+
+Those are engineering differences, **not a blanket security certification**. Signed external packages do not make the unsigned launcher trusted, and its CI-only environment markers are not an access-control boundary.
+
+## Verification boundaries
+
+Linux tests exercise parsing, packaging, hashes and contracts. Native Windows tests execute compiled AutoIt helpers. Public CLI tests exercise a separately launched EXE across restarts and root relocation. Real driver/empty-VM experiments use disposable Windows Server hosts only. GUI visual/DPI review, Windows 11 standard-user transitions and real guest OS/disk acceptance remain pending.
+
+[Community adoption ledger](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/COMMUNITY-ADOPTION.md) · [Changelog](CHANGELOG.md) · [Credits](CREDITS.md)

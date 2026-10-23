@@ -1,0 +1,97 @@
+name: Verified Oracle package preparation (no installation)
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - .github/workflows/inspect-oracle.yml
+      - scripts/inspect_oracle.ps1
+      - scripts/prepare_app64.py
+      - scripts/oracle_release.py
+  pull_request:
+    branches: [work/upstream-baseline-2026]
+    paths:
+      - .github/workflows/**
+      - scripts/**
+      - source/**
+      - tests/**
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: oracle-preparation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  inspect:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Python regression suite on Windows
+        shell: pwsh
+        run: |
+          python -X utf8 -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Python tests failed' }
+      - name: Download, verify, passively extract and inspect MSI
+        shell: pwsh
+        run: ./scripts/inspect_oracle.ps1 -WorkDirectory (Join-Path $env:RUNNER_TEMP 'verified-oracle-inspection')
+      - name: Prepare and independently verify app64 (no MSI execution)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'verified-oracle-inspection'
+          $exe = Join-Path $work 'VirtualBox-7.2.22-175245-Win.exe'
+          $expected = 'afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f'
+          function Snapshot-VBoxServices {
+            @((Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop | Where-Object PSChildName -match '^VBox' | ForEach-Object {
+              [pscustomobject]@{name=$_.PSChildName; properties=(Get-ItemProperty -LiteralPath $_.PSPath)}
+            }) | ConvertTo-Json -Depth 5 -Compress)
+          }
+          $before = Snapshot-VBoxServices
+          $inputsBefore = @(Get-ChildItem (Join-Path $work 'extracted') -File | Get-FileHash -Algorithm SHA256 | Sort-Object Path | Select-Object Path,Hash | ConvertTo-Json -Compress)
+          $parent = New-Item -ItemType Directory -Path (Join-Path $work 'portable Тест')
+          $app = Join-Path $parent.FullName 'app64'
+          python -X utf8 scripts/prepare_app64.py $exe $app --sha256 $expected --version 7.2.22
+          if ($LASTEXITCODE -ne 0) { throw 'Application staging failed' }
+          $report = Get-Content -LiteralPath (Join-Path $app '.prepared.json') -Raw | ConvertFrom-Json
+          # Counts were independently read from the pinned MSI using COM in c417037.
+          # Exact coverage measured on a clean, signed, pinned 7.2.22 host.
+          if ($report.file_count -ne 185 -or $report.total_bytes -ne 247834716) { throw 'Pinned 7.2.22 package coverage differs from verified baseline' }
+          Write-Host ("Verified 7.2.22 prepared file count: " + $report.file_count)
+          Write-Host ("Verified 7.2.22 prepared total bytes: " + $report.total_bytes)
+          foreach ($item in @('drivers/vboxsup/VBoxSup.sys','drivers/vboxsup/VBoxSup.inf','drivers/vboxsup/VBoxSup.cat')) {
+            $path = Join-Path $app $item
+            Write-Host ("Verified 7.2.22 " + $item + " SHA256: " + (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant())
+          }
+          if (@(Get-ChildItem -LiteralPath $app -File -Recurse).Count -ne ($report.file_count + 1)) { throw 'Unexpected staged file set' }
+          foreach ($entry in $report.files) {
+            $file = Get-Item -LiteralPath (Join-Path $app $entry.path)
+            if (($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Reparse point in prepared tree' }
+            if ($file.Length -ne $entry.size -or (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.sha256) { throw 'Independent output hash check failed' }
+          }
+          $main = Get-Item -LiteralPath (Join-Path $app 'VirtualBox.exe')
+          if ($main.VersionInfo.FileVersion -notmatch '^7\.2\.22(?:\.|$)') { throw 'Prepared executable version mismatch' }
+          $sig = Get-AuthenticodeSignature -LiteralPath $main.FullName
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Oracle') { throw 'Prepared VirtualBox.exe signature invalid' }
+          $inputsAfter = @(Get-ChildItem (Join-Path $work 'extracted') -File | Get-FileHash -Algorithm SHA256 | Sort-Object Path | Select-Object Path,Hash | ConvertTo-Json -Compress)
+          if (($inputsBefore | Out-String) -cne ($inputsAfter | Out-String)) { throw 'Prepared package inputs changed' }
+          if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Wrapper changed' }
+          if (($before | Out-String) -cne ((Snapshot-VBoxServices) | Out-String)) { throw 'VBox service registry changed' }
+          $report | Add-Member -NotePropertyName sourceCommit -NotePropertyValue $env:GITHUB_SHA
+          $report | Add-Member -NotePropertyName independentFileHashesChecked -NotePropertyValue $true
+          $report | Add-Member -NotePropertyName vboxServiceRegistryUnchanged -NotePropertyValue $true
+          $report | Add-Member -NotePropertyName mainExecutableSignature -NotePropertyValue $sig.Status.ToString()
+          $report | Add-Member -NotePropertyName mainExecutableVersion -NotePropertyValue $main.VersionInfo.FileVersion
+          $report | ConvertTo-Json -Depth 10 | Set-Content '.reports/app64-inspection.json' -Encoding utf8
+          Write-Host "PASS: $($report.file_count) files, $($report.total_bytes) bytes; source hashes and VBox service registry unchanged. No executable run."
+      - name: Retain metadata only, not Oracle payloads
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: oracle-package-inspection
+          path: |
+            .reports/oracle-inspection.json
+            .reports/app64-inspection.json
+          if-no-files-found: warn
+          retention-days: 7

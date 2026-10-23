@@ -1,0 +1,39 @@
+# Community adoption ledger
+
+Rechecked **2026-10-22** against the original repository's full list of **28 PRs** and the current default branches of Deac2, Deac2 NewMenuTest, ThatAdminGuy, bitamind and SpruceGuy7. None of these sources has new code since the review dated 2026-10-21. This audit explicitly separates **tested implementation**, **CI-only adaptation**, **unfinished required work** and **intentionally unused legacy code**. Original review date 2026-10-21. Author/source details: [CREDITS.md](../CREDITS.md). This ledger is the implementation follow-up to the [2026-10-21 review](REVIEW-2026-10-21-UPSTREAM-FORKS-PRS.md). “Useful” does not mean every legacy patch can be merged safely.
+
+| ID | Source / useful behavior | Status in this branch | Implementation / validation | Still open |
+| --- | --- | --- | --- | --- |
+| COM-01 | Deac2: saved first-run language and settings UX | **Independently adapted** | `LauncherSettings.au3`, GUI Save/Windows-language, `--save-language`; native fixture and multi-launch public CLI tests | Full settings wizard, arbitrary profile paths and visual Windows 11 review |
+| COM-02 | #103/#105: missing CLI/failed extraction must be explained | **Independently adapted** | `PortableApp.au3` checks the existing 15-file staging requirement; `--app-status` and GUI readiness; native partial/empty/collision fixtures | Signature/runtime compatibility is a separate gate, not proven by file presence |
+| COM-03 | #92: missing Machines after relocation | **Independently adapted** | `PortableProfile.au3` reports precise missing folders; readiness names them; setup remains non-destructive | General cross-host and snapshot/medium-chain migration |
+| COM-04 | ThatAdminGuy / #90: Manager is not a guest; headless process matters | **CI-verified session + main GUI source integration, not a release** | `ManagerSession.au3` runs real Start/Finish/Reopen; `LauncherGui.au3` now opens those controls from the normal EXE only on the disposable CI boundary. Retained Manager handle, guest-aware cleanup, two sessions ([evidence](EXECUTION-2026-10-21-manager-session.md)) | Real Windows 11 UAC/standard-user runtime and main-EXE end-to-end Windows acceptance still required |
+| COM-05 | bitamind: Oracle VBoxSDS registration APIs | **CI-verified, no unsafe fork code imported** | Fixed elevated helper and exact-owned signed SDS/driver operations, `--regservice`/`--unregservice`, fail-closed proof and interrupted-recovery checkpoints | Production Windows 11 UAC, reboot and in-flight driver-operation recovery |
+| COM-06 | #92/#95: spaces, Unicode and full-root paths | **Existing coverage retained** | Unicode-path compilation/driver fixtures; saved preference relocation and missing folders additionally tested | Full user-selected paths and adversarial filesystem races |
+| COM-07 | #92: partial/frozen downloads | **Developer implementation, not user setup** | `oracle_release.py` bounds official downloads, pins hashes and publishes only complete artifacts; `prepare_app64.py` stages 185 verified files | **Required for out-of-box use:** first-run download/extract/prepare without Python or user-installed tooling; cancellation/retry GUI |
+| COM-08 | SpruceGuy7 #2: updater must not erase the launcher | **Not implemented (post-core)** | No destructive updater present; package builder refuses overwrite | Transactional updater/rollback with actual launcher survival test; do not deploy prematurely |
+| COM-09 | #69/#68: English clarity and encoding | **Modern catalog maintained independently** | Embedded RU/EN, UTF-8 output, exhaustive key tests, persistent language | Additional locales and visual layout/DPI acceptance |
+| COM-10 | #100: new 7.x icon/splash | **Not adopted** | No new assets copied; old splash stays removed | Optional design/licensing decision after functional runtime |
+
+## Adoption approach
+
+Use suitable code directly, with local interface/error-handling adaptations, retained author/license notices and behavioral checks. Independently reimplement only when there is a concrete incompatibility or unsafe operation. Do not reject a whole fork just because one function needs repair.
+
+The “still open” column above previously mixed follow-up work with complete new features. Production Manager Start/Stop, cross-host VM migration and a transactional updater are not completed patch imports; they are still implementation work. Existing hash/download checks should be reused rather than duplicated. Optional artwork and unused legacy features are not required merely because a PR exists.
+
+A finished adaptation means the intended public behavior works and its tests have run. A diagnostic category, test idea or backlog row does not finish a shutdown controller or updater.
+
+Actual reuse is acknowledged once in CREDITS.md (plus preserved source headers). LICENSE.md and that same CREDITS file travel with the ZIP. The About dialog does not list community contributors. CHANGELOG/FEATURES and this development record stay in the repository.
+
+## Remaining functional sequence
+
+Manager/session startup and shutdown work through a separately compiled experiment and its core controls are now called from the **ordinary main GUI source** on a *disposable host only*. That is meaningful integration, **not proof of ordinary-user functionality**. The outstanding task is to remove CI-only dependencies from a narrowly scoped and reviewed production helper, supply app64 through a normal first-run path, then pass real Windows 11 interactive UAC, guest/disk and cleanup acceptance. Do not postpone suitable code behind further attribution documents or generic infrastructure. Windows 11 standard-user/UAC acceptance remains a real test requirement, not a reason to avoid implementing the flow.
+
+## Recheck decision for the discussed PRs and forks (2026-10-22)
+
+- **No overlooked new upstream PR:** the upstream API returns **28 total**; latest #106 was closed without merge, #100 remains optional/open. Existing merged PRs, including #90/#91/#92/#68/#69/#70, are already within or historically superseded relative to the pinned upstream base. Their *useful behaviours*, not obsolete bundled executables, matter.
+- **Needed and adopted:** Deac2's saved language and first-run clarity; #92/#103/#105 folder/file diagnostics; #95 space/Unicode test cases; ThatAdminGuy/#90 guest-aware Manager lifetime; bitamind's Oracle-specific SDS lifecycle; read-only detection of #104 relocation and external media risks. Our adaptations use present-day interfaces and explicit process/driver ownership rather than global ProcessClose or #RequireAdmin.
+- **Needed but NOT finished:** a non-Python **end-user** first-run download/staging experience (#92/#105), normal Start/Stop through production reviewed UAC helper, interactive Win11 acceptance with a real guest OS, full Deac2-style configurable-path settings if still useful, and a complete recoverable transaction for app updates (SpruceGuy7 #2). Existing developer download scripts and diagnostic buttons are **not** substitutes for the unfinished end-user functions.
+- **Not required to ship basic virtualization:** PR #100 artwork; obsolete translations or extra languages; USB and bridged-network driver installers; any command that kills VBox processes by basename; direct Hyper-V/BCD manipulation; old 7za/DevCon/SnetCfg bundles. These are intentional exclusions, not accidentally missed imports.
+
+**Core priority:** launch, run an actual VM, close Manager without killing the guest, refuse foreign resources, confirm exact-owned cleanup or recover. Do not spend another development cycle on incidental UI/audit features instead of that path.

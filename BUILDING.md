@@ -1,55 +1,66 @@
-To build Portable-VirtualBox from source do the following:
+# Building Portable-VirtualBox (2026 development branch)
 
-### Prerequisites
+This describes the **active** `dev/modernization-2026` project. The historical
+2010s batch/SFX build instructions have been retired.
 
-Obtain and install the following free tools
+## Requirements
 
-* AutoIt version 3.3.8.1 from https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.8.1-setup.exe
-* 7zip from http://www.7-zip.org/
-* Resource Hacker from http://www.angusj.com/resourcehacker/
+- Windows x64 and the official **AutoIt 3.3.18.0** compiler, installed or
+  extracted from [AutoIt](https://www.autoitscript.com/site/autoit/downloads/).
+  The compiler root must contain `Aut2Exe/Aut2exe_x64.exe`.
+- PowerShell 7 (preferred) or Windows PowerShell.
+- Python 3 for non-native tests and packaging.
+- No 7-Zip, DevCon, SnetCfg, Resource Hacker or historical bundled compiler.
 
-## Obtaining the source code
+## Build the current diagnostic preview
 
-Check out the source code from GitHub. For example by using [GitHub on Windows](http://windows.github.com/) or use `git` from the command line like this:
+From the repository checkout:
 
-`git clone https://github.com/vboxme/Portable-VirtualBox.git`
+```powershell
+pwsh -NoProfile -File .\scripts\build.ps1 -AutoItRoot 'C:\Program Files (x86)\AutoIt3'
+python -X utf8 -m unittest discover -s tests -v
+pwsh -NoProfile -File .\scripts\test-native.ps1 -AutoItRoot 'C:\Program Files (x86)\AutoIt3'
+python -X utf8 scripts/check_active_tree.py
+```
 
-This will create a new folder named `Portable-VirtualBox`.
+Windows `build.bat` is a compatibility wrapper around
+`scripts/build.ps1`. It no longer calls any in-repository compiler,
+7za, or release/SFX packager.
 
-## Making a new version with the build script
+Output: `build/Portable-VirtualBox_x64.exe` and `build/SHA256SUMS.txt`.
+To create the **diagnostic-only** ZIP (not a usable hypervisor release):
 
-Run the `build.bat` script. The new version should appear in the `build\release` directory.
+```powershell
+python -X utf8 scripts/package_preview.py --repo . --exe build/Portable-VirtualBox_x64.exe --out build/Portable-VirtualBox-diagnostic-preview.zip
+```
 
-## Making a new version manually
+The compiled GUI only provides read-only Windows diagnostics and user-owned
+portable-folder preparation. Native VM execution and privileged VBoxSup/VBoxSDS
+experiments are fenced to disposable GitHub Actions Windows hosts and are NOT
+available as a supported normal-user start/stop workflow.
 
-### Compiling manually
+Oracle VirtualBox is not shipped in this repository or ZIP. The current
+pinned signed Oracle 7.2.22 preparation and test instructions are in
+[dependency inventory](docs/DEPENDENCIES-2026-10-20.md).
 
-1. Go to the Start menu and select `All programs` -> `AutoIt v3` -> `Compile Script to .exe (x86)`
-2. Use the browse functionality to set:
-  * Source: `Portable-VirtualBox\source\Portable-VirtualBox.au3`
-  * Destination: `Portable-VirtualBox\Portable-VirtualBox.exe`
-  * Custom Icon: `Portable-VirtualBox\source\VirtualBox.ico`
-3. Click `Convert`
+Old translations, splash artwork and executable tools were removed from the
+active tree. Earlier versions remain recoverable in Git history. The old
+launcher source remains deliberately disabled at
+`source/legacy/Portable-VirtualBox.au3.disabled` for historical review.
+Do not run it as a current launcher.
 
-A new `.exe` file is created as `Portable-VirtualBox.exe`. This is Portable-VirtualBox and can be run from the Portable-VirtualBox folder.
+Original author credit and licensing: [LICENSE.md](LICENSE.md).
 
-### Releasing manually
+## Separate Manager-session experiment
 
-To make a release you also need to do the following:
+`./scripts/build.ps1 -AutoItRoot <official-toolchain-root> -SessionExperiment`
+builds `build/Portable-VirtualBox-Session-Test.exe` from its own entrypoint.
+The ordinary build and six-member preview ZIP are unchanged. The experimental
+EXE refuses an ordinary checkout/PC and needs the disposable hosted Windows
+workflow plus its already-elevated effect adapter. These environment checks
+are accident guards, not a security boundary or a production UAC helper.
 
-1. If you have run it in the Portable-VirtualBox folder delete the Portable-VirtualBox folder and do a new git clone and compile so its no junk in the data and app folders from previous runs
-2. Go back to the Portable-VirtualBox folder
-3. Right click on it and select `7zip` -> `Add to archive`
-4. In the 7zip dialog select `Self extracting archive (SFX)` and click `OK` 
-5. This will make a new `.exe` file named `Portable-VirtualBox.exe`
-6. Open the newly created `Portable-VirtualBox.exe` with Resource Hacker find the Icon Group->1->1033
-7. Use the Replace resource function to replace it with the icon at `Portable-VirtualBox\source\VirtualBox.ico`
-8. Save & exit
-
-### AutoIt version when distributing software
-
-Portable-VirtualBox uses a great and powerful scripting language known as AutoIt. Unfortunately some virus creators also use AutoIt with malicious intent. Each time a new version of AutoIt is released some virus is quickly written in it, and some anti-virus vendor then manages to marks sets of instructions found in all AutoIt made software as malicious. This causes many legitimate programs to be accidently flagged as viruses (this is what is known as a [false positive](https://en.wikipedia.org/wiki/Antivirus_software#Problems_caused_by_false_positives)).
-
-Eventually software makers complain and the anti-virus maker realize there mistakes. AutoIt gets cleared again. However this vicious cycle means that if you do not want to get any falsely virus warnings when distributing software that you have built it is best to use an older version of AutoIt. We recommend version 3.3.8.1 that was released in November 2012. 
-
-However if you for some reason want to use the newest version you can download it from http://www.autoitscript.com/site/autoit/downloads/ ( you need "AutoIt Full Installation" ).
+The `manager-session.yml` workflow drives actual buttons and Oracle Manager,
+verifies guest preservation/second-controller refusal and two exact-owned
+cleanups. It publishes bounded evidence, not a runnable experimental package.
+See [the execution report](docs/EXECUTION-2026-10-21-manager-session.md).

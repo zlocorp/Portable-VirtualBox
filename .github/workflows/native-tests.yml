@@ -1,0 +1,37 @@
+name: Native AutoIt policy regressions
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - 'source/**'
+      - 'tests/native/**'
+      - scripts/test-native.ps1
+      - .github/workflows/native-tests.yml
+  pull_request:
+    branches: [work/upstream-baseline-2026]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: windows-2022
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Official signed test toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest 'https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.18.0.zip' -OutFile "$env:RUNNER_TEMP/autoit.zip"
+          Expand-Archive "$env:RUNNER_TEMP/autoit.zip" "$env:RUNNER_TEMP/autoit"
+          $compilers = @(Get-ChildItem "$env:RUNNER_TEMP/autoit" -Recurse -Filter Aut2exe_x64.exe -File)
+          if ($compilers.Count -ne 1) { throw 'Ambiguous compiler path' }
+          $sig = Get-AuthenticodeSignature -LiteralPath $compilers[0].FullName
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'Invalid compiler signature' }
+          $root = Split-Path (Split-Path $compilers[0].FullName -Parent) -Parent
+          "AUTOIT_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Execute native policies, not VirtualBox
+        shell: pwsh
+        run: ./scripts/test-native.ps1 -AutoItRoot $env:AUTOIT_ROOT

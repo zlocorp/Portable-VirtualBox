@@ -1,59 +1,79 @@
-Low speed network NAT problems in 7.1.0 rollback to version 7.0.20 anyone who wants can watch can change download url<br>
-On VirtualBox versions ver. 7 and above<br>
-Disable message center notifications and screen capture messages VirtualBoxVM.exe default settings directory:<br>
-Portable-VirtualBox\\.VirtualBox\VirtualBox.xml<br>
-Change or add before launch <ExtraDataItem name=\"GUI/SuppressMessages\" value=\"all\"/> sample:<br><br>
-<ExtraData\><br>
-<ExtraDataItem name=\"GUI/GuestControl/FileManagerVisiblePanel\" value=\"LogPanel\"/><br>
-<ExtraDataItem name=\"GUI/LastItemSelected\" value=\"m=2bd3571f-97f7-4297-b779-2b6f3d9c5ae0\"/><br>
-<ExtraDataItem name=\"GUI/LastWindowPosition\" value=\"121,139,848,438\"/><br>
-<ExtraDataItem name=\"GUI/SessionInformationDialogGeometry\" value=\"296,140,512,360\"/><br>
-<ExtraDataItem name=\"GUI/SuppressMessages\" value=\"all\"/><br>
-<ExtraDataItem name=\"GUI/Tools/LastItemsSelected\" value=\"Welcome,Details\"/><br>
-<\/ExtraData><br><br>
-Save the VirtualBox.xml file
+# Portable-VirtualBox · 2026 modernization
 
-Portable-VirtualBox Change bug
-===================
+[Русский](README.ru.md) · [Features](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/FEATURES.md) · [Changelog](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/CHANGELOG.md)
 
-Portable-VirtualBox is a free and open source software tool that lets you run any operating system from a USB stick without separate installation.
+A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portable-VirtualBox), focused on a small bilingual launcher, verifiable dependencies and portable user data.
 
-More info is available at http://www.vbox.me/
+> **Development preview, not a usable VM launcher yet.** The normal GUI does not start VirtualBox Manager or VMs and does not install drivers. Actual driver/empty-VM tests run only on disposable Windows CI hosts. Windows 11 standard-user/UAC acceptance is still pending.
 
-### Building ###
+## What is different
 
-Please see here for information on how to build from source: [BUILDING](BUILDING.md).
+**Offline portable-data backups and fresh-root recovery.** The ordinary GUI now offers an asynchronous backup/verification action for the entire `data/` tree, with cancellation, SHA-256 checks for each copied file and a non-overwriting `.pending` staging folder. The backup and restore actions never touch drivers, VM processes or Oracle configuration. Restoring always creates a fresh, separate folder; existing files are never merged or overwritten. Copying is blocked while VirtualBox is active. **This is a backup of files under `data/`, not a live VM snapshot:** disk images/media outside `data/` are not included. Interrupted stages are preserved for inspection; use a separate drive for important backups. A restored root contains only portable data and its checksum manifest: supply a launcher and Oracle app64 separately before attempting to run VMs.
 
-### Changelog for VirtualBox ###
+**Check VM portability before copying.** Use the RU/EN **Audit VM portability** GUI action or `--audit-vms` to inspect local `.vbox` configurations, snapshot counts, external/missing virtual disks and machine registrations in `data/.VirtualBox/VirtualBox.xml`. An external registered VM or unregistered `.vbox` file is shown as needing review. Backing up `data` with such findings requires explicit GUI confirmation or prints a CLI warning. External disks are **never included** in that copy. This read-only check does not modify VM XML and does not guarantee that a backup is complete.
 
-<strong>VirtualBox 7.1.0</strong> (released 11.09.2024)
+**A usable diagnostic shell.** Native Russian/English GUI and UTF-8 CLI, remembered language with an explicit “Save language” action, a return to Windows language selection, readable failure reasons, copyable diagnostics and a concise About window. A temporary `--lang` selection never overwrites the saved preference.
 
-This is a major update. The following new features were added:
+**No bundled obsolete executables.** Old AutoIt compilers, 7za, DevCon, SnetCfg, fourteen legacy translation INIs and the old splash were removed. The build uses official external AutoIt **3.3.18.0**. The tested Oracle package is pinned to **7.2.22 r175245**, with exact hashes, publisher checks and file-only MSI/CAB preparation rather than silently running an installer.
 
-<ul><li>GUI: Modernized look and feel, offering a selection between Basic and Experienced user level with reduced or full UI functionality
-</li><li>OCI Integration: Performance dashboard now shows resource usage for cloud VMs
-</li><li>OCI Integration: Clone compute instances
-</li><li>OCI Integration: Reset compute instances
-</li><li>Oracle VirtualBox Extension Pack: Update to the PUEL license, removing the evaluation option. For evaluation use of the Extension Pack, please download it from the Oracle Software Delivery Cloud
-</li><li>VRDE: If user does not set up TLS with custom certificates, enable it with self-signed certificate, including issuing a new one before the old one expires
-</li><li>NAT: New engine with IPv6 support
-</li><li>macOS/Arm host: Arm virtualization for Linux and BSD VMs
-</li><li>Linux host and guest: Added Wayland support for Clipboard sharing (bug <a class="new ticket" href="https://www.virtualbox.org/ticket/20808" title="#20808: defect: shared clipboard does not work with Wayland (new)">#20808</a>)
-</li><li>Shared Clipboard: Added initial support for transferring files on Linux and Windows hosts / guests. This requires the 7.1 Guest Additions to be installed. See User Guide for known limitations
-</li><li>Screen Recording: Significant performance improvements for the encoding pipeline, resulting in less CPU usage while recording is active. This requires 7.1 Guest Additions to be installed on Windows guests
-</li></ul><br>
-In addition, the following items were fixed and/or added:
+**Checks that distinguish failure states.** Missing directories, incomplete `app64`, inaccessible/reparse paths, existing installations and unknown host observations are not treated as “ready”. The application inspection names missing or empty required EXEs, DLLs and VBoxSup files. Presence alone is explicitly **not** a signature check or permission to launch.
 
-<ul><li>VMM: Fixed EFLAGS.TF handling for CPUID instructions when Hyper-V is being used (bug <a class="closed ticket" href="https://www.virtualbox.org/ticket/17961" title="#17961: defect: VMM missing rflags.TF handling when advance rip that abused by virtual ... (closed: fixed)">#17961</a>)
-</li><li>virtio-net: Follow up fixes for FreeBSD 12.3 and pfSense 2.6.0 (bug <a class="closed ticket" href="https://www.virtualbox.org/ticket/21201" title="#21201: defect: FreeBSD 12.3 and pfSense 2.6.0 networking no longer works with upgrade ... (closed: fixed)">#21201</a>)
-</li><li>EFI: Ability to add new Microsoft DB/KEX certificates to newly created VMs
-</li><li>Oracle Extension Pack: Fixed shipping the cryptographic support module for full VM encryption
-</li><li>GUI: Improved overall accessibility
-</li><li>GUI: Update the version of Qt used
-</li><li>Unattended Installation: Added support for subiquity- / cloud-init-based installers; this enables installing more modern Linux-based guest OSes in Unattended mode
-</li><li>Unattended Installation: Added support for specifying separate passwords for the user and admin / root accounts
-</li><li>VBoxManage: Added ability to show and (re-)attach to a (video) recording progress of a VM
-</li><li>VBoxManage: Added the ability to query the guest's mount points via a new "mount" Guest Control sub command. Requires at least 7.1 Guest Additions
-</li><li>Python: Our API bindings for Python 2.x is now marked as being deprecated and will be removed in a future version. Please upgrade your code to use Python 3
-</li><li>VBoxShell: Lots of smaller and bigger bugfixes + Python 3.x compatibility
-</li></ul>
+**Portable user preferences and data.** Explicit first-run creation of `data/.VirtualBox`, `data/Machines` and `logs` preserves existing files. The only preference file is `data/launcher.ini`; malformed/foreign settings are not overwritten. Saving uses a same-directory staged replacement and refuses stale `.pending` files. No Oracle XML is rewritten by these public features.
+
+**Manager and guests are not the same process.** Diagnostics separately report Manager, GUI/headless guest processes and background activity. These are observations, not proof that a guest is running or permission to stop/delete anything.
+
+## Try the current preview
+
+Double-click the compiled launcher for the GUI, or use the ordinary CLI:
+
+```powershell
+Portable-VirtualBox.exe --lang ru --help
+Portable-VirtualBox.exe --save-language ru
+Portable-VirtualBox.exe --save-language auto
+Portable-VirtualBox.exe --prepare-profile
+Portable-VirtualBox.exe --app-status
+Portable-VirtualBox.exe --check-readiness
+Portable-VirtualBox.exe --diagnose
+Portable-VirtualBox.exe --audit-vms
+Portable-VirtualBox.exe --about
+Portable-VirtualBox.exe --backup-data "D:\Backups\PortableVBox-2026-10-22"
+Portable-VirtualBox.exe --verify-backup "D:\Backups\PortableVBox-2026-10-22"
+Portable-VirtualBox.exe --restore-backup "D:\Backups\PortableVBox-2026-10-22" "E:\Restored-VBox-Data"
+```
+
+`--save-language ru|en|auto` explicitly creates portable data folders when needed. Other inspection commands do not create them. `--app-status` returns 0 for required nonempty files present, 2 for absent `app64`, and 3 for incomplete/unsafe files. `--check-readiness` returns 3 for a blocker or 2 when preflight is clear but this build's runtime is disabled. Neither exit code enables a VM.
+
+For `--audit-vms`, exit code **0** means no detected portability flags, **2** means review needed or no registered VMs, and **3** means invalid/unsafe observations. None of these is Oracle integrity certification.
+
+A damaged `launcher.ini` is left intact and the launcher falls back to the Windows language. Inspect a stale `launcher.ini.pending` before removing it; it can be evidence of an interrupted write. Do not overwrite a working VirtualBox installation with this preview.
+
+The 2026-10-22 VM audit extension passed [compiled x64 RU/EN and file-only backup regressions](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670380), [23 native AutoIt harnesses](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670330) and [actual Oracle 7.2.22 machine-registry/VM boot/teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670384). These tests ran on disposable Windows Server, **not interactive Windows 11**.
+
+## Manager session integration (experimental)
+
+**Recovery after interrupted driver preparation (experimental):** Protected, owner-bound checkpoints now also allow exact-owned rollback after VBoxSup **Stage**, **Start** or VBoxSDS **registration**, *before* the normal session receipt exists. [Three clean-host rollback and forged-receipt CI scenarios](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39778793621) demonstrated all three phases, rejected live-owner/missing-receipt/replayed operations and refused both a forged VBoxSup stage receipt and a forged VBoxSDS registration marker without changing services or VM data. No speculative cleanup if a system operation was interrupted *before* the corresponding receipt. This is CI-only, not approved end-user recovery; no interactive Windows 11/UAC acceptance.
+
+**Recovery after an abandoned session (experimental):** the separate test GUI now offers an explicit recovery action when a prior protected session remains. The fixed helper independently rejects a still-live original controller, active VMs, foreign/stale receipts and replay; it cleans only exactly owned VBoxSup/SDS and protected staging after positive verification. [Real disposable-host proof](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39761908190) preserved the VM's configuration across recovery. No automatic cleanup, production UAC/Windows 11 approval, power-cut/reboot or arbitrary mid-operation recovery, or release is implied.
+
+A separate compiled test frontend now has working **Start VirtualBox / Finish session / Reopen Manager** controls. [Windows GUI acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39567202279) opened the real Oracle Manager, kept an empty VM running after Manager closed, reopened Manager, refused a second controller, and completed two cleanups with the same VM UUID. This is **not included in the diagnostic ZIP**: its system adapter still requires an already elevated disposable runner, not a production UAC flow. [Evidence and limitations](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-manager-session.md).
+
+## Evidence and limits
+
+Data backups are folders containing `data/` plus `SHA256SUMS.txt`; failed/cancelled operations leave `*.pending` in place, not a misleading finished copy. SHA-256 detects accidental corruption but the manifest is not cryptographically signed. Only **offline** files in the portable `data/` directory are included. Do not infer that VMs with external disks are fully backed up or automatically restorable.
+
+
+[FEATURES.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/FEATURES.md) is the current capability matrix: **public preview**, **CI-only**, **planned**. [CHANGELOG.md](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/CHANGELOG.md) records user-relevant changes under **Unreleased**, not fictional product releases.
+
+The community-adoption implementation `183f35da` passed [x64 build, ordinary compiled CLI and ZIP checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219426), [18 native AutoIt harnesses](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219415) and [compiled empty-VM boot plus exact-owned driver teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548214487). The downloaded preview ZIP was independently inspected: its checksum matches, and credits, notices and both READMEs are included. [Full evidence and environment limits](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-community-adoption.md).
+
+**Not implemented:** production Manager Start/Stop, reviewed privilege-separated UAC helper, general VM migration, power-loss and arbitrary mid-driver-operation recovery, transactional Oracle updates, optional USB/bridged networking. No real guest OS/disk or interactive Windows 11 GUI/DPI acceptance is claimed. A Linux/Windows Server CI pass is not Windows 11 approval.
+
+## Build and packaging
+
+See [build instructions](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/BUILDING.md). `build.bat` delegates to `scripts/build.ps1`; Python runs tests and builds the diagnostic ZIP. Oracle, drivers and VM data are never bundled in that ZIP. The six-file allowlist contains the launcher, preview warning, original license, both READMEs and one consolidated CREDITS file. Developer feature/changelog/adoption documents remain in the repository.
+
+## Authors and license
+
+Based on upstream snapshot `5b58dbbe701c3e2eb348942a9059708063b0cb96`. Original author credits, including **Michael Meyer (michaelm_007) and contributors** and the **vboxme project**, are retained. This modernization is maintained in **zlocorp/Portable-VirtualBox**.
+
+The original **CC BY-NC-SA 3.0** license remains unchanged; see [LICENSE.md](LICENSE.md). Sources, authors and external-component notices are consolidated in [CREDITS.md](CREDITS.md). No affiliation with or endorsement by Oracle, AutoIt or community authors is implied.

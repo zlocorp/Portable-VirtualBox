@@ -1,0 +1,142 @@
+name: Native AutoIt empty-VM boot and exact driver teardown (disposable)
+
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - .github/workflows/native-vm-session.yml
+      - source/PortableCIVM.au3
+      - source/PortableVmInventory.au3
+      - source/PortableCIIntegrated.au3
+      - source/PortableCommand.au3
+      - source/Aut2Exe/**
+      - source/i_data/**
+      - scripts/check_active_tree.py
+      - scripts/build.ps1
+      - build.bat
+      - tests/test_dependency_audit_contract.py
+      - source/Portable-VirtualBox.au3
+      - scripts/check_native_vm_boot.ps1
+      - scripts/native_vm_smoke.ps1
+      - scripts/integrated_native_vm_smoke.ps1
+      - tests/native/test_ci_vm_policy.au3
+      - tests/native/test_portable_command.au3
+      - tests/test_native_boot_receipt.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compiled-native-VM-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-guest-boot:
+    if: github.repository == 'zlocorp/Portable-VirtualBox'
+    runs-on: windows-2022
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Verify active source has no retired binaries or translations
+        shell: pwsh
+        run: |
+          python -X utf8 scripts/check_active_tree.py
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy build dependencies reintroduced' }
+      - name: Verify native VM host evidence contract and PowerShell syntax
+        shell: pwsh
+        run: |
+          python -X utf8 -m unittest tests.test_native_boot_receipt -v
+          if ($LASTEXITCODE -ne 0) { throw 'Native guest boot contract failed' }
+          foreach ($file in @('scripts\check_native_vm_boot.ps1','scripts\native_vm_smoke.ps1','scripts\integrated_native_vm_smoke.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw ("PowerShell parsing failed for $file : " + ($errors -join '; ')) }
+          }
+      - name: Download verified Oracle wrapper and passively inspect MSI
+        shell: pwsh
+        run: ./scripts/inspect_oracle.ps1 -WorkDirectory (Join-Path $env:RUNNER_TEMP 'native-vm-oracle')
+      - name: Prepare app64 under disposable Unicode root
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'Portable Native VM Тест'
+          New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
+          $installer = Join-Path $env:RUNNER_TEMP 'native-vm-oracle\VirtualBox-7.2.22-175245-Win.exe'
+          python -X utf8 scripts/prepare_app64.py $installer (Join-Path $root 'app64') --sha256 afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f --version 7.2.22
+          if ($LASTEXITCODE -ne 0) { throw 'File-only application staging failed' }
+          $sig = Get-AuthenticodeSignature -LiteralPath (Join-Path $root 'app64\VBoxManage.exe')
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Oracle') { throw 'Oracle CLI signature missing' }
+          "NATIVE_VM_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Compile current AutoIt launcher with official signed 3.3.18.0
+        shell: pwsh
+        run: |
+          $uri = 'https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.18.0.zip'
+          Invoke-WebRequest -Uri $uri -OutFile (Join-Path $env:RUNNER_TEMP 'native-vm-autoit.zip')
+          Expand-Archive -LiteralPath (Join-Path $env:RUNNER_TEMP 'native-vm-autoit.zip') -DestinationPath (Join-Path $env:RUNNER_TEMP 'native-vm-autoit') -Force
+          $bins = @(Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'native-vm-autoit') -Recurse -File -Filter 'Aut2exe_x64.exe')
+          if ($bins.Count -ne 1) { throw 'Ambiguous compiler' }
+          $sig = Get-AuthenticodeSignature -LiteralPath $bins[0].FullName
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'AutoIt compiler publisher invalid' }
+          $compilerRoot = Split-Path (Split-Path $bins[0].FullName -Parent) -Parent
+          ./scripts/build.ps1 -AutoItRoot $compilerRoot
+          Copy-Item -LiteralPath 'build/Portable-VirtualBox_x64.exe' -Destination (Join-Path $env:NATIVE_VM_ROOT 'Portable-VirtualBox_x64.exe') -ErrorAction Stop
+      - name: Compiled AutoIt orders driver, native VM, independent check and exact cleanup
+        shell: pwsh
+        run: ./scripts/integrated_native_vm_smoke.ps1 -PortableRoot $env:NATIVE_VM_ROOT -RuntimeTimeoutSeconds 600
+      - name: Audit real Oracle-created .vbox with ordinary compiled read-only launcher
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=Join-Path $env:NATIVE_VM_ROOT 'Portable-VirtualBox_x64.exe'
+          $out=Join-Path $env:RUNNER_TEMP 'real-vm-inventory.txt'
+          $err=Join-Path $env:RUNNER_TEMP 'real-vm-inventory.stderr.txt'
+          $p=Start-Process -FilePath $exe -ArgumentList '--lang en --audit-vms' -PassThru -Wait -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+          if ($p.ExitCode -ne 0) { throw "Real Oracle VM inventory returned $($p.ExitCode): $(Get-Content $err -Raw)" }
+          $report=Get-Content -LiteralPath $out -Raw -Encoding utf8
+          if (-not $report.Contains('pvbox_compiled_native_fixture') -or
+              -not $report.Contains('VMs / snapshots / media / external / missing: 1 / 0 / 0 / 0 / 0')) {
+            throw 'Real Oracle .vbox XML could not be audited as an in-root VM'
+          }
+          if (@(Get-Process -Name VBoxSVC,VBoxSDS,VBoxHeadless,VirtualBoxVM -ErrorAction SilentlyContinue).Count -ne 0) { throw 'Read-only audit started Oracle processes' }
+          Write-Host 'PASS: actual Oracle 7.2.22 VM configuration parsed with ordinary compiled read-only RU/EN catalog'
+      - name: Collect only bounded logs and metadata (never Oracle binaries, VM data, drivers)
+        if: always()
+        shell: pwsh
+        run: |
+          $dest = 'results/compiled-native-vm'
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          foreach ($file in @('native-vm-session.stdout.txt','native-vm-session.stderr.txt')) {
+            $source = Join-Path $env:RUNNER_TEMP $file
+            if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $dest }
+          }
+          $independent = Join-Path $env:RUNNER_TEMP 'native-vm-independent-receipt'
+          if (Test-Path -LiteralPath $independent) {
+            foreach ($name in @('independent-vminfo.stdout.txt','independent-vminfo.stderr.txt')) {
+              $src = Join-Path $independent $name
+              if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $dest }
+            }
+          }
+          foreach ($set in @(
+            @{name='driver-stage';dir='native-vm-sup-stage';file='sup-standalone.json'},
+            @{name='driver-start';dir='native-vm-sup-start';file='sup-start-results.json'},
+            @{name='native-receipt';dir='native-vm-independent-receipt';file='vm-boot-results.json'},
+            @{name='teardown';dir='native-vm-cleanup';file='cleanup-results.json'}
+          )) {
+            $file = Join-Path (Join-Path $env:RUNNER_TEMP $set.dir) $set.file
+            if (Test-Path -LiteralPath $file) {
+              $sub = Join-Path $dest $set.name
+              New-Item -ItemType Directory -Path $sub -Force | Out-Null
+              Copy-Item -LiteralPath $file -Destination $sub
+            }
+          }
+      - name: Publish metadata only
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-AutoIt-VM-boot-and-cleanup
+          path: results/compiled-native-vm/
+          if-no-files-found: warn
+          retention-days: 7
