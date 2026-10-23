@@ -26,6 +26,13 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('Main launcher button not visible after',s)
         self.assertIn('Wait-MainButton $Process',s)
 
+    def test_ci_effect_worker_binds_both_exact_compiled_controller_images(self):
+        worker=(R/'scripts/manager_session_worker.ps1').read_text(encoding='utf-8')
+        self.assertIn("(Join-Path $root 'Portable-VirtualBox.exe')",worker)
+        self.assertIn("(Join-Path $root 'Portable-VirtualBox-Session-Test.exe')",worker)
+        self.assertIn('$parentPath -notin @(',worker)
+        self.assertNotIn("if ($parentPath -ine (Join-Path $root 'Portable-VirtualBox-Session-Test.exe'))",worker)
+
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
         w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
