@@ -40,7 +40,11 @@ $parent=[Diagnostics.Process]::GetProcessById($parentId)
 try {
     $parentPath=$parent.MainModule.FileName
     $parentStart=$parent.StartTime.ToUniversalTime().Ticks.ToString()
-    if ($parentPath -ine (Join-Path $root 'Portable-VirtualBox-Session-Test.exe')) { throw 'Worker not launched by the exact compiled session controller' }
+    # Exact CI-owned controller paths only; never authorise an arbitrary EXE.
+    if ($parentPath -notin @((Join-Path $root 'Portable-VirtualBox-Session-Test.exe'),
+                             (Join-Path $root 'Portable-VirtualBox.exe'))) {
+        throw 'Worker not launched by one of the exact compiled session controllers'
+    }
 } finally { $parent.Dispose() }
 function VBox-Processes { return @(Get-Process -ErrorAction Stop | Where-Object ProcessName -match '^(VBox|VirtualBox)') }
 function Check-App {
