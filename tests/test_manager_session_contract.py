@@ -40,6 +40,12 @@ class ManagerSessionContract(unittest.TestCase):
         self.assertIn('session-lock-create-failed',source)
         self.assertIn('session-lock-result-unknown',source)
 
+    def test_failure_details_preserve_worker_observation_and_exact_exit_code(self):
+        source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('worker-not-confirmed-',source)
+        self.assertIn('worker-failed-no-guessed-cleanup-exit-',source)
+        self.assertIn('$worker["exit_code"]',source)
+
     def test_delayed_oracle_background_never_claims_clean_early(self):
         source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
         gui=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
