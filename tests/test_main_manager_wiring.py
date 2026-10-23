@@ -19,6 +19,13 @@ class MainManagerWiring(unittest.TestCase):
         lang=(R/'source/LauncherI18n.au3').read_text(encoding='utf-8-sig')
         self.assertIn('_LI("gui.manager")',gui)
         self.assertIn('Case "gui.manager"',lang)
+    def test_main_gui_click_is_bounded_and_reports_real_disabled_gate(self):
+        s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
+        self.assertIn('function Wait-MainButton(',s)
+        self.assertIn('Main launcher Start/Stop disabled by safety gate',s)
+        self.assertIn('Main launcher button not visible after',s)
+        self.assertIn('Wait-MainButton $Process',s)
+
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
         w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
