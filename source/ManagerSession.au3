@@ -411,7 +411,7 @@ Func _MS_Tick(ByRef $s)
             Return
         EndIf
         If $status <> "EXITED" Then
-            _MS_State($s, "FAILED", "worker-failed-no-guessed-cleanup")
+            _MS_State($s, "FAILED", "worker-not-confirmed-" & $status)
             Return
         EndIf
         _MP_Release($worker)
@@ -441,7 +441,7 @@ Func _MS_Tick(ByRef $s)
             Return
         EndIf
         If $worker["exit_code"] <> 0 Then
-            _MS_State($s, "FAILED", "worker-failed-no-guessed-cleanup")
+            _MS_State($s, "FAILED", "worker-failed-no-guessed-cleanup-exit-" & $worker["exit_code"])
             Return
         EndIf
         If $state == "CLEANING" Or $state == "CONSENT_FINISH" Or $state == "CONSENT_RECOVER" Or $state == "RECOVERING" Then
