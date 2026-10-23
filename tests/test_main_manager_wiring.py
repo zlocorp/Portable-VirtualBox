@@ -33,6 +33,13 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('$parentPath -notin @(',worker)
         self.assertNotIn("if ($parentPath -ine (Join-Path $root 'Portable-VirtualBox-Session-Test.exe'))",worker)
 
+    def test_manager_cleanup_accepts_only_the_two_exact_controller_images(self):
+        cleanup=(R/'scripts/vbox_sup_cleanup.ps1').read_text(encoding='utf-8')
+        self.assertIn("(Join-Path $proof.portable_root 'Portable-VirtualBox.exe')",cleanup)
+        self.assertIn("(Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe')",cleanup)
+        self.assertIn('$controller.MainModule.FileName -notin $approvedControllers',cleanup)
+        self.assertNotIn("$controller.MainModule.FileName -ine (Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe')",cleanup)
+
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
         w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
