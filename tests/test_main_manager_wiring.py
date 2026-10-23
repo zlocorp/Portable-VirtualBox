@@ -24,6 +24,8 @@ class MainManagerWiring(unittest.TestCase):
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
         self.assertIn('build/Portable-VirtualBox_x64.exe',w)
         self.assertIn("ArgumentList '--version'",w)
+        self.assertNotIn('$p=Start-Process -FilePath $exe -PassThru -Wait -NoNewWindow',w)
+        self.assertIn("ArgumentList '--version'",w)
         self.assertNotIn("$p=Start-Process -FilePath $exe -PassThru -Wait -NoNewWindow",w)
         self.assertIn('-MainLauncher',w)
         self.assertIn('[switch]$MainLauncher',s)
