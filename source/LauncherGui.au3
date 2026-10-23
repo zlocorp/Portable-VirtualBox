@@ -5,6 +5,7 @@
 #include "LauncherReadiness.au3"
 #include "LauncherSettings.au3"
 #include "LauncherAbout.au3"
+#include "PortableAppSetup.au3"
 #include "PortableVmInventory.au3"
 #include "ManagedProcess.au3"
 #include "ManagerWindow.au3"
@@ -145,6 +146,7 @@ Func _LG_Show()
     Local $idClose = GUICtrlCreateButton("", 508, 761, 148, 35)
     Local $checked = False, $showInventory = False
     Local $backupWorker = _MP_New(), $backupTarget = "", $backupAction = "", $restoreSource = ""
+    Local $setupWorker = _MP_New(), $setupInstaller = ""
     GUICtrlSetData($idBackupStatus, _LI("backup.hint"))
     GUICtrlSetState($idCancel, $GUI_DISABLE)
     ; Hosted disposable-root only until helper/UAC production acceptance.
@@ -193,9 +195,32 @@ Func _LG_Show()
                         $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
                 EndIf
             Case $idPrepare
+                If $setupWorker["handle"] <> 0 Or $backupWorker["handle"] <> 0 Then ContinueLoop
                 Local $result = _PP_Ensure(@ScriptDir)
                 GUICtrlSetData($idProfile, _LG_ProfileMessage($result))
-                If $checked Then
+                If $result["status"] == "READY" Then
+                    Local $app = _PA_Inspect(@ScriptDir)
+                    If $app["status"] == "MISSING" Then
+                        If _PA_FileState(@ScriptDir, "Portable-VirtualBox-Setup.exe") <> 1 Then
+                            GUICtrlSetData($idResult, _LI("setup.blocked"))
+                        Else
+                            ; First-run setup selects an already-downloaded pinned Oracle
+                            ; installer. No network fetch, Python installation or UAC.
+                            Local $installer = FileOpenDialog(_LI("setup.choose"), @ScriptDir, "Oracle VirtualBox installer (*.exe)", 1, "", $hGui)
+                            If $installer <> "" Then
+                                $setupWorker = _PAS_Start(@ScriptDir, $installer)
+                                If $setupWorker["status"] == "STARTED" Then
+                                    $setupInstaller = $installer
+                                    GUICtrlSetState($idPrepare, $GUI_DISABLE)
+                                    GUICtrlSetData($idResult, _LI("setup.running"))
+                                Else
+                                    GUICtrlSetData($idResult, _LI("setup.blocked"))
+                                EndIf
+                            EndIf
+                        EndIf
+                    EndIf
+                EndIf
+                If $checked And $setupWorker["handle"] = 0 Then
                     Local $readiness = _LR_Inspect(@ScriptDir)
                     GUICtrlSetData($idResult, $readiness["message"])
                 EndIf
@@ -212,6 +237,7 @@ Func _LG_Show()
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
                     $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idManager, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
             Case $idBackup, $idVerify, $idRestore
+                If $setupWorker["handle"] <> 0 Then ContinueLoop
                 If $event == $idBackup Then
                     Local $risk = _PVI_Inspect(@ScriptDir)
                     If $risk["status"] == "REVIEW" Or $risk["status"] == "BLOCKED" Then
@@ -265,6 +291,24 @@ Func _LG_Show()
             Case $idCopy
                 ClipPut(GUICtrlRead($idReport))
         EndSwitch
+        If $setupWorker["handle"] <> 0 Then
+            Local $state = _MP_Poll($setupWorker)
+            If $state == "EXITED" Then
+                Local $success = _PAS_Complete(@ScriptDir, $setupWorker["exit_code"])
+                _MP_Release($setupWorker)
+                GUICtrlSetState($idPrepare, $GUI_ENABLE)
+                If $success Then
+                    GUICtrlSetData($idResult, _LI("setup.done"))
+                Else
+                    GUICtrlSetData($idResult, _LI("setup.failed"))
+                EndIf
+                Local $preparedProfile = _PP_Inspect(@ScriptDir)
+                GUICtrlSetData($idProfile, _LG_ProfileMessage($preparedProfile))
+            ElseIf $state == "UNKNOWN" Then
+                GUICtrlSetData($idResult, _LI("setup.unknown"))
+                GUICtrlSetState($idPrepare, $GUI_DISABLE)
+            EndIf
+        EndIf
         If $backupWorker["handle"] <> 0 Then
             Local $status = _MP_Poll($backupWorker)
             If $status == "EXITED" Then

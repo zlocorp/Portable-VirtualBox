@@ -15,14 +15,15 @@ import sys
 import zipfile
 
 DOC_MEMBERS = ("LICENSE.md", "README.md", "README.ru.md", "CREDITS.md")
-MEMBERS = DOC_MEMBERS + ("PREVIEW-NOT-A-HYPERVISOR.txt", "Portable-VirtualBox.exe")
+MEMBERS = DOC_MEMBERS + ("PREVIEW-NOT-A-HYPERVISOR.txt", "Portable-VirtualBox.exe", "Portable-VirtualBox-Setup.exe")
 NOTICE = """Portable-VirtualBox development diagnostic preview
 
 This is NOT a usable virtual machine hypervisor.
 The ordinary user interface does not launch virtual machines,
 install drivers, register Oracle services, or redistribute VirtualBox.
 Normal use remains read-only except explicit portable-folder preparation,
-saving the launcher language to data/launcher.ini, and offline data/ backup
+saving the launcher language to data/launcher.ini, file-only Oracle
+preparation from a user-supplied pinned official installer, and offline data/ backup
 to a directory chosen by the user. Backup never installs VirtualBox.
 An isolated GitHub Actions-only internal research command can exercise
 Oracle VBoxSDS registration/cleanup; do not use it on a personal PC.
@@ -31,11 +32,12 @@ What works:
 - RU/EN diagnostics, explicit saved language, completeness checks and built-in help
 - concise About dialog; original license and consolidated notices included
 - explicit first-run setup of data/.VirtualBox, data/Machines and logs
+- offline preparation of app64 from the exact official Oracle 7.2.22 installer, without installing drivers
 - offline, copy-and-verify data/ backup without deleting any source files
 - repeat setup without overwriting existing user files
 
-To work with VirtualBox you still need a separately verified Oracle
-VirtualBox 7.2.x app64 and a production-safe driver/service launcher.
+To work with VirtualBox you still need the separately downloaded exact Oracle
+VirtualBox 7.2.22 Windows installer and a production-safe driver/service launcher.
 The actual VM and signed driver CI experiments are NOT wired into
 the regular launcher. No elevation is requested.
 
@@ -76,12 +78,18 @@ def build_preview(root: Path, exe: Path, output: Path) -> dict:
     executable = _read_regular(exe, 64 * 1024 * 1024)
     if len(executable) < 10240 or executable[:2] != b"MZ":
         raise ValueError("Compiled launcher does not have a plausible PE header")
+    # One-file non-admin offline preparer: the Python runtime is embedded in
+    # this separately compiled binary. No Oracle installer/driver is bundled.
+    setup = _read_regular(root / "build" / "Portable-VirtualBox-Setup.exe", 128 * 1024 * 1024)
+    if len(setup) < 10240 or setup[:2] != b"MZ":
+        raise ValueError("Compiled offline preparer has an invalid PE header")
     # Read every mandatory notice before creating the output: attribution is
     # required package content, not an optional README link.
     inputs = {name: _read_regular(root / name, 256 * 1024) for name in DOC_MEMBERS}
     inputs.update({
         "PREVIEW-NOT-A-HYPERVISOR.txt": NOTICE.encode("utf-8"),
         "Portable-VirtualBox.exe": executable,
+        "Portable-VirtualBox-Setup.exe": setup,
     })
     with output.open("xb") as handle:
         with zipfile.ZipFile(handle, mode="w", compression=zipfile.ZIP_DEFLATED,

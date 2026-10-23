@@ -113,7 +113,7 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
         import package_preview
-        self.assertEqual(len(package_preview.MEMBERS), 6)
+        self.assertEqual(len(package_preview.MEMBERS), 7)
         self.assertFalse(any('Helper' in p or 'Session-Test' in p for p in package_preview.MEMBERS))
 
 if __name__ == '__main__': unittest.main()

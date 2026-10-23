@@ -19,6 +19,7 @@
 #include "PortableProfile.au3"
 #include "LauncherSettings.au3"
 #include "PortableApp.au3"
+#include "PortableAppSetup.au3"
 #include "LauncherAbout.au3"
 #include "PortableCISession.au3"
 #include "PortableCIVM.au3"
@@ -54,7 +55,7 @@ If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
             _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
-                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --about  --help" & @CRLF & _
+                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --about  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
         Case "--ci-service-smoke"
@@ -139,6 +140,19 @@ If $CmdLine[0] >= $iFirst Then
                 Case Else
                     Exit 3
             EndSwitch
+        Case "--prepare-app64"
+            If $CmdLine[0] <> $iFirst + 1 Then Exit 64
+            Local $prepared = _PAS_Run(@ScriptDir, $CmdLine[$iFirst + 1])
+            If $prepared = 0 Then
+                _LI_Write(_LI("setup.done") & @CRLF)
+                Exit 0
+            EndIf
+            If $prepared = 2 Then
+                _LI_Write(_LI("setup.blocked") & @CRLF, True)
+                Exit 2
+            EndIf
+            _LI_Write(_LI("setup.failed") & @CRLF, True)
+            Exit 3
         Case "--app-status"
             Local $app = _PA_Inspect(@ScriptDir)
             _LI_Write(_PA_Message($app) & @CRLF)

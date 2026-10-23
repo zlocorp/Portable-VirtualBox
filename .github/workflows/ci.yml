@@ -51,7 +51,7 @@ jobs:
     name: Compile x64 (never launch)
     needs: audit
     runs-on: windows-2022
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -83,6 +83,9 @@ jobs:
       - name: Build x64
         shell: pwsh
         run: ./scripts/build.ps1 -AutoItRoot "$env:AUTOIT_ROOT"
+      - name: Freeze exact-release offline preparer (no end-user Python dependency)
+        shell: pwsh
+        run: ./scripts/build_portable_setup.ps1
       - name: Verify root build.bat delegates to official external AutoIt
         shell: cmd
         run: |
@@ -184,10 +187,10 @@ jobs:
           $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $archive).Path)
           try {
             $names = @($zip.Entries | ForEach-Object FullName | Sort-Object)
-            $expected = @('LICENSE.md','PREVIEW-NOT-A-HYPERVISOR.txt','Portable-VirtualBox.exe','README.md','README.ru.md','CREDITS.md') | Sort-Object
+            $expected = @('LICENSE.md','PREVIEW-NOT-A-HYPERVISOR.txt','Portable-VirtualBox.exe','Portable-VirtualBox-Setup.exe','README.md','README.ru.md','CREDITS.md') | Sort-Object
             if (($names -join ';') -cne ($expected -join ';')) { throw 'Preview archive contains unexpected files' }
           } finally { $zip.Dispose() }
-          Write-Host 'PASS: preview ZIP contains only compiled launcher, bilingual README, consolidated notices, license and preview warning'
+          Write-Host 'PASS: preview ZIP contains compiled launcher, offline-only preparer, bilingual README, license and notices'
       - name: Verify actual unpacked preview initializes independent Cyrillic root
         shell: pwsh
         run: |

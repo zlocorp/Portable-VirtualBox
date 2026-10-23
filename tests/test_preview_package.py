@@ -17,6 +17,8 @@ class DiagnosticPreviewTests(unittest.TestCase):
         (self.root/"build").mkdir()
         self.exe=self.root/"build"/"Portable-VirtualBox_x64.exe"
         self.exe.write_bytes(b"MZ"+b"x"*12000)
+        self.setup=self.root/"build"/"Portable-VirtualBox-Setup.exe"
+        self.setup.write_bytes(b"MZ"+b"s"*14000)
         (self.root/"README.md").write_text("readme",encoding="utf-8")
         (self.root/"LICENSE.md").write_text("original license",encoding="utf-8")
         for name in ("README.ru.md", "CHANGELOG.md", "FEATURES.md", "CREDITS.md", "THIRD_PARTY_NOTICES.md"):
@@ -33,6 +35,7 @@ class DiagnosticPreviewTests(unittest.TestCase):
         with zipfile.ZipFile(self.output) as z:
             self.assertEqual(sorted(z.namelist()),sorted(MEMBERS))
             self.assertEqual(z.read("Portable-VirtualBox.exe"),self.exe.read_bytes())
+            self.assertEqual(z.read("Portable-VirtualBox-Setup.exe"),self.setup.read_bytes())
             self.assertEqual(z.read("LICENSE.md"),b"original license")
             notice=z.read("PREVIEW-NOT-A-HYPERVISOR.txt").decode("utf-8")
             self.assertIn("does not launch virtual machines",notice)
@@ -46,9 +49,15 @@ class DiagnosticPreviewTests(unittest.TestCase):
             for name in ("CREDITS.md", "LICENSE.md", "README.md", "README.ru.md"):
                 self.assertIn(name, archive.namelist())
                 self.assertEqual(archive.read(name),(self.root/name).read_bytes())
-            self.assertEqual(set(archive.namelist()), {"Portable-VirtualBox.exe", "PREVIEW-NOT-A-HYPERVISOR.txt", "README.md", "README.ru.md", "LICENSE.md", "CREDITS.md"})
+            self.assertEqual(set(archive.namelist()), {"Portable-VirtualBox.exe", "PREVIEW-NOT-A-HYPERVISOR.txt", "README.md", "README.ru.md", "LICENSE.md", "CREDITS.md", "Portable-VirtualBox-Setup.exe"})
             for name in ("THIRD_PARTY_NOTICES.md", "FEATURES.md", "CHANGELOG.md"):
                 self.assertNotIn(name, archive.namelist())
+
+    def test_no_zip_is_created_without_frozen_offline_preparer(self):
+        self.setup.unlink()
+        with self.assertRaises(ValueError):
+            build_preview(self.root,self.exe,self.output)
+        self.assertFalse(self.output.exists())
 
     def test_no_zip_is_created_when_credits_missing(self):
         (self.root/"CREDITS.md").unlink()

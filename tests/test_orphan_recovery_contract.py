@@ -50,7 +50,7 @@ class OrphanRecovery(unittest.TestCase):
         import sys
         sys.path.insert(0, str(ROOT / 'scripts'))
         from package_preview import MEMBERS
-        self.assertEqual(len(MEMBERS), 6)
+        self.assertEqual(len(MEMBERS), 7)
 
     def test_windows_fixture_uses_real_driver_and_rejects_live_or_foreign_recovery(self):
         workflow = read('.github/workflows/orphan-recovery.yml')

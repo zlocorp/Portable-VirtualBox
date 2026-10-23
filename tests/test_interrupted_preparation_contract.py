@@ -58,7 +58,7 @@ class InterruptedPreparation(unittest.TestCase):
         import sys
         sys.path.insert(0, str(ROOT / 'scripts'))
         from package_preview import MEMBERS
-        self.assertEqual(len(MEMBERS), 6)
+        self.assertEqual(len(MEMBERS), 7)
         self.assertFalse(any('Helper' in f for f in MEMBERS))
 
     def test_cannot_forge_checked_driver_or_sds_receipts_in_recovery_fixture(self):
