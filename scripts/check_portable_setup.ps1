@@ -33,6 +33,27 @@ foreach($path in @('VirtualBox.exe','VBoxManage.exe','VirtualBoxVM.exe','VBoxSDS
 $hash=(Get-FileHash -LiteralPath (Join-Path $app 'VirtualBox.exe')).Hash
 Execute ('--prepare-app64 "'+$Installer+'"') 2 'refuse-existing-app64'
 if ((Get-FileHash -LiteralPath (Join-Path $app 'VirtualBox.exe')).Hash -ne $hash) { throw 'Repeat preparation modified Oracle app64' }
+# End-to-end automatic official HTTPS download through the ordinary EXE.
+# Separate clean root ensures no accidental success from a cached local wrapper.
+$online=Join-Path $env:RUNNER_TEMP 'Portable Oracle Online Проверка'
+New-Item -ItemType Directory -Path $online -ErrorAction Stop | Out-Null
+Copy-Item -LiteralPath $launcher -Destination (Join-Path $online 'Portable-VirtualBox.exe')
+Copy-Item -LiteralPath (Join-Path $target 'Portable-VirtualBox-Setup.exe') -Destination (Join-Path $online 'Portable-VirtualBox-Setup.exe')
+$onlineLauncher=Join-Path $online 'Portable-VirtualBox.exe'
+$onlineOut=Join-Path $env:RUNNER_TEMP 'online-preparation.stdout.txt'
+$onlineErr=Join-Path $env:RUNNER_TEMP 'online-preparation.stderr.txt'
+$p=Start-Process -FilePath $onlineLauncher -ArgumentList '--download-app64' -PassThru -NoNewWindow -WorkingDirectory $online -RedirectStandardOutput $onlineOut -RedirectStandardError $onlineErr
+try {
+    if (-not $p.WaitForExit(600000)) { throw 'Online Oracle preparation did not complete in ten minutes' }
+    if ($p.ExitCode -ne 0) { throw ('Official online preparation failed: '+(Get-Content -LiteralPath $onlineErr -Raw)) }
+} finally { $p.Dispose() }
+$onlineApp=Join-Path $online 'app64'
+$onlineReceipt=Get-Content -LiteralPath (Join-Path $onlineApp '.prepared.json') -Raw | ConvertFrom-Json
+if ($onlineReceipt.file_count -ne 185 -or $onlineReceipt.total_bytes -ne 247834716 -or $onlineReceipt.status -ne 'prepared-not-installed') { throw 'Downloaded Oracle inventory inconsistent' }
+if ((Get-FileHash -LiteralPath (Join-Path $onlineApp 'VirtualBox.exe')).Hash -ne $hash) { throw 'Downloaded Oracle executable differs from local offline control' }
+if (@(Get-ChildItem -LiteralPath $online -Directory -Filter '.vbox-official-*').Count -ne 0) { throw 'Downloaded temporary wrapper was not cleaned' }
+Write-Host 'PASS: main GUI CLI downloaded pinned official Oracle 7.2.22 via HTTPS, verified 185 files, removed temporary wrapper; no Python on user PC'
+
 $servicesAfter=@(Get-CimInstance Win32_Service -Filter "Name LIKE 'VBox%'" -ErrorAction Stop)
 if ($servicesAfter.Count) { throw 'File-only extraction accidentally registered services' }
 if (@(Get-Process -Name VirtualBox,VirtualBoxVM,VBoxHeadless,VBoxManage -ErrorAction SilentlyContinue).Count) { throw 'File-only extraction launched Oracle' }

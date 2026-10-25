@@ -204,18 +204,26 @@ Func _LG_Show()
                         If _PA_FileState(@ScriptDir, "Portable-VirtualBox-Setup.exe") <> 1 Then
                             GUICtrlSetData($idResult, _LI("setup.blocked"))
                         Else
-                            ; First-run setup selects an already-downloaded pinned Oracle
-                            ; installer. No network fetch, Python installation or UAC.
-                            Local $installer = FileOpenDialog(_LI("setup.choose"), @ScriptDir, "Oracle VirtualBox installer (*.exe)", 1, "", $hGui)
-                            If $installer <> "" Then
+                            ; Ask explicitly: download an exact verified Oracle package,
+                            ; select the same package already saved, or cancel.
+                            ; Neither path requests UAC or executes Oracle's installer.
+                            Local $choice = MsgBox(0x23, _LI("gui.prepare"), _LI("setup.source"), 0, $hGui)
+                            Local $installer = ""
+                            If $choice = 6 Then
+                                $setupWorker = _PAS_StartDownload(@ScriptDir)
+                            ElseIf $choice = 7 Then
+                                $installer = FileOpenDialog(_LI("setup.choose"), @ScriptDir, "Oracle VirtualBox installer (*.exe)", 1, "", $hGui)
+                                If $installer == "" Then ContinueLoop
                                 $setupWorker = _PAS_Start(@ScriptDir, $installer)
-                                If $setupWorker["status"] == "STARTED" Then
-                                    $setupInstaller = $installer
-                                    GUICtrlSetState($idPrepare, $GUI_DISABLE)
-                                    GUICtrlSetData($idResult, _LI("setup.running"))
-                                Else
-                                    GUICtrlSetData($idResult, _LI("setup.blocked"))
-                                EndIf
+                            Else
+                                ContinueLoop
+                            EndIf
+                            If $setupWorker["status"] == "STARTED" Then
+                                $setupInstaller = $installer
+                                GUICtrlSetState($idPrepare, $GUI_DISABLE)
+                                GUICtrlSetData($idResult, _LI($choice = 6 ? "setup.downloading" : "setup.running"))
+                            Else
+                                GUICtrlSetData($idResult, _LI("setup.blocked"))
                             EndIf
                         EndIf
                     EndIf

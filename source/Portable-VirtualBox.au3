@@ -55,7 +55,7 @@ If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
             _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
-                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --about  --help" & @CRLF & _
+                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --download-app64  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --about  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
         Case "--ci-service-smoke"
@@ -140,6 +140,19 @@ If $CmdLine[0] >= $iFirst Then
                 Case Else
                     Exit 3
             EndSwitch
+        Case "--download-app64"
+            If $CmdLine[0] <> $iFirst Then Exit 64
+            Local $downloaded = _PAS_RunDownload(@ScriptDir)
+            If $downloaded = 0 Then
+                _LI_Write(_LI("setup.done") & @CRLF)
+                Exit 0
+            EndIf
+            If $downloaded = 2 Then
+                _LI_Write(_LI("setup.blocked") & @CRLF, True)
+                Exit 2
+            EndIf
+            _LI_Write(_LI("setup.failed") & @CRLF, True)
+            Exit 3
         Case "--prepare-app64"
             If $CmdLine[0] <> $iFirst + 1 Then Exit 64
             Local $prepared = _PAS_Run(@ScriptDir, $CmdLine[$iFirst + 1])

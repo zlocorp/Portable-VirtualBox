@@ -25,6 +25,23 @@ class PortableSetupWiring(unittest.TestCase):
                           'app64\\.prepared.json'):
             self.assertIn(statement,s)
 
+    def test_official_download_without_python_on_the_user_pc(self):
+        gui=self.read('source/LauncherGui.au3')
+        self.assertIn('_PAS_StartDownload(@ScriptDir)',gui)
+        self.assertIn('setup.source',gui)
+        adapter=self.read('source/PortableAppSetup.au3')
+        self.assertIn('Func _PAS_StartDownload(',adapter)
+        self.assertIn('Func _PAS_CanPrepareRoot(',adapter)
+        self.assertIn('Func _PAS_RunDownload(',adapter)
+        self.assertIn('Return _PAS_Wait(',adapter)
+        entry=self.read('source/Portable-VirtualBox.au3')
+        self.assertIn('Case "--download-app64"',entry)
+        self.assertIn('_PAS_RunDownload(@ScriptDir)',entry)
+        downloader=self.read('scripts/portable_prepare.py')
+        self.assertIn('OFFICIAL_URL = "https://download.virtualbox.org/virtualbox/"',downloader)
+        self.assertIn('download_verified',downloader)
+        self.assertIn('TemporaryDirectory(prefix=".vbox-official-", dir=root)',downloader)
+
     def test_public_cli_not_hidden_ci_mode(self):
         entry=self.read('source/Portable-VirtualBox.au3')
         self.assertIn('Case "--prepare-app64"',entry)
