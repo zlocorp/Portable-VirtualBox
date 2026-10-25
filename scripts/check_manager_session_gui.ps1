@@ -250,7 +250,7 @@ try {
     $null=Oracle ('storagectl '+$uuid+' --name SATA --add sata --controller IntelAhci') 'create-storage-controller'
     $null=Oracle ('storageattach '+$uuid+' --storagectl SATA --port 0 --device 0 --type hdd --medium "'+$disk+'"') 'attach-virtual-disk'
     $diskInfo=Oracle ('showmediuminfo disk "'+$disk+'"') 'medium-info'
-    if ($diskInfo -notmatch '(?im)^Format:\s+VDI' -or
+    if ($diskInfo -notmatch '(?im)^Storage format:\s+VDI' -or
         $diskInfo -notmatch '(?im)^UUID:\s+[a-f0-9-]{36}') { throw 'Oracle did not register the VDI' }
     $proof.virtual_disk_created=$true
     $null=Oracle ('startvm '+$uuid+' --type headless') 'start-guest'
@@ -299,7 +299,7 @@ try {
     if ($again -notmatch ('(?mi)^UUID="'+[regex]::Escape($uuid)+'"') -or $again -notmatch '(?m)^VMState="poweroff"') { throw 'Second Manager session lost fixture UUID/state' }
     $proof.uuid_preserved=$true
     $againDisk=Oracle ('showmediuminfo disk "'+$disk+'"') 'same-virtual-disk'
-    if ($againDisk -notmatch '(?im)^Format:\s+VDI' -or
+    if ($againDisk -notmatch '(?im)^Storage format:\s+VDI' -or
         $againDisk -notmatch '(?im)^UUID:\s+[a-f0-9-]{36}') { throw 'VDI not registered after restart' }
     # Snapshot is taken while the guest is powered off; Oracle creates a
     # differencing VDI under this VM's portable Snapshots directory.
