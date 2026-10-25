@@ -197,6 +197,8 @@ function Run-Bounded([string]$Executable,[string]$Argv,[string]$Label) {
     $p=$null
     try {
         $p=Start-Process -FilePath $Executable -ArgumentList $Argv -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr -ErrorAction Stop
+        $ownedHandle=$p.Handle
+        if ($ownedHandle -eq [IntPtr]::Zero) { throw 'Cleanup tool process handle unavailable' }
         if (-not $p.WaitForExit($TimeoutSeconds*1000)) {
             # Kill only the subprocess started by this script, never by image name.
             try { $p.Kill(); [void]$p.WaitForExit(5000) } catch {}

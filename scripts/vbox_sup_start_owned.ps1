@@ -66,6 +66,8 @@ try {
     # Only "sc.exe start VBoxSup", never a driver delete/stop, and only after
     # proving there is no pre-existing VBox service and verifying the driver.
     $proc=Start-Process -FilePath $sc -ArgumentList 'start VBoxSup' -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr -ErrorAction Stop
+    $ownedHandle=$proc.Handle
+    if ($ownedHandle -eq [IntPtr]::Zero) { throw 'SCM process handle unavailable' }
     if ($proc.WaitForExit($TimeoutSeconds*1000)) {
         $status='EXITED'; $exitCode=$proc.ExitCode
     } else {

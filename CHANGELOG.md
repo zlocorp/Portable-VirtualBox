@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · 2026-10-25 Windows PowerShell process tracking
+
+- Windows PowerShell 5.1 exposed a real process-tracking incompatibility: Start-Process -NoNewWindow -PassThru with redirected output can return an empty ExitCode after waiting, despite successful driver staging. The fixed elevated scripts now cache each exact subprocess handle immediately, before waiting. All confirmation still depends on verified zero exit codes and signed driver/service receipts; no guessed success or relaxed service checks.
+
 ### Reliability · 2026-10-25 system-worker lifetime and dependency
 
 - The fixed elevated helper uses the built-in **64-bit Windows PowerShell** from System32 instead of requiring an separately installed PowerShell 7. It continues to run only the embedded, hash-checked fixed-action scripts inside the protected session; no PATH lookup, downloaded scripts, or arbitrary commands.

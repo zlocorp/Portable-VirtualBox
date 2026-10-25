@@ -44,6 +44,8 @@ function VBox-Processes { return @(Get-Process -ErrorAction Stop | Where-Object 
 function Run-Sds([string]$Argument,[string]$Label) {
     $p=Start-Process -FilePath (Join-Path $app 'VBoxSDS.exe') -ArgumentList $Argument -WorkingDirectory $app -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $session ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $session ($Label+'.stderr.txt'))
     try {
+        $ownedHandle=$p.Handle
+        if ($ownedHandle -eq [IntPtr]::Zero) { throw 'SDS process handle unavailable' }
         if (-not $p.WaitForExit(30000) -or $p.ExitCode -ne 0) { throw 'SDS operation unconfirmed; retain resources' }
     } finally { $p.Dispose() }
 }

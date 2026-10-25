@@ -176,6 +176,8 @@ function Run-Bounded([string]$Command,[string]$Arguments,[string]$Label) {
     try {
         $p=Start-Process -FilePath $Command -ArgumentList $Arguments -NoNewWindow -PassThru -ErrorAction Stop `
             -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
+        $ownedHandle=$p.Handle
+        if ($ownedHandle -eq [IntPtr]::Zero) { throw 'Recovery tool process handle unavailable' }
         if (-not $p.WaitForExit($TimeoutSeconds*1000)) { throw "$Label timed out, retained state must be inspected" }
         return [int]$p.ExitCode
     } finally { if ($null -ne $p) { $p.Dispose() } }

@@ -85,6 +85,10 @@ $exception = ''
 $process = $null
 try {
     $process = Start-Process -FilePath $pnputil -ArgumentList $arguments -WorkingDirectory $driverRoot -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -NoNewWindow -ErrorAction Stop
+    # Cache the exact process handle before waiting. Start-Process with
+    # -NoNewWindow and redirected output can lose ExitCode on Windows PowerShell.
+    $ownedHandle = $process.Handle
+    if ($ownedHandle -eq [IntPtr]::Zero) { throw 'PnPUtil process handle unavailable' }
     if ($process.WaitForExit($TimeoutSeconds * 1000)) {
         $status = 'EXITED'
         $exitCode = $process.ExitCode
