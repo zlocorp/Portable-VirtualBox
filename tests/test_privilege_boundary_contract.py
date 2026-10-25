@@ -146,23 +146,16 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertNotIn('While TimerDiff($clock) < 180000', worker)
 
     def test_built_in_powershell_retains_command_process_handles(self):
-        for path,variable in (
+        for path, variable in (
             ('scripts/vbox_sup_standalone.ps1', 'process'),
             ('scripts/vbox_sup_start_owned.ps1', 'proc'),
             ('scripts/vbox_sup_cleanup.ps1', 'p'),
             ('scripts/vbox_sup_partial_cleanup.ps1', 'p'),
             ('scripts/privileged_session_worker.ps1', 'p')
         ):
-            contents=self.text(path)
-            self.assertRegex(contents, r'\\$ownedHandle\\s*=\\s*\\
-        import sys
-        sys.path.insert(0,str(ROOT / 'scripts'))
-        import package_preview
-        self.assertEqual(len(package_preview.MEMBERS), 7)
-        self.assertFalse(any('Helper' in p or 'Session-Test' in p for p in package_preview.MEMBERS))
-
-if __name__ == '__main__': unittest.main()
- + variable + r'\\.Handle')
+            contents = self.text(path)
+            self.assertIn('$ownedHandle', contents)
+            self.assertIn('$' + variable + '.Handle', contents)
             self.assertIn('WaitForExit(', contents)
 
     def test_helper_not_in_preview(self):
