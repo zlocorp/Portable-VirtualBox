@@ -7,11 +7,11 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 ### Expanded Windows acceptance · 2026-10-25 real VM media
 
 - The disposable main-EXE GUI Start/Stop fixture now creates a real Oracle 64 MiB VDI under portable `data/Machines`, attaches it to the test VM, checks it survived driver removal, and then creates a powered-off Oracle snapshot on the second session, verifying its differencing files after teardown.
-- These new checks are pending their isolated Windows CI result. An empty guest with a real VDI is **not** a booted Windows/Linux guest OS; interactive Windows 11 UAC remains unverified.
+- [Isolated compiled-main-GUI Windows acceptance 40220863138](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40220863138) **passed**: real Oracle Manager/VM, VDI created and preserved, snapshot created and differencing medium retained, guest-aware Manager reopening and two exact-owned cleanups. An empty guest with a real VDI is **not** a booted Windows/Linux guest OS; interactive Windows 11 UAC remains unverified.
 
 ### Integrated experiment · 2026-10-25 main EXE privilege boundary
 
-- The fixed-action helper can now bind the exact compiled **main** frontend as well as the separate experiment: build-time controller name/SHA-256 and Oracle inventory are verified before any system mutation. Its privileged worker accepts only the compiled-in controller identity, never caller-supplied paths or commands.
+- The fixed-action helper can now bind the exact compiled **main** frontend as well as the separate experiment ([medium-token acceptance passed 40220863135](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40220863135)): build-time controller name/SHA-256 and Oracle inventory are verified before any system mutation. Its privileged worker accepts only the compiled-in controller identity, never caller-supplied paths or commands.
 - On disposable Windows CI only, a medium-token normal EXE is routed to the existing separated manager/UAC controller, with the already-elevated CI path unchanged. The direct-invoker helper regression now tests both compiled frontends on separate isolated hosts; it does not simulate or claim interactive Windows 11 UAC.
 - No helper is added to the public preview ZIP, no release is published, and normal-host Start/Stop stays blocked pending reviewed production effects.
 
