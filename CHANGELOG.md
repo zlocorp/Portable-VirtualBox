@@ -4,6 +4,11 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Expanded Windows acceptance · 2026-10-25 real VM media
+
+- The disposable main-EXE GUI Start/Stop fixture now creates a real Oracle 64 MiB VDI under portable `data/Machines`, attaches it to the test VM, checks it survived driver removal, and then creates a powered-off Oracle snapshot on the second session, verifying its differencing files after teardown.
+- These new checks are pending their isolated Windows CI result. An empty guest with a real VDI is **not** a booted Windows/Linux guest OS; interactive Windows 11 UAC remains unverified.
+
 ### Integrated experiment · 2026-10-25 main EXE privilege boundary
 
 - The fixed-action helper can now bind the exact compiled **main** frontend as well as the separate experiment: build-time controller name/SHA-256 and Oracle inventory are verified before any system mutation. Its privileged worker accepts only the compiled-in controller identity, never caller-supplied paths or commands.

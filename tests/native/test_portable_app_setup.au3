@@ -24,5 +24,31 @@ Check(Not _PAS_Complete("C:\no-such-vbox-dir", 0), "zero exit without verified a
 Check(Not _PAS_Complete("C:\no-such-vbox-dir", 3), "failed helper cannot mark success")
 Local $p = _PAS_Start("C:\no-such-vbox-dir", "C:\Temp\file.exe")
 Check($p["status"] <> "STARTED" And $p["handle"] = 0, "no arbitrary process started")
+Local $statusRoot = EnvGet("PVBOX_NATIVE_TEST_DIR")
+Local $statusPath = _PAS_ProgressPath($statusRoot)
+Check($statusPath <> "", "reserved unique setup progress path")
+If $statusPath <> "" Then
+    Local $statusHandle = FileOpen($statusPath, 2)
+    Check($statusHandle <> -1, "create disposable native status leaf")
+    If $statusHandle <> -1 Then
+        FileWrite($statusHandle, "DOWNLOAD|1048576|2097152" & @LF)
+        FileClose($statusHandle)
+        Local $progress = _MP_New()
+        $progress["progress"] = $statusPath
+        _LI_Set("en")
+        Check(StringInStr(_PAS_ProgressText($progress), "1.0 MiB / 2.0 MiB (50%)") > 0, "English byte and percent progress")
+        _LI_Set("ru")
+        Check(StringInStr(_PAS_ProgressText($progress), "1.0 MiB / 2.0 MiB (50%)") > 0, "Russian byte and percent progress")
+        $statusHandle = FileOpen($statusPath, 2)
+        FileWrite($statusHandle, "EXTRACT|0|0" & @LF)
+        FileClose($statusHandle)
+        Check(_PAS_ProgressText($progress) == _LI("setup.progress_extract"), "localized extraction progress")
+        $statusHandle = FileOpen($statusPath, 2)
+        FileWrite($statusHandle, "DOWNLOAD|500|100" & @LF)
+        FileClose($statusHandle)
+        Check(_PAS_ProgressText($progress) == "", "impossible transfer amounts rejected")
+        FileDelete($statusPath)
+    EndIf
+EndIf
 ConsoleWrite("Offline portable app setup native assertions: " & $checks & "; failed: " & $failed & @CRLF)
 Exit ($failed > 0)

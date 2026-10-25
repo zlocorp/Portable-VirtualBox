@@ -41,6 +41,13 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('$controller.MainModule.FileName -notin $approvedControllers',cleanup)
         self.assertNotIn("$controller.MainModule.FileName -ine (Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe')",cleanup)
 
+    def test_main_gui_fixture_has_real_portable_disk_and_snapshot(self):
+        script=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
+        for term in ('createmedium disk', 'storagectl ', 'storageattach ', 'showmediuminfo disk',
+                     'take portable-baseline', 'snapshot_preserved_after_cleanup=$true',
+                     'disk_preserved_after_cleanup=$true'):
+            self.assertIn(term, script)
+
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
         w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')

@@ -2,7 +2,7 @@
 #include "ManagedProcess.au3"
 ; Fixed compiled helper only. ShellExecuteExW runas returns the process handle;
 ; do not fall back to shell commands, scheduled tasks or direct elevated effects.
-; This module is wired only to the separate, non-distributed session experiment.
+; In CI it is wired to the exact compiled main EXE too; production effects remain disabled.
 
 Func _PB_Outcome($ok, $error, $handle)
     If Not $ok And $error = 1223 Then Return "CANCELLED"
