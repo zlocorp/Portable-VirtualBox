@@ -16,6 +16,8 @@ class PrivilegeBoundaryContract(unittest.TestCase):
             self.assertIn(expected, s)
         self.assertNotIn('Arguments = args[', s)
         self.assertIn('FrontendSha256', s)
+        self.assertIn('PinnedBuild.FrontendName', s)
+        self.assertIn('" -FrontendName "+PinnedBuild.FrontendName', s)
 
     def test_elevation_retains_native_handle_and_distinguishes_cancel(self):
         s = self.text('source/PrivilegeBoundary.au3')
@@ -108,6 +110,23 @@ class PrivilegeBoundaryContract(unittest.TestCase):
                        'unattended_ui_responsive=$true'):
             self.assertIn(marker, script)
         self.assertNotIn('EnableLUA', script)
+
+    def test_exact_main_frontend_binding_stays_ci_only(self):
+        compiler = self.text('scripts/build_session_helper.ps1')
+        self.assertIn("Portable-VirtualBox_x64.exe", compiler)
+        self.assertIn("internal const string FrontendName", compiler)
+        worker = self.text('scripts/privileged_session_worker.ps1')
+        self.assertIn("ValidateSet('Portable-VirtualBox.exe','Portable-VirtualBox-Session-Test.exe')", worker)
+        self.assertIn('(Join-Path $root $FrontendName)', worker)
+        entry = self.text('source/Portable-VirtualBox.au3')
+        self.assertIn('Case "--elevation-worker"', entry)
+        self.assertIn('If Not _MS_Allowed(@ScriptDir', entry)
+        self.assertIn('_PB_RunRequest(@ScriptDir', entry)
+        gui = self.text('source/LauncherGui.au3')
+        self.assertIn('$g_MS_Separated = _PB_Medium()', gui)
+        workflow = self.text('.github/workflows/helper-boundary.yml')
+        self.assertIn('frontend: [session-test, main-launcher]', workflow)
+        self.assertIn("-MainLauncher:", workflow)
 
     def test_helper_not_in_preview(self):
         import sys

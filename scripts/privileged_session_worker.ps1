@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory)][string]$SessionDir,
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][long]$ControllerCreated,
+    [Parameter(Mandatory)][ValidateSet('Portable-VirtualBox.exe','Portable-VirtualBox-Session-Test.exe')][string]$FrontendName,
     [ValidateRange(0,2147483647)][int]$OriginalControllerPid = 0,
     [ValidateRange(0,9223372036854775807)][long]$OriginalControllerCreated = 0,
     [switch]$IncompletePreparation,
@@ -28,7 +29,7 @@ try {
 } finally { $parent.Dispose() }
 $caller=[Diagnostics.Process]::GetProcessById($ControllerPid)
 try {
-    if ($caller.MainModule.FileName -ine (Join-Path $root 'Portable-VirtualBox-Session-Test.exe') -or
+    if ($caller.MainModule.FileName -ine (Join-Path $root $FrontendName) -or
         $caller.StartTime.ToFileTimeUtc() -ne $ControllerCreated) { throw 'Controller generation changed' }
     $controllerImage=$caller.MainModule.FileName
 } finally { $caller.Dispose() }

@@ -27,7 +27,7 @@ class PortableSetupWiring(unittest.TestCase):
 
     def test_official_download_without_python_on_the_user_pc(self):
         gui=self.read('source/LauncherGui.au3')
-        self.assertIn('_PAS_StartDownload(@ScriptDir)',gui)
+        self.assertIn('_PAS_StartDownload(@ScriptDir, True)',gui)
         self.assertIn('setup.source',gui)
         self.assertIn('_PAS_ProgressText($setupWorker)',gui)
         self.assertIn('_PAS_StartDownload(@ScriptDir, True)',gui)

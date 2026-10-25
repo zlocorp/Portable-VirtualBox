@@ -3,7 +3,7 @@
 # Real frontend/Manager/VBoxManage/guest tokens remain medium/non-admin. This
 # proves helper effects and boundaries, not GUI ShellExecute/UAC consent.
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$PortableRoot)
+param([Parameter(Mandatory)][string]$PortableRoot,[switch]$MainLauncher)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -15,7 +15,7 @@ $repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $out=Join-Path $env:RUNNER_TEMP 'helper-boundary-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $store=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Experiment'
-$exe=Join-Path $root 'Portable-VirtualBox-Session-Test.exe'
+$exe=Join-Path $root $(if($MainLauncher){'Portable-VirtualBox.exe'}else{'Portable-VirtualBox-Session-Test.exe'})
 $helper=Join-Path $root 'Portable-VirtualBox-Helper-Test.exe'
 Add-Type -Path @((Join-Path $repo 'source/privilege/TokenFacts.cs'),(Join-Path $PSScriptRoot 'MediumProcess.cs'))
 $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
@@ -79,12 +79,12 @@ function Await-GuestLog([Diagnostics.Process]$Process) {
     }
     throw 'Fresh guest log never reached RUNNING'
 }
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';frontend=$(if($MainLauncher){'main-launcher'}else{'separate-experiment'});gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
 $front=$null;$manager=$null;$guest=$null
 try {
     Clean-System
     if (Test-Path -LiteralPath $store) { throw 'Fixture requires a fresh store' }
-    $front=Start-Medium $exe '--lang en --separate-privileges' 'frontend'
+    $front=Start-Medium $exe $(if($MainLauncher){'--lang en'}else{'--lang en --separate-privileges'}) 'frontend'
     # No GUI Start click: this fixture must not pretend to validate UAC delivery.
     if ($front.WaitForExit(500)) { throw 'Frontend did not remain live' }
     $payload=Join-Path $root 'app64\VBoxRT.dll';$manifest=Join-Path $root 'app64\.prepared.json'
@@ -169,7 +169,7 @@ try {
     }
     $proof.uuid=$uuid;$proof.two_cycles_clean=$true
     if (-not $front.CloseMainWindow()) { throw 'Idle frontend could not close' }
-    Wait-Exit $front 0 'frontend close' 10
+    Wait-Exit $front $(if($MainLauncher){2}else{0}) 'frontend close' 10
     Write-Host 'PASS: direct-invoker helper boundary with actual medium Manager/guest, pinned-input refusal, protected write denial and two clean cycles; UAC NOT VERIFIED'
 } catch { $proof.error=$_.Exception.Message;throw } finally {
     $proof | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'helper-boundary-proof.json') -Encoding utf8

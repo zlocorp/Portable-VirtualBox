@@ -58,6 +58,19 @@ If $CmdLine[0] >= $iFirst Then
                 "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --download-app64  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --about  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
+        Case "--elevation-worker"
+            ; The fixed-action helper worker is only available inside the
+            ; isolated hosted-Windows experiment. Never present in normal CLI.
+            If Not _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) Then Exit 9
+            If $CmdLine[0] < $iFirst + 3 Or $CmdLine[0] > $iFirst + 4 Then Exit 64
+            If Not StringRegExp($CmdLine[$iFirst + 2], "^[1-9][0-9]{0,8}$") Then Exit 64
+            If $CmdLine[$iFirst + 1] == "Recover" Then
+                If $CmdLine[0] <> $iFirst + 4 Then Exit 64
+                If Not StringRegExp($CmdLine[$iFirst + 3], "^[1-9][0-9]{0,8}$") Or Not StringRegExp($CmdLine[$iFirst + 4], "^[1-9][0-9]{0,2}$") Then Exit 64
+                Exit _PB_RunRequest(@ScriptDir, "Recover", Int($CmdLine[$iFirst + 2]), Int($CmdLine[$iFirst + 4]), Int($CmdLine[$iFirst + 3]))
+            EndIf
+            If $CmdLine[0] <> $iFirst + 3 Or Not StringRegExp($CmdLine[$iFirst + 3], "^[1-9][0-9]{0,2}$") Then Exit 64
+            Exit _PB_RunRequest(@ScriptDir, $CmdLine[$iFirst + 1], Int($CmdLine[$iFirst + 2]), Int($CmdLine[$iFirst + 3]))
         Case "--ci-service-smoke"
             ; Explicitly gated disposable-host experiment only: not in help/GUI.
             Exit _PVS_Execute(@ScriptDir)

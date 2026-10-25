@@ -185,7 +185,10 @@ Func _LG_Show()
             Case $idAbout
                 MsgBox(64, _LI("gui.about"), _LA_Text(), 0, $hGui)
             Case $idManager
-                If _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) And $backupWorker["handle"] = 0 Then
+                If _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) And $backupWorker["handle"] = 0 And $setupWorker["handle"] = 0 Then
+                    ; Exactly the same Manager controller, with separate helper
+                    ; selected for medium-token CI; no blanket elevation.
+                    $g_MS_Separated = _PB_Medium()
                     GUISetState(@SW_HIDE, $hGui)
                     _MSW_Show(@ScriptDir, EnvGet("GITHUB_WORKSPACE"))
                     GUISetState(@SW_SHOW, $hGui)

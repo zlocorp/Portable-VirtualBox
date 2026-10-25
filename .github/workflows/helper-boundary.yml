@@ -16,6 +16,9 @@ on:
       - tests/windows/**
       - source/ManagerWindow.au3
       - source/Portable-VirtualBox-Session-Test.au3
+      - source/Portable-VirtualBox.au3
+      - source/LauncherGui.au3
+      - tests/test_main_manager_wiring.py
       - scripts/manager_session_worker.ps1
       - scripts/check_manager_session_gui.ps1
       - scripts/snapshot_manager_windows.ps1
@@ -34,6 +37,10 @@ concurrency:
 jobs:
   helper-boundary:
     if: github.repository == 'zlocorp/Portable-VirtualBox'
+    strategy:
+      fail-fast: false
+      matrix:
+        frontend: [session-test, main-launcher]
     runs-on: windows-2022
     timeout-minutes: 18
     steps:
@@ -75,15 +82,24 @@ jobs:
           $sig=Get-AuthenticodeSignature -LiteralPath $bins[0].FullName
           if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'Untrusted compiler' }
           $toolchain=Split-Path (Split-Path $bins[0].FullName -Parent) -Parent
-          ./scripts/build.ps1 -AutoItRoot $toolchain -SessionExperiment
-          $exe=(Resolve-Path 'build/Portable-VirtualBox-Session-Test.exe').Path
-          $p=Start-Process -FilePath $exe -PassThru -Wait -NoNewWindow
-          if ($p.ExitCode -ne 9) { throw 'Experiment accepted the ordinary checkout instead of private runner root' }
-          Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
+          if ('${{ matrix.frontend }}' -eq 'main-launcher') {
+            ./scripts/build.ps1 -AutoItRoot $toolchain
+            $exe=(Resolve-Path 'build/Portable-VirtualBox_x64.exe').Path
+            $p=Start-Process -FilePath $exe -ArgumentList '--version' -PassThru -Wait -NoNewWindow
+            if ($p.ExitCode -ne 0) { throw 'Main compiled controller version probe failed' }
+            ./scripts/build_session_helper.ps1 -Frontend $exe
+            Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox.exe')
+          } else {
+            ./scripts/build.ps1 -AutoItRoot $toolchain -SessionExperiment
+            $exe=(Resolve-Path 'build/Portable-VirtualBox-Session-Test.exe').Path
+            $p=Start-Process -FilePath $exe -PassThru -Wait -NoNewWindow
+            if ($p.ExitCode -ne 9) { throw 'Experiment accepted the ordinary checkout instead of private runner root' }
+            Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
+          }
           Copy-Item -LiteralPath 'build/Portable-VirtualBox-Helper-Test.exe' -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Helper-Test.exe')
       - name: Verify helper effects with medium callers, without claiming UAC delivery
         shell: pwsh
-        run: ./tests/windows/check_helper_boundary.ps1 -PortableRoot $env:MANAGER_ROOT
+        run: ./tests/windows/check_helper_boundary.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher:('${{ matrix.frontend }}' -eq 'main-launcher')
       - name: Collect bounded evidence only, no executable or Oracle payload
         if: always()
         shell: pwsh
@@ -109,7 +125,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: fixed-helper-boundary-evidence
+          name: fixed-helper-boundary-evidence-${{ matrix.frontend }}
           path: results/manager-session/
           retention-days: 7
           if-no-files-found: warn

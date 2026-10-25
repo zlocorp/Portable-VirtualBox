@@ -24,7 +24,7 @@ namespace PortableVBox {
             var self=TokenFacts.Read(Process.GetCurrentProcess().Id);
             if(!self.Administrator || self.Integrity<12288 || user.Administrator || user.Integrity<8192 || user.Integrity>=12288 || user.Sid!=self.Sid || user.Session!=self.Session)
                 throw new InvalidOperationException("Privilege/user/session boundary rejected");
-            if(!String.Equals(user.Image,Path.Combine(root,"Portable-VirtualBox-Session-Test.exe"),StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Unexpected controller image");
+            if(!String.Equals(user.Image,Path.Combine(root,PinnedBuild.FrontendName),StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Unexpected controller image");
             using(var f=OpenLocked(user.Image)) if(Hash(f)!=PinnedBuild.FrontendSha256) throw new InvalidOperationException("Controller build hash rejected");
             return user;
         }
@@ -51,7 +51,7 @@ namespace PortableVBox {
             if(!OrphanControllerAbsent(oldPid) || oldPid<1) throw new InvalidOperationException("Untrusted or ambiguous recovery target");
             var original=ProtectedJson(Path.Combine(session,"controller.json"));
             var receipt=ProtectedJson(Path.Combine(session,"session.json"));
-            string formerImage=Path.Combine(root,"Portable-VirtualBox-Session-Test.exe");
+            string formerImage=Path.Combine(root,PinnedBuild.FrontendName);
             string created=ReadProtectedField(original,"created");
             if(ReadProtectedField(original,"pid")!=oldPid.ToString(CultureInfo.InvariantCulture) ||
                ReadProtectedField(original,"cycle")!=cycle.ToString(CultureInfo.InvariantCulture) ||
@@ -88,7 +88,7 @@ namespace PortableVBox {
                 throw new InvalidOperationException("Untrusted or replayed incomplete session");
             var original=ProtectedJson(Path.Combine(session,"controller.json"));
             var intent=ProtectedJson(Path.Combine(session,"prepare-intent.json"));
-            string formerImage=Path.Combine(root,"Portable-VirtualBox-Session-Test.exe");
+            string formerImage=Path.Combine(root,PinnedBuild.FrontendName);
             string created=ReadProtectedField(original,"created");
             if(ReadProtectedField(original,"pid")!=oldPid.ToString(CultureInfo.InvariantCulture) ||
                ReadProtectedField(original,"cycle")!=cycle.ToString(CultureInfo.InvariantCulture) ||
@@ -190,7 +190,7 @@ namespace PortableVBox {
                 if(testBreak=="Stage" || testBreak=="Start" || testBreak=="Sds")
                     extra+=" -TestBreakAfter "+testBreak;
                 else if(testBreak.Length>0) throw new InvalidOperationException("Unknown controlled test breakpoint");
-                var info=new ProcessStartInfo(powershell,"-NoLogo -NoProfile -NonInteractive -File "+Quote(Path.Combine(working,"privileged_session_worker.ps1"))+" -Action "+args[0]+" -PortableRoot "+Quote(root)+" -SessionDir "+Quote(session)+" -ControllerPid "+pid+" -ControllerCreated "+caller.Created+extra);
+                var info=new ProcessStartInfo(powershell,"-NoLogo -NoProfile -NonInteractive -File "+Quote(Path.Combine(working,"privileged_session_worker.ps1"))+" -Action "+args[0]+" -PortableRoot "+Quote(root)+" -SessionDir "+Quote(session)+" -ControllerPid "+pid+" -ControllerCreated "+caller.Created+" -FrontendName "+PinnedBuild.FrontendName+extra);
                 info.UseShellExecute=false;info.CreateNoWindow=true;info.WorkingDirectory=working;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
                 // Never inherit low-user module search paths, PS profiles, PATH,
                 // temp dirs or .NET startup/profiler variables into elevated effects.

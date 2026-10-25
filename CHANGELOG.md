@@ -4,6 +4,12 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Integrated experiment · 2026-10-25 main EXE privilege boundary
+
+- The fixed-action helper can now bind the exact compiled **main** frontend as well as the separate experiment: build-time controller name/SHA-256 and Oracle inventory are verified before any system mutation. Its privileged worker accepts only the compiled-in controller identity, never caller-supplied paths or commands.
+- On disposable Windows CI only, a medium-token normal EXE is routed to the existing separated manager/UAC controller, with the already-elevated CI path unchanged. The direct-invoker helper regression now tests both compiled frontends on separate isolated hosts; it does not simulate or claim interactive Windows 11 UAC.
+- No helper is added to the public preview ZIP, no release is published, and normal-host Start/Stop stays blocked pending reviewed production effects.
+
 ### Improved · 2026-10-25 first-run progress
 
 - First-run download now reports verified transfer progress in MiB and percentage when Oracle provides Content-Length; SHA-256 validation and app64 extraction have separate RU/EN status messages. The temporary status is written only by the non-admin preparer to a fresh reserved file and removed after completion/failure; it is never used as integrity or privilege evidence.

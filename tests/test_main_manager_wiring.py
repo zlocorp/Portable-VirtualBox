@@ -11,6 +11,7 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('GUICtrlCreateButton("", 346, 492, 310, 37)',gui)
         self.assertIn('_MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE"))',gui)
         self.assertIn('_MSW_Show(@ScriptDir, EnvGet("GITHUB_WORKSPACE"))',gui)
+        self.assertIn('$g_MS_Separated = _PB_Medium()',gui)
         self.assertIn('GUICtrlSetState($idManager, $GUI_DISABLE)',gui)
         self.assertIn('Case $idManager',gui)
         self.assertNotIn('ProcessClose(',gui)
