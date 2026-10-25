@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · 2026-10-25 Unicode-safe privileged recovery
+
+- Windows PowerShell 5.1 interpreted BOM-less UTF-8 JSON receipts produced by the elevated C# helper using the system ANSI code page. Cyrillic portable-root paths then appeared to be different owners, blocking legitimate interrupted driver recovery. All protected JSON reads now explicitly request UTF-8, preserving exact owner/path comparisons. Refusal remains strict for forged/stale records, and the existing one-shot recovery tests run on isolated Unicode-path hosts.
+
 ### Fixed · 2026-10-25 Windows PowerShell process tracking
 
 - Windows PowerShell 5.1 exposed a real process-tracking incompatibility: Start-Process -NoNewWindow -PassThru with redirected output can return an empty ExitCode after waiting, despite successful driver staging. The fixed elevated scripts now cache each exact subprocess handle immediately, before waiting. All confirmation still depends on verified zero exit codes and signed driver/service receipts; no guessed success or relaxed service checks.

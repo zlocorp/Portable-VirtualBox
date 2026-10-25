@@ -31,9 +31,9 @@ foreach ($candidate in @($AppDir,$StandaloneReport,$DriverStartReport,$proofPath
     if (-not (Under-Runner $candidate)) { throw 'All input/output paths must be in RUNNER_TEMP' }
 }
 $app=(Resolve-Path -LiteralPath $AppDir).Path
-$stage=(Get-Content -LiteralPath $StandaloneReport -Raw -ErrorAction Stop | ConvertFrom-Json)
-$started=(Get-Content -LiteralPath $DriverStartReport -Raw -ErrorAction Stop | ConvertFrom-Json)
-$proof=(Get-Content -LiteralPath $proofPath -Raw -ErrorAction Stop | ConvertFrom-Json)
+$stage=(Get-Content -LiteralPath $StandaloneReport -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json)
+$started=(Get-Content -LiteralPath $DriverStartReport -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json)
+$proof=(Get-Content -LiteralPath $proofPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json)
 $pinSys='4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be'
 $pinInf='2fc48547de7dad96e3ebf0b49c339757317abd0c8a482f5f412a59fb730e05e4'
 if ($stage.experiment -ne 'standalone-VBoxSup-primitive-INF-pnputil' -or
@@ -116,7 +116,7 @@ if ($PSCmdlet.ParameterSetName -eq "RecoverySession") {
         $proof.controller_image -notin @((Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe'), (Join-Path $proof.portable_root 'Portable-VirtualBox.exe'))) {
         throw 'Protected cleanup recovery proof is missing or mismatched'
     }
-    $old=Get-Content -LiteralPath (Join-Path (Split-Path $app -Parent) 'session.json') -Raw -ErrorAction Stop | ConvertFrom-Json
+    $old=Get-Content -LiteralPath (Join-Path (Split-Path $app -Parent) 'session.json') -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
     if ($old.schema -ne 1 -or -not $old.prepared -or
         $old.controller_pid -ne $proof.original_controller_pid -or
         $old.controller_created_filetime -ne $proof.original_controller_created_filetime -or

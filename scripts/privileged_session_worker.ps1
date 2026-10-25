@@ -89,7 +89,7 @@ try {
                 throw 'Incomplete preparation has no exclusive driver staging proof'
             }
             if (Test-Path -LiteralPath (Join-Path $session 'session.json')) { throw 'Completed session is not an interrupted preparation' }
-            $intent=Get-Content -LiteralPath (Join-Path $session 'prepare-intent.json') -Raw | ConvertFrom-Json
+            $intent=Get-Content -LiteralPath (Join-Path $session 'prepare-intent.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             # Name the failing invariant without printing private user paths,
             # SIDs or protected receipt contents. All checks remain fail-closed.
             $reject=@()
@@ -116,14 +116,14 @@ try {
                 ConvertTo-Json | Set-Content -LiteralPath $partialProof -Encoding utf8
             if (-not (Test-OriginalControllerAbsent $OriginalControllerPid)) { throw 'Old owner reappeared before partial recovery' }
             & (Join-Path $PSScriptRoot 'vbox_sup_partial_cleanup.ps1') -AppDir $app -SessionDir $session -PartialRecoveryReport $partialProof -OutputDirectory (Join-Path $session 'cleanup') -OriginalControllerCreated $OriginalControllerCreated
-            $clean=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw | ConvertFrom-Json
+            $clean=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             if (-not $clean.cleanup_verified -or -not $clean.driver_package_removed -or @(VBox-Processes).Count -ne 0) {
                 throw 'Partial preparation teardown unconfirmed'
             }
             Write-Host 'PRIVILEGED_INCOMPLETE_PREPARATION_RECOVERED'
             exit 0
         }
-        $receipt=Get-Content -LiteralPath (Join-Path $session 'session.json') -Raw | ConvertFrom-Json
+        $receipt=Get-Content -LiteralPath (Join-Path $session 'session.json') -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($receipt.schema -ne 1 -or -not $receipt.prepared -or $receipt.portable_root -ine $root -or $receipt.protected_app -ine $app) {
             throw 'Not our protected session'
         }
@@ -163,7 +163,7 @@ try {
                 ConvertTo-Json | Set-Content -LiteralPath $proof -Encoding utf8
             & (Join-Path $PSScriptRoot 'vbox_sup_cleanup.ps1') -AppDir $app -StandaloneReport (Join-Path $session 'stage\sup-standalone.json') -DriverStartReport (Join-Path $session 'start\sup-start-results.json') -PrivilegedReport $proof -OutputDirectory (Join-Path $session 'cleanup')
         }
-        $clean=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw | ConvertFrom-Json
+        $clean=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw -Encoding UTF8 | ConvertFrom-Json
         if (-not $clean.cleanup_verified -or -not $clean.driver_package_removed -or @(VBox-Processes).Count -ne 0) { throw 'Cleanup not confirmed' }
         Write-Host 'PRIVILEGED_SESSION_CLEAN'
     }

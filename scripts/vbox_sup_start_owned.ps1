@@ -21,7 +21,7 @@ if (-not $source.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase) -or
     -not $target.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase)) {
     throw 'Input report and output must be under RUNNER_TEMP'
 }
-$report=Get-Content -LiteralPath $source -Raw -ErrorAction Stop | ConvertFrom-Json
+$report=Get-Content -LiteralPath $source -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
 if ($report.experiment -ne 'standalone-VBoxSup-primitive-INF-pnputil' -or
     $report.pnputil_status -ne 'EXITED' -or $report.pnputil_exit_code -ne 0 -or
     -not $report.package_verified -or -not $report.service_registered -or

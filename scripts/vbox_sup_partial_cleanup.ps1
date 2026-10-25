@@ -33,9 +33,9 @@ if ((Test-Path -LiteralPath $outPath) -or (Test-Path -LiteralPath (Join-Path $se
 $stagePath=Join-Path $session 'stage\sup-standalone.json'
 $startPath=Join-Path $session 'start\sup-start-results.json'
 $sdsMarkerPath=Join-Path $session 'sds-registered.json'
-$intent=Get-Content -LiteralPath (Join-Path $session 'prepare-intent.json') -Raw -ErrorAction Stop | ConvertFrom-Json
-$stage=Get-Content -LiteralPath $stagePath -Raw -ErrorAction Stop | ConvertFrom-Json
-$proof=Get-Content -LiteralPath $proofPath -Raw -ErrorAction Stop | ConvertFrom-Json
+$intent=Get-Content -LiteralPath (Join-Path $session 'prepare-intent.json') -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
+$stage=Get-Content -LiteralPath $stagePath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
+$proof=Get-Content -LiteralPath $proofPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
 function Test-OriginalControllerAbsent([int]$OldPid) {
     if ($OldPid -le 0) { return $false }
     return $null -eq (Get-CimInstance Win32_Process -Filter "ProcessId=$OldPid" -ErrorAction Stop)
@@ -117,7 +117,7 @@ if ((Test-Path -LiteralPath (Join-Path $session 'start')) -and -not $startExists
 }
 $phase='Stage'
 if ($startExists) {
-    $started=Get-Content -LiteralPath $startPath -Raw | ConvertFrom-Json
+    $started=Get-Content -LiteralPath $startPath -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($started.experiment -ne 'owned-standalone-VBoxSup-start' -or
         $started.start_exit_code -ne 0 -or $started.start_status -ne 'EXITED' -or
         -not $started.driver_running -or $started.initial_status -ne 'Stopped' -or
@@ -136,7 +136,7 @@ if (-not $markerExists -and ((Test-Path -LiteralPath (Join-Path $session 'sds-re
 }
 if ($markerExists) {
     if (-not $startExists) { throw 'SDS registered before proven driver start' }
-    $marker=Get-Content -LiteralPath $sdsMarkerPath -Raw | ConvertFrom-Json
+    $marker=Get-Content -LiteralPath $sdsMarkerPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $sdsExe=Join-Path $app 'VBoxSDS.exe'
     if ($marker.schema -ne 1 -or -not $marker.registered -or
         $marker.protected_app -ine $app -or

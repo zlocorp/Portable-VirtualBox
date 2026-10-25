@@ -165,6 +165,20 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         workflow=self.text('.github/workflows/helper-boundary.yml')
         self.assertIn('Require native Windows PowerShell 5.1', workflow)
 
+    def test_protected_receipts_decode_unicode_consistently_on_windows_powershell(self):
+        for path in (
+            'scripts/privileged_session_worker.ps1',
+            'scripts/vbox_sup_partial_cleanup.ps1',
+            'scripts/vbox_sup_cleanup.ps1',
+            'scripts/vbox_sup_start_owned.ps1'
+        ):
+            source=self.text(path)
+            matches=[line for line in source.splitlines()
+                     if 'Get-Content ' in line and '| ConvertFrom-Json' in line]
+            self.assertTrue(matches, path)
+            for line in matches:
+                self.assertIn('-Encoding UTF8', line, path)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
