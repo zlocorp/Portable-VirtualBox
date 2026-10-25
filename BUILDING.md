@@ -9,7 +9,7 @@ This describes the **active** `dev/modernization-2026` project. The historical
   extracted from [AutoIt](https://www.autoitscript.com/site/autoit/downloads/).
   The compiler root must contain `Aut2Exe/Aut2exe_x64.exe`.
 - PowerShell 7 (preferred) or Windows PowerShell.
-- Python 3 for non-native tests and packaging.
+- Python 3 for non-native tests, packaging and building the self-contained Setup helper (external pinned `PyInstaller==6.22.3`). **Users do not install Python.**
 - No 7-Zip, DevCon, SnetCfg, Resource Hacker or historical bundled compiler.
 
 ## Build the current diagnostic preview
@@ -23,6 +23,12 @@ pwsh -NoProfile -File .\scripts\test-native.ps1 -AutoItRoot 'C:\Program Files (x
 python -X utf8 scripts/check_active_tree.py
 ```
 
+Also compile the standalone Oracle file-only Setup helper before creating the ZIP:
+
+```powershell
+pwsh -NoProfile -File .\scripts\build_portable_setup.ps1
+```
+
 Windows `build.bat` is a compatibility wrapper around
 `scripts/build.ps1`. It no longer calls any in-repository compiler,
 7za, or release/SFX packager.
@@ -34,8 +40,7 @@ To create the **diagnostic-only** ZIP (not a usable hypervisor release):
 python -X utf8 scripts/package_preview.py --repo . --exe build/Portable-VirtualBox_x64.exe --out build/Portable-VirtualBox-diagnostic-preview.zip
 ```
 
-The compiled GUI only provides read-only Windows diagnostics and user-owned
-portable-folder preparation. Native VM execution and privileged VBoxSup/VBoxSDS
+The ordinary GUI provides nonprivileged diagnostics, portable-folder/data backup and pinned Oracle 7.2.22 file-only setup (official download or a selected local installer). Native VM execution and privileged VBoxSup/VBoxSDS
 experiments are fenced to disposable GitHub Actions Windows hosts and are NOT
 available as a supported normal-user start/stop workflow.
 
@@ -55,7 +60,7 @@ Original author credit and licensing: [LICENSE.md](LICENSE.md).
 
 `./scripts/build.ps1 -AutoItRoot <official-toolchain-root> -SessionExperiment`
 builds `build/Portable-VirtualBox-Session-Test.exe` from its own entrypoint.
-The ordinary build and six-member preview ZIP are unchanged. The experimental
+The seven-member diagnostic preview ZIP includes `Portable-VirtualBox-Setup.exe` but does not enable production driver operations. The experimental
 EXE refuses an ordinary checkout/PC and needs the disposable hosted Windows
 workflow plus its already-elevated effect adapter. These environment checks
 are accident guards, not a security boundary or a production UAC helper.

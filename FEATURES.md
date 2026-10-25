@@ -1,6 +1,6 @@
 # Features and differences from the original
 
-Updated **2026-10-22**. The comparison baseline is upstream `vboxme/Portable-VirtualBox` at `5b58dbbe701c3e2eb348942a9059708063b0cb96`, not every community fork. This branch is still a **diagnostic development preview**, not a replacement for an existing working launcher.
+Updated **2026-10-25**. The comparison baseline is upstream `vboxme/Portable-VirtualBox` at `5b58dbbe701c3e2eb348942a9059708063b0cb96`, not every community fork. This branch is still a **diagnostic development preview**, not a replacement for an existing working launcher.
 
 | Capability | Current status | What that means / evidence |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Updated **2026-10-22**. The comparison baseline is upstream `vboxme/Portable-Vir
 | Distinguish Manager / guest / background processes | Public preview | Query-only diagnostic snapshot; not VM state or teardown permission |
 | About, authors and reuse notices | Public preview | Concise GUI/`--about`; detailed authors and component notices in one CREDITS file, also included in ZIP |
 | Legacy binary-free source/build | Implemented | Old AutoIt/7za/DevCon/SnetCfg removed; signed external compiler; source-tree guard |
-| Oracle 7.2.22 verified file-only preparation | Developer tooling / CI | Exact pinned official package, MSI/CAB extraction, hashes and publisher checks; not a user-facing installer |
+| Oracle 7.2.22 verified file-only preparation | **Public preview** | Non-admin Setup helper with embedded Python; GUI and CLI `--download-app64` or `--prepare-app64 INSTALLER`; official HTTPS with pinned SHA-256, non-overwriting app64, no MSI execution or driver changes. [Windows CI](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40209800549) passed both routes. VM Start/Stop still requires Windows 11 UAC acceptance. |
 | Empty VM boot and own-resource teardown | CI-only | Actual compiled AutoIt and signed VBoxSup on disposable Windows Server; not a shipped user flow |
 | Offline portable `data/` backup, verify and fresh-root restore | **Public preview** | GUI + CLI; SHA-256 verification, non-overwriting staged publish, Unicode/snapshots subfolders, explicit cancellation and refusal during VBox activity. Restore creates only a new folder, never merges old profiles. External media are NOT copied; not a VM snapshot. |
 | VM/media/global-registry portability audit | **Public preview** | RU/EN GUI and `--audit-vms`: read-only `.vbox` snapshot/medium paths and `VirtualBox.xml` registrations; flags external/missing disks, external registered machines, unregistered VM files. Backup of `data` warns but never copies external disks. Initial [native/compiled Windows checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39790408168) and [real Oracle-created `.vbox`](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39791602687) passed; [global registry native tests 39793670330](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670330), [compiled Windows CLI 39793670380](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670380) and [actual Oracle 7.2.22 XML 39793670384](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39793670384) **passed**. |

@@ -17,6 +17,8 @@ The modern adaptations above were implemented independently; their source links 
 
 - **AutoIt**, Jonathan Bennett and the AutoIt Team: [official site](https://www.autoitscript.com/site/autoit/) and [license](https://www.autoitscript.com/autoit3/docs/license.htm). An official external compiler builds this EXE; compiler/toolkit binaries are not bundled. Existing include-file headers remain intact.
 - **Oracle VirtualBox**: a separately obtained runtime with its own [licensing](https://www.virtualbox.org/wiki/Licensing_FAQ). No Oracle EXE, DLL, driver, Guest Additions or Extension Pack is included in this preview ZIP.
-- **Python, PowerShell and Windows APIs/PnPUtil** are external development or host dependencies; their distributions are not included. The inherited project icon remains unchanged; no new community artwork was imported.
+- **Python (PSF license)**: the standalone `Portable-VirtualBox-Setup.exe` includes an embedded Python runtime and standard-library modules. Users do not need Python separately. [License](https://docs.python.org/3/license.html).
+- **PyInstaller**: an external build tool for that Setup EXE; its bootloader is part of the compiled executable. [Licensing and distribution exception](https://pyinstaller.org/en/stable/license.html).
+- **PowerShell and Windows APIs/PnPUtil** are development/host dependencies and are not shipped as extra executables. The inherited project icon remains unchanged; no community artwork was imported.
 
 These notices do not change third-party licenses or imply endorsement by any named author or vendor.

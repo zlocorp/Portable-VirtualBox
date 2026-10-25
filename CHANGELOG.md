@@ -4,6 +4,12 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · 2026-10-25 first-run Oracle preparation
+
+- The ordinary GUI offers two choices: download exact pinned Oracle VirtualBox 7.2.22 from official HTTPS, or select a local official installer. Public CLI: `--download-app64` / `--prepare-app64 INSTALLER`. Standalone non-admin Setup EXE embeds Python; Oracle MSI and drivers are never executed or installed. Existing `app64` is never overwritten.
+- [Compiled Windows acceptance https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40209800549](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40209800549) verified both paths, 185 files, repeated-preparation refusal and no system driver/service changes. Diagnostic ZIP contains seven files, including Setup. **Production Start/Stop and interactive Windows 11 UAC remain unverified.**
+
+
 ### Added / fixed · 2026-10-22 VM portability and safer repeat start
 
 - Ordinary RU/EN GUI and `--audit-vms` now read `.vbox` configurations, count snapshots and identify local, missing or external virtual-disk paths. The extended inventory checks `data/.VirtualBox/VirtualBox.xml`: it flags registered VMs outside portable data, locally saved but unregistered machines, and invalid/missing registration information. XML DTD/external entities and reparse points are rejected; no VM files are rewritten.

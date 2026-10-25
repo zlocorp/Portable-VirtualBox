@@ -6,6 +6,8 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 > **Development preview, not a usable VM launcher yet.** The normal GUI does not start VirtualBox Manager or VMs and does not install drivers. Actual driver/empty-VM tests run only on disposable Windows CI hosts. Windows 11 standard-user/UAC acceptance is still pending.
 
+**First-run setup without installed Python.** Click **Prepare VirtualBox / folders**: **Yes** downloads pinned Oracle VirtualBox 7.2.22 over official HTTPS, **No** selects an already-downloaded installer. The separate non-admin `Portable-VirtualBox-Setup.exe` checks its built-in SHA-256 and prepares `app64` without executing an MSI or installing drivers. Existing `app64` is not overwritten. CLI: `--download-app64` or `--prepare-app64 "INSTALLER_PATH"`. Both routes passed [compiled Windows acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40209800549).
+
 ## What is different
 
 **Offline portable-data backups and fresh-root recovery.** The ordinary GUI now offers an asynchronous backup/verification action for the entire `data/` tree, with cancellation, SHA-256 checks for each copied file and a non-overwriting `.pending` staging folder. The backup and restore actions never touch drivers, VM processes or Oracle configuration. Restoring always creates a fresh, separate folder; existing files are never merged or overwritten. Copying is blocked while VirtualBox is active. **This is a backup of files under `data/`, not a live VM snapshot:** disk images/media outside `data/` are not included. Interrupted stages are preserved for inspection; use a separate drive for important backups. A restored root contains only portable data and its checksum manifest: supply a launcher and Oracle app64 separately before attempting to run VMs.
@@ -31,6 +33,8 @@ Portable-VirtualBox.exe --lang ru --help
 Portable-VirtualBox.exe --save-language ru
 Portable-VirtualBox.exe --save-language auto
 Portable-VirtualBox.exe --prepare-profile
+Portable-VirtualBox.exe --download-app64
+Portable-VirtualBox.exe --prepare-app64 "D:\Downloads\VirtualBox-7.2.22-175245-Win.exe"
 Portable-VirtualBox.exe --app-status
 Portable-VirtualBox.exe --check-readiness
 Portable-VirtualBox.exe --diagnose
@@ -55,7 +59,7 @@ The 2026-10-22 VM audit extension passed [compiled x64 RU/EN and file-only backu
 
 **Recovery after an abandoned session (experimental):** the separate test GUI now offers an explicit recovery action when a prior protected session remains. The fixed helper independently rejects a still-live original controller, active VMs, foreign/stale receipts and replay; it cleans only exactly owned VBoxSup/SDS and protected staging after positive verification. [Real disposable-host proof](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39761908190) preserved the VM's configuration across recovery. No automatic cleanup, production UAC/Windows 11 approval, power-cut/reboot or arbitrary mid-operation recovery, or release is implied.
 
-A separate compiled test frontend now has working **Start VirtualBox / Finish session / Reopen Manager** controls. [Windows GUI acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39567202279) opened the real Oracle Manager, kept an empty VM running after Manager closed, reopened Manager, refused a second controller, and completed two cleanups with the same VM UUID. This is **not included in the diagnostic ZIP**: its system adapter still requires an already elevated disposable runner, not a production UAC flow. [Evidence and limitations](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-manager-session.md).
+The ordinary compiled EXE contains **Start VirtualBox / Finish session / Reopen Manager** controls, currently enabled only on disposable CI hosts. [Windows GUI acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39567202279) opened the real Oracle Manager, kept an empty VM running after Manager closed, reopened Manager, refused a second controller, and completed two cleanups with the same VM UUID. This is **not included in the diagnostic ZIP**: its system adapter still requires an already elevated disposable runner, not a production UAC flow. [Evidence and limitations](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-manager-session.md).
 
 ## Evidence and limits
 
@@ -70,7 +74,7 @@ The community-adoption implementation `183f35da` passed [x64 build, ordinary com
 
 ## Build and packaging
 
-See [build instructions](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/BUILDING.md). `build.bat` delegates to `scripts/build.ps1`; Python runs tests and builds the diagnostic ZIP. Oracle, drivers and VM data are never bundled in that ZIP. The six-file allowlist contains the launcher, preview warning, original license, both READMEs and one consolidated CREDITS file. Developer feature/changelog/adoption documents remain in the repository.
+See [build instructions](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/BUILDING.md). `build.bat` delegates to `scripts/build.ps1`; Python runs tests and builds the diagnostic ZIP. Oracle, drivers and VM data are never bundled in that ZIP. The seven-file allowlist contains the launcher, standalone file-only preparation helper (with embedded Python), preview warning, original license, both READMEs and one consolidated CREDITS file. Developer feature/changelog/adoption documents remain in the repository.
 
 ## Authors and license
 

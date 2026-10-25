@@ -23,7 +23,7 @@ The ordinary user interface does not launch virtual machines,
 install drivers, register Oracle services, or redistribute VirtualBox.
 Normal use remains read-only except explicit portable-folder preparation,
 saving the launcher language to data/launcher.ini, file-only Oracle
-preparation from a user-supplied pinned official installer, and offline data/ backup
+preparation from official HTTPS or a user-supplied pinned installer, and offline data/ backup
 to a directory chosen by the user. Backup never installs VirtualBox.
 An isolated GitHub Actions-only internal research command can exercise
 Oracle VBoxSDS registration/cleanup; do not use it on a personal PC.
@@ -32,12 +32,12 @@ What works:
 - RU/EN diagnostics, explicit saved language, completeness checks and built-in help
 - concise About dialog; original license and consolidated notices included
 - explicit first-run setup of data/.VirtualBox, data/Machines and logs
-- offline preparation of app64 from the exact official Oracle 7.2.22 installer, without installing drivers
+- preparation of app64 from the exact Oracle 7.2.22 package, obtained via official HTTPS or selected locally; no driver installation
 - offline, copy-and-verify data/ backup without deleting any source files
 - repeat setup without overwriting existing user files
 
-To work with VirtualBox you still need the separately downloaded exact Oracle
-VirtualBox 7.2.22 Windows installer and a production-safe driver/service launcher.
+The preparer can fetch the pinned Oracle 7.2.22 installer automatically or use a local copy.
+Actual VM operation still requires a production-safe driver/service launcher.
 The actual VM and signed driver CI experiments are NOT wired into
 the regular launcher. No elevation is requested.
 
