@@ -4,6 +4,11 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Improved · 2026-10-25 first-run progress
+
+- First-run download now reports verified transfer progress in MiB and percentage when Oracle provides Content-Length; SHA-256 validation and app64 extraction have separate RU/EN status messages. The temporary status is written only by the non-admin preparer to a fresh reserved file and removed after completion/failure; it is never used as integrity or privilege evidence.
+- File-only setup stays non-overwriting, and Start/Stop is unavailable during active preparation. This does **not** enable VM Start/Stop for ordinary Windows 11 users.
+
 ### Added · 2026-10-25 first-run Oracle preparation
 
 - The ordinary GUI offers two choices: download exact pinned Oracle VirtualBox 7.2.22 from official HTTPS, or select a local official installer. Public CLI: `--download-app64` / `--prepare-app64 INSTALLER`. Standalone non-admin Setup EXE embeds Python; Oracle MSI and drivers are never executed or installed. Existing `app64` is never overwritten.

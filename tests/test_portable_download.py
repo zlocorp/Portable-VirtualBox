@@ -36,6 +36,35 @@ class PinnedOnlineSetup(TestCase):
             pp.online_prepare(self.root,downloader=downloader,require_windows=False)
         self.assertEqual(list(self.root.iterdir()),[])
 
+    def test_progress_file_is_one_shot_reserved_and_cleaned(self):
+        name = ".pvbox-setup-123-20261025123456-1.progress"
+        status = self.root/name
+        with pp.ProgressFile(self.root, status) as report:
+            report.update("DOWNLOAD", 1048576, 2097152)
+            self.assertEqual(status.read_text(), "DOWNLOAD|1048576|2097152\n")
+            with self.assertRaises(FileExistsError):
+                with pp.ProgressFile(self.root, status):
+                    pass
+        self.assertFalse(status.exists())
+        with self.assertRaises(ValueError):
+            pp.ProgressFile(self.root, self.root.parent/"outside.progress")
+
+    def test_online_progress_reports_download_and_extract_and_cleans_on_error(self):
+        phases=[]
+        class Reporter:
+            def update(self, phase, done=0, total=0):
+                phases.append((phase, done, total))
+        def download(url, dest, sha, *, progress):
+            self.assertEqual((url,sha),(pp.OFFICIAL_URL,pp.PINNED_SHA256))
+            progress(2,4)
+            Path(dest).write_bytes(b"fixture")
+        with patch.object(pp,"download_verified",side_effect=download), \
+             patch.object(pp,"offline_prepare",return_value={"file_count":185,"total_bytes":247834716}):
+            pp.online_prepare(self.root,require_windows=False,progress=Reporter())
+        self.assertIn(("DOWNLOAD",2,4),phases)
+        self.assertEqual(phases[0][0],"DOWNLOAD")
+        self.assertEqual(list(self.root.iterdir()),[])
+
     def test_existing_app64_blocks_download_before_network(self):
         app=self.root/"app64"; app.mkdir()
         (app/"VM.vdi").write_text("keep")

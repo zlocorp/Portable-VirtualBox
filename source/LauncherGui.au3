@@ -146,7 +146,7 @@ Func _LG_Show()
     Local $idClose = GUICtrlCreateButton("", 508, 761, 148, 35)
     Local $checked = False, $showInventory = False
     Local $backupWorker = _MP_New(), $backupTarget = "", $backupAction = "", $restoreSource = ""
-    Local $setupWorker = _MP_New(), $setupInstaller = ""
+    Local $setupWorker = _MP_New(), $setupInstaller = "", $setupLast = ""
     GUICtrlSetData($idBackupStatus, _LI("backup.hint"))
     GUICtrlSetState($idCancel, $GUI_DISABLE)
     ; Hosted disposable-root only until helper/UAC production acceptance.
@@ -210,18 +210,20 @@ Func _LG_Show()
                             Local $choice = MsgBox(0x23, _LI("gui.prepare"), _LI("setup.source"), 0, $hGui)
                             Local $installer = ""
                             If $choice = 6 Then
-                                $setupWorker = _PAS_StartDownload(@ScriptDir)
+                                $setupWorker = _PAS_StartDownload(@ScriptDir, True)
                             ElseIf $choice = 7 Then
                                 $installer = FileOpenDialog(_LI("setup.choose"), @ScriptDir, "Oracle VirtualBox installer (*.exe)", 1, "", $hGui)
                                 If $installer == "" Then ContinueLoop
-                                $setupWorker = _PAS_Start(@ScriptDir, $installer)
+                                $setupWorker = _PAS_Start(@ScriptDir, $installer, True)
                             Else
                                 ContinueLoop
                             EndIf
                             If $setupWorker["status"] == "STARTED" Then
                                 $setupInstaller = $installer
                                 GUICtrlSetState($idPrepare, $GUI_DISABLE)
-                                GUICtrlSetData($idResult, _LI($choice = 6 ? "setup.downloading" : "setup.running"))
+                                GUICtrlSetState($idManager, $GUI_DISABLE)
+                                $setupLast = _LI($choice = 6 ? "setup.downloading" : "setup.running")
+                                GUICtrlSetData($idResult, $setupLast)
                             Else
                                 GUICtrlSetData($idResult, _LI("setup.blocked"))
                             EndIf
@@ -300,11 +302,17 @@ Func _LG_Show()
                 ClipPut(GUICtrlRead($idReport))
         EndSwitch
         If $setupWorker["handle"] <> 0 Then
+            Local $progressText = _PAS_ProgressText($setupWorker)
+            If $progressText <> "" And $progressText <> $setupLast Then
+                $setupLast = $progressText
+                GUICtrlSetData($idResult, $progressText)
+            EndIf
             Local $state = _MP_Poll($setupWorker)
             If $state == "EXITED" Then
                 Local $success = _PAS_Complete(@ScriptDir, $setupWorker["exit_code"])
                 _MP_Release($setupWorker)
                 GUICtrlSetState($idPrepare, $GUI_ENABLE)
+                If _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) And $backupWorker["handle"] = 0 Then GUICtrlSetState($idManager, $GUI_ENABLE)
                 If $success Then
                     GUICtrlSetData($idResult, _LI("setup.done"))
                 Else

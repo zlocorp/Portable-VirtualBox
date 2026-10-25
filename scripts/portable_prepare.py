@@ -6,6 +6,7 @@ claim. Nothing is installed or executed from the Oracle wrapper or MSI.
 """
 from __future__ import annotations
 import argparse
+from contextlib import nullcontext
 import os
 from pathlib import Path
 import re
@@ -23,6 +24,45 @@ FILE_COUNT = 185
 TOTAL_BYTES = 247834716
 MAX_INSTALLER_SIZE = 1024 * 1024 * 1024
 OFFICIAL_URL = "https://download.virtualbox.org/virtualbox/" + RELEASE + "/" + INSTALLER
+
+
+class ProgressFile:
+    """Display-only status owned by this nonprivileged preparer, never authority."""
+
+    def __init__(self, root: Path, path: Path):
+        self.path = Path(path)
+        if (self.path.parent != Path(root) or
+                not re.fullmatch(r"\.pvbox-setup-[0-9]{1,10}-[0-9]{14}-[0-9]{1,3}\.progress", self.path.name)):
+            raise ValueError("Progress file must be a reserved leaf inside portable root")
+        self.stream = None
+
+    def __enter__(self):
+        # CREATE_NEW never replaces a stale file, reparse point or user document.
+        self.stream = self.path.open("x+", encoding="ascii")
+        return self
+
+    def update(self, phase: str, done: int = 0, total: int = 0) -> None:
+        if phase not in ("DOWNLOAD", "VERIFY", "EXTRACT", "DONE"):
+            raise ValueError("Unexpected setup progress phase")
+        if not 0 <= done <= 1024 ** 3 or not 0 <= total <= 1024 ** 3:
+            raise ValueError("Invalid setup byte counts")
+        self.stream.seek(0)
+        self.stream.write(f"{phase}|{done}|{total}\n")
+        self.stream.truncate()
+        self.stream.flush()
+
+    def __exit__(self, _type, _value, _tb):
+        # Do not delete a replacement file if an interrupted GUI or another
+        # same-user process changed the leaf while the handle was open.
+        same_file = False
+        try:
+            same_file = os.path.samestat(os.fstat(self.stream.fileno()),
+                                        self.path.stat(follow_symlinks=False))
+        except OSError:
+            pass
+        self.stream.close()
+        if same_file:
+            self.path.unlink(missing_ok=True)
 
 
 def safe_ancestors(path: Path) -> bool:
@@ -64,9 +104,13 @@ def candidate(installer: Path, root: Path, *, require_windows: bool = True) -> N
         raise ValueError("Oracle installer does not match the built-in pinned SHA-256")
 
 
-def offline_prepare(installer: Path, root: Path, *, require_windows: bool = True) -> dict:
+def offline_prepare(installer: Path, root: Path, *, require_windows: bool = True, progress=None) -> dict:
     root, installer = Path(root), Path(installer)
+    if progress is not None:
+        progress.update("VERIFY")
     candidate(installer, root, require_windows=require_windows)
+    if progress is not None:
+        progress.update("EXTRACT")
     result = prepare(installer, root / "app64", PINNED_SHA256, RELEASE)
     if result.get("file_count") != FILE_COUNT or result.get("total_bytes") != TOTAL_BYTES:
         # A success result with unexpected inventory MUST NOT be advertised as ready.
@@ -75,7 +119,7 @@ def offline_prepare(installer: Path, root: Path, *, require_windows: bool = True
     return result
 
 
-def online_prepare(root: Path, *, downloader=None, require_windows: bool = True) -> dict:
+def online_prepare(root: Path, *, downloader=None, require_windows: bool = True, progress=None) -> dict:
     """Retrieve only the pinned official Oracle wrapper; never execute it.
 
     The download and its partial state live in our own temporary directory.
@@ -83,12 +127,19 @@ def online_prepare(root: Path, *, downloader=None, require_windows: bool = True)
     """
     root = Path(root)
     check_root(root, require_windows=require_windows)
+    built_in_downloader = downloader is None
     if downloader is None:
         downloader = download_verified
     with tempfile.TemporaryDirectory(prefix=".vbox-official-", dir=root) as folder:
         installer = Path(folder) / INSTALLER
-        downloader(OFFICIAL_URL, installer, PINNED_SHA256)
-        return offline_prepare(installer, root, require_windows=require_windows)
+        if progress is not None:
+            progress.update("DOWNLOAD")
+        if built_in_downloader and progress is not None:
+            downloader(OFFICIAL_URL, installer, PINNED_SHA256,
+                       progress=lambda done, total: progress.update("DOWNLOAD", done, total))
+        else:
+            downloader(OFFICIAL_URL, installer, PINNED_SHA256)
+        return offline_prepare(installer, root, require_windows=require_windows, progress=progress)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -98,17 +149,25 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument("--download", action="store_true",
                         help="Download pinned Oracle package from official HTTPS site")
     parser.add_argument("--root", type=Path)
+    parser.add_argument("--progress-file", type=Path,
+                        help="Optional transient read-only-for-UI status inside portable root")
     parser.add_argument("--version", action="store_true", help="Print pinned release; no filesystem changes")
     args = parser.parse_args(argv)
     if args.version:
-        if args.installer or args.root or args.download:
+        if args.installer or args.root or args.download or args.progress_file:
             parser.error("--version must not mix with file operations")
         print("Portable-VirtualBox offline file preparation: Oracle " + RELEASE)
         return 0
     if args.root is None or (args.installer is None and not args.download):
         parser.error("--root and exactly one input mode are required")
     try:
-        result = online_prepare(args.root) if args.download else offline_prepare(args.installer, args.root)
+        check_root(args.root)
+        context = ProgressFile(args.root, args.progress_file) if args.progress_file else nullcontext()
+        with context as progress:
+            result = (online_prepare(args.root, progress=progress) if args.download
+                      else offline_prepare(args.installer, args.root, progress=progress))
+            if progress is not None:
+                progress.update("DONE")
     except FileExistsError as e:
         print("Preparation blocked: " + str(e), file=sys.stderr)
         return 2

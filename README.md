@@ -6,7 +6,7 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 > **Development preview, not a usable VM launcher yet.** The normal GUI does not start VirtualBox Manager or VMs and does not install drivers. Actual driver/empty-VM tests run only on disposable Windows CI hosts. Windows 11 standard-user/UAC acceptance is still pending.
 
-**First-run setup without installed Python.** Click **Prepare VirtualBox / folders**: **Yes** downloads pinned Oracle VirtualBox 7.2.22 over official HTTPS, **No** selects an already-downloaded installer. The separate non-admin `Portable-VirtualBox-Setup.exe` checks its built-in SHA-256 and prepares `app64` without executing an MSI or installing drivers. Existing `app64` is not overwritten. CLI: `--download-app64` or `--prepare-app64 "INSTALLER_PATH"`. Both routes passed [compiled Windows acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40209800549).
+**First-run setup without installed Python.** Click **Prepare VirtualBox / folders**: **Yes** downloads pinned Oracle VirtualBox 7.2.22 over official HTTPS, **No** selects an already-downloaded installer. The separate non-admin `Portable-VirtualBox-Setup.exe` checks its built-in SHA-256 and prepares `app64` without executing an MSI or installing drivers. Existing `app64` is not overwritten. CLI: `--download-app64` or `--prepare-app64 "INSTALLER_PATH"`. Both routes passed [compiled Windows acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40209800549). Download progress shows transferred MiB (and a percentage when Oracle provides its content length), then separate verification/extraction phases. The status is informational; only the validated app64 receipt marks success.
 
 ## What is different
 

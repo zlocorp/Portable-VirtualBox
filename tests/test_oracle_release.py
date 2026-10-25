@@ -55,6 +55,25 @@ class OracleReleaseTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 download_verified(release_root("7.2.20") + self.name, path, self.sha)
 
+    def test_download_reports_real_bytes_and_rejects_wrong_content_length(self):
+        class Response(io.BytesIO):
+            def __init__(self, payload, length):
+                super().__init__(payload)
+                self.headers = {"Content-Length": length}
+
+        with TemporaryDirectory() as folder:
+            dest = Path(folder) / self.name
+            readings = []
+            download_verified(release_root("7.2.20") + self.name, dest, self.sha,
+                opener=lambda *_a, **_kw: Response(self.payload, str(len(self.payload))),
+                progress=lambda done, total: readings.append((done, total)))
+            self.assertEqual(readings, [(0, len(self.payload)), (len(self.payload), len(self.payload))])
+            dest.unlink()
+            with self.assertRaisesRegex(ValueError, "Truncated or inconsistent"):
+                download_verified(release_root("7.2.20") + self.name, dest, self.sha,
+                    opener=lambda *_a, **_kw: Response(self.payload, str(len(self.payload) + 3)))
+            self.assertFalse(dest.exists())
+
     def test_mismatch_removes_partial_and_does_not_install(self):
         with TemporaryDirectory() as folder:
             path = Path(folder) / self.name

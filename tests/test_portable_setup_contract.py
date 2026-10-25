@@ -29,6 +29,8 @@ class PortableSetupWiring(unittest.TestCase):
         gui=self.read('source/LauncherGui.au3')
         self.assertIn('_PAS_StartDownload(@ScriptDir)',gui)
         self.assertIn('setup.source',gui)
+        self.assertIn('_PAS_ProgressText($setupWorker)',gui)
+        self.assertIn('_PAS_StartDownload(@ScriptDir, True)',gui)
         adapter=self.read('source/PortableAppSetup.au3')
         self.assertIn('Func _PAS_StartDownload(',adapter)
         self.assertIn('Func _PAS_CanPrepareRoot(',adapter)
@@ -40,6 +42,8 @@ class PortableSetupWiring(unittest.TestCase):
         downloader=self.read('scripts/portable_prepare.py')
         self.assertIn('OFFICIAL_URL = "https://download.virtualbox.org/virtualbox/"',downloader)
         self.assertIn('download_verified',downloader)
+        self.assertIn('class ProgressFile:',downloader)
+        self.assertIn('progress=lambda done, total:',downloader)
         self.assertIn('TemporaryDirectory(prefix=".vbox-official-", dir=root)',downloader)
 
     def test_public_cli_not_hidden_ci_mode(self):

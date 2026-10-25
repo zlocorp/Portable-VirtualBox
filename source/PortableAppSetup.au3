@@ -37,16 +37,67 @@ Func _PAS_DownloadArgs($root)
     Return '--download --root "' & $root & '"'
 EndFunc
 
-Func _PAS_StartDownload($root)
+; Optional status is a hint for the GUI only, not an app64 readiness receipt.
+; Create a new reserved name each attempt; never overwrite stale progress.
+Func _PAS_ProgressPath($root)
+    If Not _PP_RootSafe($root) Then Return ""
+    Local $stamp = @YEAR & @MON & @MDAY & @HOUR & @MIN & @SEC
+    For $i = 1 To 999
+        Local $path = $root & "\.pvbox-setup-" & @AutoItPID & "-" & $stamp & "-" & $i & ".progress"
+        If Not FileExists($path) Then Return $path
+    Next
+    Return ""
+EndFunc
+
+Func _PAS_AttachProgress($root, $args, $enabled)
+    Local $p = _MP_New()
+    If Not IsBool($enabled) Then Return $p
+    Local $progress = ""
+    If $enabled Then
+        $progress = _PAS_ProgressPath($root)
+        If $progress == "" Then Return $p
+        $args &= ' --progress-file "' & $progress & '"'
+    EndIf
+    $p = _MP_Start($root & "\Portable-VirtualBox-Setup.exe", $args, $root)
+    $p["progress"] = $progress
+    Return $p
+EndFunc
+
+Func _PAS_StartDownload($root, $showProgress = False)
     If Not _PAS_CanPrepareRoot($root) Then Return _MP_New()
     Local $args = _PAS_DownloadArgs($root)
     If $args == "" Then Return _MP_New()
-    Return _MP_Start($root & "\Portable-VirtualBox-Setup.exe", $args, $root)
+    Return _PAS_AttachProgress($root, $args, $showProgress)
 EndFunc
 
-Func _PAS_Start($root, $installer)
+Func _PAS_Start($root, $installer, $showProgress = False)
     If Not _PAS_CanPrepare($root, $installer) Then Return _MP_New()
-    Return _MP_Start($root & "\Portable-VirtualBox-Setup.exe", _PAS_Args($root, $installer), $root)
+    Return _PAS_AttachProgress($root, _PAS_Args($root, $installer), $showProgress)
+EndFunc
+
+Func _PAS_ProgressText($p)
+    If Not IsMap($p) Or Not MapExists($p, "progress") Or $p["progress"] == "" Then Return ""
+    Local $path = $p["progress"]
+    Local $size = FileGetSize($path)
+    If @error Or $size < 1 Or $size > 80 Then Return ""
+    Local $line = StringStripWS(FileRead($path), 3)
+    Local $match = StringRegExp($line, "^(DOWNLOAD|VERIFY|EXTRACT|DONE)\|([0-9]{1,13})\|([0-9]{1,13})$", 1)
+    If Not IsArray($match) Then Return ""
+    Local $bytes = Number($match[1]), $total = Number($match[2])
+    If $bytes > 1073741824 Or $total > 1073741824 Or ($total > 0 And $bytes > $total) Then Return ""
+    Switch $match[0]
+        Case "DOWNLOAD"
+            Local $text = _LI("setup.progress_download") & " " & StringFormat("%.1f", $bytes / 1048576) & " MiB"
+            If $total > 0 Then $text &= " / " & StringFormat("%.1f", $total / 1048576) & " MiB (" & Int($bytes * 100 / $total) & "%)"
+            Return $text
+        Case "VERIFY"
+            Return _LI("setup.progress_verify")
+        Case "EXTRACT"
+            Return _LI("setup.progress_extract")
+        Case "DONE"
+            Return _LI("setup.done")
+    EndSwitch
+    Return ""
 EndFunc
 
 Func _PAS_Complete($root, $exitCode)

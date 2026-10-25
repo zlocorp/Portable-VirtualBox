@@ -95,7 +95,8 @@ def read_manifest(version: str, opener=official_open) -> dict[str, str]:
 
 
 def download_verified(url: str, destination: Path, expected_sha256: str,
-                      opener=official_open, *, max_bytes: int = MAX_INSTALLER_BYTES) -> str:
+                      opener=official_open, *, max_bytes: int = MAX_INSTALLER_BYTES,
+                      progress=None) -> str:
     validate_official_url(url)
     version, filename = urllib.parse.urlsplit(url).path.split("/")[-2:]
     find_windows_installer({filename: expected_sha256}, version)
@@ -116,6 +117,16 @@ def download_verified(url: str, destination: Path, expected_sha256: str,
         total = 0
         with opener(request, timeout=60) as response, temporary.open("xb") as handle:
             _validate_response(response, url)
+            raw_length = getattr(response, "headers", {}).get("Content-Length")
+            expected_length = 0
+            if raw_length is not None:
+                if not isinstance(raw_length, str) or not raw_length.isascii() or not raw_length.isdecimal():
+                    raise ValueError("Invalid official Content-Length")
+                expected_length = int(raw_length)
+                if not 0 < expected_length <= max_bytes:
+                    raise ValueError("Official Content-Length exceeds permitted size")
+            if progress is not None:
+                progress(0, expected_length)
             while True:
                 if time.monotonic() > deadline:
                     raise TimeoutError("Download deadline exceeded")
@@ -127,6 +138,10 @@ def download_verified(url: str, destination: Path, expected_sha256: str,
                     raise ValueError("Installer exceeds size limit")
                 digest.update(chunk)
                 handle.write(chunk)
+                if progress is not None:
+                    progress(total, expected_length)
+            if expected_length and total != expected_length:
+                raise ValueError("Truncated or inconsistent official download")
             handle.flush()
             os.fsync(handle.fileno())
         actual = digest.hexdigest()
