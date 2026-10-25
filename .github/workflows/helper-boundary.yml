@@ -97,6 +97,14 @@ jobs:
             Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
           }
           Copy-Item -LiteralPath 'build/Portable-VirtualBox-Helper-Test.exe' -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Helper-Test.exe')
+      - name: Require native Windows PowerShell 5.1 for protected worker
+        shell: pwsh
+        run: |
+          $builtIn=Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+          if (-not (Test-Path -LiteralPath $builtIn -PathType Leaf)) { throw 'Built-in x64 PowerShell absent' }
+          $engine=& $builtIn -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.Major'
+          if ($LASTEXITCODE -ne 0 -or $engine -ne 5) { throw 'Windows PowerShell 5.1 not available' }
+          Write-Host 'Using built-in Windows PowerShell 5.1 for signed, fixed-action VBox worker'
       - name: Verify helper effects with medium callers, without claiming UAC delivery
         shell: pwsh
         run: ./tests/windows/check_helper_boundary.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher:('${{ matrix.frontend }}' -eq 'main-launcher')

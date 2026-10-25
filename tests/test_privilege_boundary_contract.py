@@ -158,6 +158,13 @@ class PrivilegeBoundaryContract(unittest.TestCase):
             self.assertIn('$' + variable + '.Handle', contents)
             self.assertIn('WaitForExit(', contents)
 
+    def test_inbox_powershell_required_in_effect_worker(self):
+        s=self.text('scripts/privileged_session_worker.ps1')
+        self.assertIn("$PSVersionTable.PSEdition -ne 'Desktop'", s)
+        self.assertIn('$PSVersionTable.PSVersion.Major -ne 5', s)
+        workflow=self.text('.github/workflows/helper-boundary.yml')
+        self.assertIn('Require native Windows PowerShell 5.1', workflow)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))

@@ -15,6 +15,11 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+# The system worker is always launched from the OS-owned x64 Windows PowerShell,
+# never an optionally installed pwsh or user-selected executable.
+if ($PSVersionTable.PSEdition -ne 'Desktop' -or $PSVersionTable.PSVersion.Major -ne 5) {
+    throw 'Only Windows PowerShell 5.1 is accepted for the protected effect worker'
+}
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
     $env:GITHUB_REPOSITORY -ne 'zlocorp/Portable-VirtualBox' -or $env:RUNNER_OS -ne 'Windows') { throw 'Disposable Windows only' }
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
