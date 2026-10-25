@@ -4,6 +4,11 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### CI-bound main EXE UAC transport · 2026-10-25
+
+- The unattended, noninteractive Windows UAC regression now launches the **actual ordinary compiled main EXE** with a medium user token, clicks its own Manager/Start controls, and follows its real same-EXE request-worker to ShellExecuteExW runas. The test requires the GUI to remain responsive in CONSENT_PREPARE with no VBox service/driver effects. It does not approve/cancel the secure-desktop dialog and cannot replace interactive Windows 11 testing.
+- The earlier separate session-test frontend is retained for focused helper and recovery regressions, not used to substitute for the main app's UAC request.
+
 ### Fixed · 2026-10-25 Unicode-safe privileged recovery
 
 - Windows PowerShell 5.1 interpreted BOM-less UTF-8 JSON receipts produced by the elevated C# helper using the system ANSI code page. Cyrillic portable-root paths then appeared to be different owners, blocking legitimate interrupted driver recovery. All protected JSON reads now explicitly request UTF-8, preserving exact owner/path comparisons. Refusal remains strict for forged/stale records, and the existing one-shot recovery tests run on isolated Unicode-path hosts.

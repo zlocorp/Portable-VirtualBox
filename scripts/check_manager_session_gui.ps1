@@ -10,7 +10,9 @@ $root=(Resolve-Path -LiteralPath $PortableRoot).Path
 $runner=(Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path.TrimEnd('\')+'\'
 if (-not $root.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase)) { throw 'Root outside temporary host' }
 if ($UnattendedConsentProbe -and -not $SeparatePrivileges) { throw 'Consent probe requires a medium frontend' }
-if ($MainLauncher -and $SeparatePrivileges) { throw 'Public entrypoint is not yet a verified production privileged helper' }
+if ($MainLauncher -and $SeparatePrivileges -and -not $UnattendedConsentProbe) {
+    throw 'Main launcher UAC acceptance cannot be automated on hosted Windows'
+}
 $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $exe=Join-Path $root $(if($MainLauncher){'Portable-VirtualBox.exe'}else{'Portable-VirtualBox-Session-Test.exe'})
@@ -158,7 +160,8 @@ function Assert-Clean([string]$Label) {
 }
 function Start-Controller([string]$Label) {
     if ($SeparatePrivileges) {
-        $p=[MediumProcess]::Start($exe,'--lang en --separate-privileges',$root,(Join-Path $out ($Label+'.stdout.txt')),(Join-Path $out ($Label+'.stderr.txt')))
+        $args=if ($MainLauncher) { '--lang en' } else { '--lang en --separate-privileges' }
+        $p=[MediumProcess]::Start($exe,$args,$root,(Join-Path $out ($Label+'.stdout.txt')),(Join-Path $out ($Label+'.stderr.txt')))
         [MediumProcess]::LastFacts | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out ($Label+'-token.json')) -Encoding utf8
         return $p
     }
@@ -194,7 +197,8 @@ try {
                 if ((State-Of $badFront) -ne 'CONSENT_PREPARE') { throw 'Consent state lost without user action' }
                 Assert-Clean 'no unapproved elevated effects'
                 $proof.unattended_ui_responsive=$true
-                Write-Host 'PASS: medium GUI responsive while real UAC consent is pending; UAC consent NOT verified'
+                $proof.main_uac_request_pending=[bool]$MainLauncher
+                Write-Host 'PASS: actual compiled frontend stayed responsive during runas request; unattended Windows did not approve/cancel consent'
                 return
             }
             Await-State $badFront 'FAILED' 90

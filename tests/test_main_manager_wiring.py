@@ -48,6 +48,16 @@ class MainManagerWiring(unittest.TestCase):
                      'disk_preserved_after_cleanup=$true'):
             self.assertIn(term, script)
 
+    def test_unattended_runas_reaches_real_main_gui_without_false_approval(self):
+        workflow=(R/'.github/workflows/privilege-session.yml').read_text(encoding='utf-8')
+        fixture=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
+        self.assertIn('build/Portable-VirtualBox_x64.exe', workflow)
+        self.assertIn('build_session_helper.ps1 -Frontend $exe', workflow)
+        self.assertIn('-MainLauncher -SeparatePrivileges -UnattendedConsentProbe', workflow)
+        self.assertIn('main_uac_request_pending=[bool]$MainLauncher', fixture)
+        self.assertIn('unattended_ui_responsive=$true', fixture)
+        self.assertIn('interactive_uac_consent_verified=$false', fixture)
+
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
         w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')

@@ -16,6 +16,9 @@ on:
       - tests/windows/**
       - source/ManagerWindow.au3
       - source/Portable-VirtualBox-Session-Test.au3
+      - source/Portable-VirtualBox.au3
+      - source/LauncherGui.au3
+      - tests/test_main_manager_wiring.py
       - scripts/manager_session_worker.ps1
       - scripts/check_manager_session_gui.ps1
       - scripts/snapshot_manager_windows.ps1
@@ -63,7 +66,7 @@ jobs:
           # separate ProgramData helper cache, whose write denial is tested.
           ./tests/windows/Set-PortableFixtureOwner.ps1 -PortableRoot $root
           "MANAGER_ROOT=$root" >> $env:GITHUB_ENV
-      - name: Compile separate session frontend with official signed AutoIt
+      - name: Compile ordinary main frontend and its exact pinned helper with official AutoIt
         shell: pwsh
         run: |
           $archive=Join-Path $env:RUNNER_TEMP 'manager-autoit.zip'
@@ -75,17 +78,18 @@ jobs:
           $sig=Get-AuthenticodeSignature -LiteralPath $bins[0].FullName
           if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'Untrusted compiler' }
           $toolchain=Split-Path (Split-Path $bins[0].FullName -Parent) -Parent
-          ./scripts/build.ps1 -AutoItRoot $toolchain -SessionExperiment
-          $exe=(Resolve-Path 'build/Portable-VirtualBox-Session-Test.exe').Path
-          $p=Start-Process -FilePath $exe -PassThru -Wait -NoNewWindow
-          if ($p.ExitCode -ne 9) { throw 'Experiment accepted the ordinary checkout instead of private runner root' }
-          Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
+          ./scripts/build.ps1 -AutoItRoot $toolchain
+          $exe=(Resolve-Path 'build/Portable-VirtualBox_x64.exe').Path
+          $p=Start-Process -FilePath $exe -ArgumentList '--version' -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw 'Ordinary main launcher failed its read-only version probe' }
+          ./scripts/build_session_helper.ps1 -Frontend $exe
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox.exe')
           Copy-Item -LiteralPath 'build/Portable-VirtualBox-Helper-Test.exe' -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Helper-Test.exe')
       - name: Verify medium GUI stays responsive during unattended UAC request (no consent acceptance)
         shell: pwsh
         run: |
           try {
-            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -SeparatePrivileges -UnattendedConsentProbe
+            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher -SeparatePrivileges -UnattendedConsentProbe
           } catch {
             # Compare inherited fixture permissions before changing any ACL.
             $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
