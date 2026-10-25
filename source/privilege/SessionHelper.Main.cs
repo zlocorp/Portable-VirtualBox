@@ -179,8 +179,12 @@ namespace PortableVBox {
                         frontend_sha256=PinnedBuild.FrontendSha256
                     })));
                 }
-                string powershell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"PowerShell","7","pwsh.exe");
+                // Windows 10/11 ship 64-bit Windows PowerShell 5.1. Requiring
+                // an optional PowerShell 7 installation broke portability.
+                // Use the trusted OS path only, never user PATH/COMSPEC.
+                string powershell=Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe");
                 LockParents(Path.GetDirectoryName(powershell));
+                if(!File.Exists(powershell)) throw new InvalidOperationException("Built-in Windows PowerShell is unavailable");
                 string working=Path.Combine(session,"code");
                 string extra=recovery?" -OriginalControllerPid "+oldPid+" -OriginalControllerCreated "+originalCreated+(incomplete?" -IncompletePreparation":""):"";
                 // These single-word injections are exclusively for the
@@ -206,11 +210,17 @@ namespace PortableVBox {
                 info.EnvironmentVariables["RUNNER_TEMP"]=store; // fixed protected effect boundary, not an input from the low caller
                 using(var process=new Process {StartInfo=info}) {
                     process.Start();var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
-                    if(!process.WaitForExit(150000)) throw new InvalidOperationException("Elevated effect timeout; no speculative cleanup");
+                    // If a system operation outlives the expected deadline,
+                    // never discard a still-live child. Otherwise the helper
+                    // could finish after we reported FAILED and removed locks.
+                    // The non-admin GUI remains responsive while this waits.
+                    bool withinDeadline=process.WaitForExit(150000);
+                    if(!withinDeadline) process.WaitForExit();
                     WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(stdout.GetAwaiter().GetResult()));
                     WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(stderr.GetAwaiter().GetResult()));
                     var helper=TokenFacts.Read(Process.GetCurrentProcess().Id);
                     WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".json"),Encoding.UTF8.GetBytes(Json.Serialize(new{action=args[0],helper=helper,controller=caller,childExit=process.ExitCode})));
+                    if(!withinDeadline) throw new InvalidOperationException("Fixed effect exceeded deadline (child completed); inspect protected receipts");
                     if(process.ExitCode!=0) throw new InvalidOperationException("Fixed effect worker rejected operation");
                 }
                 if(TokenFacts.WaitForSingleObject(controller,0)!=258) throw new InvalidOperationException("Controller exited during privileged operation");

@@ -133,6 +133,18 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn('frontend: [session-test, main-launcher]', workflow)
         self.assertIn("-MainLauncher:", workflow)
 
+    def test_no_orphaned_privileged_child_on_elapsed_timeout(self):
+        helper=self.text('source/privilege/SessionHelper.Main.cs')
+        self.assertIn('bool withinDeadline=process.WaitForExit(150000)', helper)
+        self.assertIn('if(!withinDeadline) process.WaitForExit()', helper)
+        self.assertIn('if(!withinDeadline) throw new InvalidOperationException', helper)
+        self.assertIn('Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe"', helper)
+        self.assertNotIn('"PowerShell","7","pwsh.exe"', helper)
+        worker=self.text('source/PrivilegeBoundary.au3')
+        self.assertIn('While 1', worker)
+        self.assertIn('$controllerPresent', worker)
+        self.assertNotIn('While TimerDiff($clock) < 180000', worker)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))

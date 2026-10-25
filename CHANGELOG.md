@@ -4,6 +4,12 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Reliability · 2026-10-25 system-worker lifetime and dependency
+
+- The fixed elevated helper uses the built-in **64-bit Windows PowerShell** from System32 instead of requiring an separately installed PowerShell 7. It continues to run only the embedded, hash-checked fixed-action scripts inside the protected session; no PATH lookup, downloaded scripts, or arbitrary commands.
+- If an elevated action exceeds its normal 150-second deadline, the helper **retains and waits for its real system-worker handle** before reporting failure and releasing the effect lock. The ordinary GUI's non-admin UAC request worker likewise no longer marks a still-live elevated helper finished after an arbitrary 180-second timeout. Owner loss never becomes a success response.
+- CI exercises the actual protected service/driver lifecycle with these changes. This is not approval of interactive Windows 11 UAC or a shipping runtime.
+
 ### Expanded Windows acceptance · 2026-10-25 real VM media
 
 - The disposable main-EXE GUI Start/Stop fixture now creates a real Oracle 64 MiB VDI under portable `data/Machines`, attaches it to the test VM, checks it survived driver removal, and then creates a powered-off Oracle snapshot on the second session, verifying its differencing files after teardown.

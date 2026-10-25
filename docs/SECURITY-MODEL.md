@@ -39,6 +39,10 @@ Snapshots are bounded UTF-8 TSV with a completion footer. Exclusive CREATE_NEW w
 
 Native **unit** tests run compiled AutoIt code with synthetic effects, private journal files, real query-only self/child observations and a built-in service read. Test children are private copies that exit naturally. These unit harnesses do not install VBox drivers or run real VMs. Separately, [the disposable native VM integration workflow](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39450334031) provisions a signed isolated VBoxSup through pinned PowerShell, uses the compiled AutoIt launcher to boot/power off one fresh empty VM and verifies its own VM UUID/state with a second independent process. Only then does the workflow remove its exact signed VBoxSDS/VBoxSup resources. This is research on a clean Windows Server 2022 host, not a Windows 11 driver/user permission proof.
 
+## Current system-operation lifetime constraint (2026-10-25)
+
+The CI-bound fixed-action helper no longer requires an optional PowerShell 7 runtime: it invokes the OS-owned x64 Windows PowerShell 5.1 by absolute System32 path. It does not inherit caller PATH or user profiles and still executes only its protected embedded scripts. A script worker that exceeds the expected bound is not abandoned: the helper keeps the process handle and waits for termination before returning an error or releasing its privileged lock; the medium elevation-request worker also waits for the fixed helper to exit rather than treating elapsed time as an exit. This is an **intentional fail-closed wait**, not a claim that Windows operations cannot hang, and a Windows 11 interactive abort/timeout procedure still needs acceptance.
+
 ## Required before actual startup
 
 1. Implement ownership-bound process creation/effect adapters with retained native handles, tested first on harmless private children. Preserve unrelated processes and reject stale/reused identities.

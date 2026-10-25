@@ -8,7 +8,7 @@ This describes the **active** `dev/modernization-2026` project. The historical
 - Windows x64 and the official **AutoIt 3.3.18.0** compiler, installed or
   extracted from [AutoIt](https://www.autoitscript.com/site/autoit/downloads/).
   The compiler root must contain `Aut2Exe/Aut2exe_x64.exe`.
-- PowerShell 7 (preferred) or Windows PowerShell.
+- Windows PowerShell 5.1 for the privileged session helper (built into Windows 10/11); PowerShell 7 remains convenient for development scripts and CI, not a runtime requirement.
 - Python 3 for non-native tests, packaging and building the self-contained Setup helper (external pinned `PyInstaller==6.22.3`). **Users do not install Python.**
 - No 7-Zip, DevCon, SnetCfg, Resource Hacker or historical bundled compiler.
 

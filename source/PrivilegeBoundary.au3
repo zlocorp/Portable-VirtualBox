@@ -78,17 +78,21 @@ Func _PB_RunRequest($root, $action, $controller, $cycle, $formerPid = 0)
     If $p["status"] == "CANCELLED" Then
         $result = 1223
     ElseIf $p["status"] == "STARTED" Then
-        Local $clock = TimerInit()
-        While TimerDiff($clock) < 180000
+        ; The fixed elevated helper may still be performing a system effect
+        ; after 180 seconds. Do NOT detach on elapsed time or controller loss:
+        ; that would turn a still-live operation into a fake completed failure.
+        ; This worker is separate from the responsive Manager GUI thread.
+        Local $controllerPresent = True
+        While 1
             Local $status = _PB_PollHelper($p)
             If $status == "EXITED" Then
-                If $p["exit_code"] = 0 Then $result = 0
+                If $controllerPresent And $p["exit_code"] = 0 Then $result = 0
                 ExitLoop
             EndIf
-            If $status <> "PRESENT" Then ExitLoop
+            If $status <> "PRESENT" Then ExitLoop ; unknown is never success
             $parent = _WinObsProcessRead($token)
-            If $parent["status"] <> "PRESENT" Then ExitLoop
-            Sleep(50)
+            If $parent["status"] <> "PRESENT" Then $controllerPresent = False
+            Sleep(100)
         WEnd
     EndIf
     If $p["handle"] <> 0 Then _MP_Release($p)
