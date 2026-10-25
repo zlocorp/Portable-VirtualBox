@@ -9,7 +9,7 @@ class PortableSetupWiring(unittest.TestCase):
     def test_normal_gui_connects_offline_preparer_without_elevation(self):
         gui=self.read('source/LauncherGui.au3')
         self.assertIn('FileOpenDialog(_LI("setup.choose")',gui)
-        self.assertIn('_PAS_Start(@ScriptDir, $installer)',gui)
+        self.assertIn('_PAS_Start(@ScriptDir, $installer, True)',gui)
         self.assertIn('_PAS_Complete(@ScriptDir, $setupWorker["exit_code"])',gui)
         self.assertNotIn('RunAs(',self.read('source/PortableAppSetup.au3'))
         self.assertNotIn('ShellExecuteExW',self.read('source/PortableAppSetup.au3'))

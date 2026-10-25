@@ -57,7 +57,7 @@ class ProgressFile:
         same_file = False
         try:
             same_file = os.path.samestat(os.fstat(self.stream.fileno()),
-                                        self.path.stat(follow_symlinks=False))
+                                        os.stat(self.path, follow_symlinks=False))
         except OSError:
             pass
         self.stream.close()
