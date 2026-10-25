@@ -165,7 +165,7 @@ function Start-Controller([string]$Label) {
     return Start-Process -FilePath $exe -ArgumentList '--lang en' -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
 }
 $front=$null; $other=$null; $badFront=$null
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
 try {
     Assert-Clean 'initial baseline'
     if ($SeparatePrivileges) {
@@ -241,6 +241,18 @@ try {
     if ($created -notmatch '(?im)^UUID:\s*([0-9a-f-]{36})\s*$') { throw 'No exact fixture UUID' }
     $uuid=$Matches[1]
     $null=Oracle ('modifyvm '+$uuid+' --memory 128 --nic1 none --audio-driver none') 'configure'
+    # Create a real portable VDI under the disposable fixture only.
+    $disk=Join-Path $root 'data\Machines\pvbox_manager_gui_fixture\portable-fixture.vdi'
+    if (Test-Path -LiteralPath $disk) { throw 'Fixture VDI unexpectedly pre-exists' }
+    $null=Oracle ('createmedium disk --filename "'+$disk+'" --size 64 --format VDI') 'create-virtual-disk'
+    if (-not (Test-Path -LiteralPath $disk -PathType Leaf) -or
+        (Get-Item -LiteralPath $disk).Length -lt 4096) { throw 'Fresh VDI absent or too small' }
+    $null=Oracle ('storagectl '+$uuid+' --name SATA --add sata --controller IntelAhci') 'create-storage-controller'
+    $null=Oracle ('storageattach '+$uuid+' --storagectl SATA --port 0 --device 0 --type hdd --medium "'+$disk+'"') 'attach-virtual-disk'
+    $diskInfo=Oracle ('showmediuminfo disk "'+$disk+'"') 'medium-info'
+    if ($diskInfo -notmatch '(?im)^Format:\s+VDI' -or
+        $diskInfo -notmatch '(?im)^UUID:\s+[a-f0-9-]{36}') { throw 'Oracle did not register the VDI' }
+    $proof.virtual_disk_created=$true
     $null=Oracle ('startvm '+$uuid+' --type headless') 'start-guest'
     $running=Oracle ('showvminfo '+$uuid+' --machinereadable') 'guest-running'
     if ($running -notmatch '(?m)^VMState="running"') { throw 'Fixture did not reach running' }
@@ -271,6 +283,8 @@ try {
     Assert-Clean 'first session'
     $vm=Join-Path $root 'data\Machines\pvbox_manager_gui_fixture\pvbox_manager_gui_fixture.vbox'
     if (-not (Test-Path -LiteralPath $vm)) { throw 'Fixture configuration lost' }
+    if (-not (Test-Path -LiteralPath $disk -PathType Leaf)) { throw 'Portable VDI deleted during driver cleanup' }
+    $proof.disk_preserved_after_cleanup=$true
     $vmBefore=(Get-FileHash -LiteralPath $vm).Hash
     # Repeat a session, preserve the registered UUID, no need to invent a
     # boot receipt for a Manager-only second cycle.
@@ -284,9 +298,26 @@ try {
     $again=Oracle ('showvminfo '+$uuid+' --machinereadable') 'same-uuid-second-session'
     if ($again -notmatch ('(?mi)^UUID="'+[regex]::Escape($uuid)+'"') -or $again -notmatch '(?m)^VMState="poweroff"') { throw 'Second Manager session lost fixture UUID/state' }
     $proof.uuid_preserved=$true
+    $againDisk=Oracle ('showmediuminfo disk "'+$disk+'"') 'same-virtual-disk'
+    if ($againDisk -notmatch '(?im)^Format:\s+VDI' -or
+        $againDisk -notmatch '(?im)^UUID:\s+[a-f0-9-]{36}') { throw 'VDI not registered after restart' }
+    # Snapshot is taken while the guest is powered off; Oracle creates a
+    # differencing VDI under this VM's portable Snapshots directory.
+    $null=Oracle ('snapshot '+$uuid+' take portable-baseline') 'take-snapshot'
+    $snapshotList=Oracle ('snapshot '+$uuid+' list --machinereadable') 'inspect-snapshot'
+    if ($snapshotList -notmatch 'portable-baseline') { throw 'Oracle did not list the snapshot' }
+    $proof.snapshot_created=$true
     Click-Button $front 'Finish session'
     Await-State $front 'CLEAN'
     Assert-Clean 'second session'
+    $snapshotDir=Join-Path $root 'data\Machines\pvbox_manager_gui_fixture\Snapshots'
+    if (-not (Test-Path -LiteralPath $disk -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $snapshotDir -PathType Container) -or
+        @(Get-ChildItem -LiteralPath $snapshotDir -File -Filter '*.vdi').Count -lt 1 -or
+        -not (Test-Path -LiteralPath $vm -PathType Leaf)) {
+        throw 'Portable snapshot media/configuration lost after own-driver cleanup'
+    }
+    $proof.snapshot_preserved_after_cleanup=$true
     $proof.two_sessions_clean=$true
     $proof.uuid=$uuid
     $proof.manager_pids=@($manager1,$manager2)
