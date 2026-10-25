@@ -90,15 +90,21 @@ try {
             }
             if (Test-Path -LiteralPath (Join-Path $session 'session.json')) { throw 'Completed session is not an interrupted preparation' }
             $intent=Get-Content -LiteralPath (Join-Path $session 'prepare-intent.json') -Raw | ConvertFrom-Json
-            if ($intent.schema -ne 1 -or $intent.phase -ne 'pre-system-effects' -or
-                $intent.portable_root -ine $root -or $intent.protected_app -ine $app -or
-                $intent.controller_pid -ne $OriginalControllerPid -or
-                $intent.controller_created_filetime -ne $OriginalControllerCreated.ToString() -or
-                $OriginalControllerPid -le 0 -or $OriginalControllerPid -eq $ControllerPid -or
-                -not (Test-OriginalControllerAbsent $OriginalControllerPid) -or
-                (Test-Path -LiteralPath (Join-Path $session 'cleanup')) -or
-                (Test-Path -LiteralPath (Join-Path $session 'partial-recovery-quiescent.json'))) {
-                throw 'Incomplete preparation protected owner mismatch or replay'
+            # Name the failing invariant without printing private user paths,
+            # SIDs or protected receipt contents. All checks remain fail-closed.
+            $reject=@()
+            if ($intent.schema -ne 1) { $reject+='intent-schema' }
+            if ($intent.phase -ne 'pre-system-effects') { $reject+='intent-phase' }
+            if ($intent.portable_root -ine $root) { $reject+='portable-root' }
+            if ($intent.protected_app -ine $app) { $reject+='protected-app' }
+            if ($intent.controller_pid -ne $OriginalControllerPid) { $reject+='former-pid' }
+            if ($intent.controller_created_filetime -ne $OriginalControllerCreated.ToString()) { $reject+='former-created' }
+            if ($OriginalControllerPid -le 0 -or $OriginalControllerPid -eq $ControllerPid) { $reject+='former-generation' }
+            if (-not (Test-OriginalControllerAbsent $OriginalControllerPid)) { $reject+='former-still-live' }
+            if (Test-Path -LiteralPath (Join-Path $session 'cleanup')) { $reject+='cleanup-already-exists' }
+            if (Test-Path -LiteralPath (Join-Path $session 'partial-recovery-quiescent.json')) { $reject+='replay-marker' }
+            if ($reject.Count -ne 0) {
+                throw ('Incomplete preparation protected owner mismatch or replay: ' + ($reject -join ','))
             }
             if (@(VBox-Processes).Count -ne 0) { throw 'Active VBox activity; partial preparation recovery denied' }
             $partialProof=Join-Path $session 'partial-recovery-quiescent.json'
