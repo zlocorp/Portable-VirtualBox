@@ -68,7 +68,7 @@ if ($proof.experiment -ne 'partial-protected-manager-quiescent' -or $proof.schem
     $OriginalControllerCreated.ToString() -ne $proof.original_controller_created_filetime -or
     $proof.controller_pid -le 0 -or $proof.original_controller_pid -le 0 -or
     $proof.original_controller_pid -eq $proof.controller_pid -or
-    $proof.controller_image -ine (Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe') -or
+    $proof.controller_image -notin @((Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe'), (Join-Path $proof.portable_root 'Portable-VirtualBox.exe')) -or
     -not $proof.no_vbox_processes_verified) { throw 'Incomplete preparation ownership proof mismatch' }
 # Before *any* system mutation, require old owner absence and live/new owner.
 Require-Quiescent

@@ -17,6 +17,11 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertNotIn('Arguments = args[', s)
         self.assertIn('FrontendSha256', s)
         self.assertIn('PinnedBuild.FrontendName', s)
+        for path in ('scripts/vbox_sup_cleanup.ps1', 'scripts/vbox_sup_partial_cleanup.ps1'):
+            cleanup = self.text(path)
+            self.assertIn("controller_image -notin @(", cleanup)
+            self.assertIn("Portable-VirtualBox-Session-Test.exe", cleanup)
+            self.assertIn("Portable-VirtualBox.exe", cleanup)
         self.assertIn('" -FrontendName "+PinnedBuild.FrontendName', s)
 
     def test_elevation_retains_native_handle_and_distinguishes_cancel(self):

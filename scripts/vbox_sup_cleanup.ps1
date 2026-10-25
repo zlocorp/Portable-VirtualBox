@@ -85,7 +85,7 @@ if ($PSCmdlet.ParameterSetName -eq "PrivilegedSession") {
     if ($proof.experiment -ne 'privilege-separated-manager-quiescent' -or
         $proof.protected_app -ine $app -or $proof.stage_report -ine $StandaloneReport -or
         $proof.driver_start_report -ine $DriverStartReport -or $proof.no_vbox_processes_verified -ne $true -or
-        $proof.controller_image -ine (Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe')) {
+        $proof.controller_image -notin @((Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe'), (Join-Path $proof.portable_root 'Portable-VirtualBox.exe'))) {
         throw 'No matching protected privilege-session proof'
     }
     $controller=[Diagnostics.Process]::GetProcessById([int]$proof.controller_pid)
@@ -113,7 +113,7 @@ if ($PSCmdlet.ParameterSetName -eq "RecoverySession") {
         $proof.original_controller_pid -le 0 -or $proof.controller_pid -le 0 -or
         $proof.original_controller_pid -eq $proof.controller_pid -or
         $proof.original_controller_created_filetime -notmatch '^[1-9][0-9]{10,19}$' -or
-        $proof.controller_image -ine (Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe')) {
+        $proof.controller_image -notin @((Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe'), (Join-Path $proof.portable_root 'Portable-VirtualBox.exe'))) {
         throw 'Protected cleanup recovery proof is missing or mismatched'
     }
     $old=Get-Content -LiteralPath (Join-Path (Split-Path $app -Parent) 'session.json') -Raw -ErrorAction Stop | ConvertFrom-Json
