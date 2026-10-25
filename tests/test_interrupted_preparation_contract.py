@@ -76,6 +76,7 @@ class InterruptedPreparation(unittest.TestCase):
         self.assertIn('matrix.scenario', workflow)
         self.assertIn('-Scenario', workflow)
         self.assertIn('system_effects_retained_due_to_refusal', check)
+        self.assertEqual(check.count("$evidence=($evidence -replace '\\s+', ' ').Trim()"), 2)
 
     def test_real_host_breaks_after_three_actual_checkpoints(self):
         check = source('tests/windows/check_interrupted_recovery.ps1')

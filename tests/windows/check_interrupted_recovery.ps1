@@ -125,6 +125,10 @@ try {
             Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 'forged-stage-receipt-denied'
             if ((Get-Service VBoxSup).Status -ne 'Stopped') { throw 'Forged stage receipt changed service state' }
             $evidence=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.stderr.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+            # Windows PowerShell 5.1 wraps emitted errors at console width.
+            # Normalize only whitespace in the diagnostic, never the forged
+            # receipt or the independent real driver/service observations.
+            $evidence=($evidence -replace '\s+', ' ').Trim()
             if ($evidence -notmatch 'No exact exclusive VBoxSup staging receipt') {
                 throw 'Stage receipt refusal did not reach exact ownership check'
             }
@@ -147,6 +151,7 @@ try {
                 throw 'Forged SDS marker changed real driver or SDS service'
             }
             $evidence=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.stderr.txt' -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+            $evidence=($evidence -replace '\s+', ' ').Trim()
             if ($evidence -notmatch 'SDS marker owner differs') {
                 throw 'SDS marker refusal did not reach exact ownership check'
             }
