@@ -87,6 +87,10 @@ class MainManagerWiring(unittest.TestCase):
                        'screenshotpng', 'guest_screen_capture=$true', 'GuestIsoSha256'):
             self.assertIn(phrase, fixture)
         self.assertIn('guest_os_booted=$false', fixture)
+        self.assertIn("'Linux_64'", fixture)
+        self.assertIn('--x86-long-mode on', fixture)
+        self.assertIn('longmode="on"', fixture)
+        self.assertIn('guest_64bit_cpu_configured=$true', fixture)
         self.assertIn('retention-days: 7', workflow)
 
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):

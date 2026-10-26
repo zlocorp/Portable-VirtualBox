@@ -181,7 +181,7 @@ function Start-Controller([string]$Label) {
     return Start-Process -FilePath $exe -ArgumentList '--lang en' -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
 }
 $front=$null; $other=$null; $badFront=$null
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;guest_iso_attached=$false;guest_screen_capture=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;guest_iso_attached=$false;guest_64bit_cpu_configured=$false;guest_screen_capture=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
 try {
     Assert-Clean 'initial baseline'
     if ($SeparatePrivileges) {
@@ -254,7 +254,8 @@ try {
     if ($MainLauncher) { Start-Sleep -Milliseconds 250;Click-Button $other 'Close' }
     if (-not $other.WaitForExit(10000) -or $other.ExitCode -ne $(if($MainLauncher){2}else{0})) { throw 'Refused controller did not exit normally' }
     $proof.second_controller_refused=$true
-    $created=Oracle 'createvm --name pvbox_manager_gui_fixture --ostype Other --register' 'create'
+    $guestType=if ($GuestIso) { 'Linux_64' } else { 'Other' }
+    $created=Oracle ('createvm --name pvbox_manager_gui_fixture --ostype '+$guestType+' --register') 'create'
     if ($created -notmatch '(?im)^UUID:\s*([0-9a-f-]{36})\s*$') { throw 'No exact fixture UUID' }
     $uuid=$Matches[1]
     $null=Oracle ('modifyvm '+$uuid+' --memory 128 --nic1 none --audio-driver none') 'configure'
@@ -272,7 +273,7 @@ try {
     $proof.virtual_disk_created=$true
     if ($GuestIso) {
         # Attach real guest boot media, never execute it on the Windows host.
-        $null=Oracle ('modifyvm '+$uuid+' --memory 256 --boot1 dvd --boot2 disk --boot3 none --boot4 none') 'configure-guest-boot'
+        $null=Oracle ('modifyvm '+$uuid+' --memory 256 --x86-long-mode on --boot1 dvd --boot2 disk --boot3 none --boot4 none') 'configure-guest-boot'
         $null=Oracle ('storageattach '+$uuid+' --storagectl SATA --port 1 --device 0 --type dvddrive --medium "'+$isoFull+'"') 'attach-guest-iso'
         $proof.guest_iso_attached=$true
     }
@@ -280,6 +281,10 @@ try {
     $running=Oracle ('showvminfo '+$uuid+' --machinereadable') 'guest-running'
     if ($running -notmatch '(?m)^VMState="running"') { throw 'Fixture did not reach running' }
     if ($GuestIso) {
+        if ($running -notmatch '(?m)^longmode="on"') {
+            throw 'Guest CPU long mode is not enabled: refusing false x86-64 boot evidence'
+        }
+        $proof.guest_64bit_cpu_configured=$true
         # Oracle screenshotpng captures the *guest display*. It is visual
         # evidence only, not proof of completed Linux boot or guest disk I/O.
         Start-Sleep -Seconds 25

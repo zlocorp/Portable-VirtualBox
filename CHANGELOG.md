@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · Alpine guest x86-64 CPU configuration (2026-10-27)
+
+- [Actual main GUI ISO screenshot 40405065168](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40405065168) exposed a genuine guest startup error despite green lifecycle CI: Oracle's Other VM default reported `longmode="off"`, so Alpine 64-bit stopped on an i686 CPU check. The existing CI fixture now requests Linux_64, enables x86 long mode and checks the independent Oracle machine-readable report for `longmode="on"` before accepting guest-display capture. A VM running state and screenshot alone do not prove the OS booted.
+
 ### Fixed · do not orphan native driver operations after safety deadline (2026-10-27)
 
 - All five existing protected Windows driver/SDS native-command paths now retain their exact spawned process after the normal timeout and wait for confirmed termination before releasing helper ownership locks. Former `Kill()` calls on PnPUtil / service control could interrupt live system modifications; one partial-recovery timeout previously discarded an active child handle. A late native exit now remains a **failure requiring protected-receipt inspection**, never inferred success or arbitrary cleanup. Main GUI stays responsive through its separate user/privileged worker processes.
