@@ -12,6 +12,10 @@ Func _MSW_Text($key)
             If $ru Then Return "Portable-VirtualBox | Проверка сессии Manager"
             Return "Portable-VirtualBox | Manager session test"
         Case "warning"
+            If $g_MS_AlphaMode Then
+                If $ru Then Return "ALPHA: только изолированный Windows 10/11 x64. Драйверы устанавливаются с UAC. Не используйте ценные ВМ. Интерактивный UAC ещё не прошёл приёмку."
+                Return "ALPHA: isolated Windows 10/11 x64 only. Drivers require UAC. Never use valuable VMs. Interactive UAC is not accepted yet."
+            EndIf
             If $ru Then Return "Экспериментальная сборка: только одноразовый Windows-хост. Системные операции ещё не готовы для обычного ПК."
             Return "Experimental build: disposable Windows host only. System operations are not yet approved for an ordinary PC."
         Case "start"

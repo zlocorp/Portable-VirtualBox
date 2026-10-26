@@ -58,6 +58,17 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('unattended_ui_responsive=$true', fixture)
         self.assertIn('interactive_uac_consent_verified=$false', fixture)
 
+    def test_alpha_mode_is_explicit_and_does_not_enable_normal_launch(self):
+        entry=(R/'source/Portable-VirtualBox.au3').read_text(encoding='utf-8-sig')
+        session=(R/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
+        for needle in ('Case "--alpha-runtime"', 'Case "--elevation-worker", "--alpha-elevation-worker"',
+                       '$g_MS_AlphaMode = True', '_MS_Allowed(@ScriptDir'):
+            self.assertIn(needle, entry)
+        for needle in ('Func _MS_AlphaPolicy(', 'Func _MS_AlphaAllowed(', '_PB_Medium()',
+                       'Portable-VirtualBox-Helper-Alpha.exe', 'If $g_MS_AlphaMode Then Return _MS_AlphaAllowed'):
+            self.assertIn(needle, session)
+        self.assertIn('Portable-VirtualBox-Helper-Alpha.exe', (R/'source/PrivilegeBoundary.au3').read_text(encoding='utf-8-sig'))
+
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
         w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')

@@ -1,5 +1,8 @@
 #include-once
 #include "ManagedProcess.au3"
+; Explicit, non-shipping Windows workstation candidate mode is only entered
+; through --alpha-runtime or the corresponding same-EXE elevation worker.
+Global $g_MS_AlphaMode = False
 ; Fixed compiled helper only. ShellExecuteExW runas returns the process handle;
 ; do not fall back to shell commands, scheduled tasks or direct elevated effects.
 ; In CI it is wired to the exact compiled main EXE too; production effects remain disabled.
@@ -32,14 +35,24 @@ Func _PB_Medium()
     Return $rid >= 8192 And $rid < 12288
 EndFunc
 
+Func _PB_HelperName()
+    If $g_MS_AlphaMode Then Return "Portable-VirtualBox-Helper-Alpha.exe"
+    Return "Portable-VirtualBox-Helper-Test.exe"
+EndFunc
+
+Func _PB_WorkerVerb()
+    If $g_MS_AlphaMode Then Return "--alpha-elevation-worker"
+    Return "--elevation-worker"
+EndFunc
+
 Func _PB_Start($root, $action, $cycle)
     Local $p = _MP_New()
     If Not _PB_Medium() Or Not _PP_RootSafe($root) Or StringLower($root) <> StringLower(@ScriptDir) Then Return $p
     If $action <> "Prepare" And $action <> "Finish" Then Return $p
     If Not IsInt($cycle) Or $cycle < 1 Or $cycle > 999 Then Return $p
-    If Not FileExists($root & "\Portable-VirtualBox-Helper-Test.exe") Then Return $p
+    If Not FileExists($root & "\" & _PB_HelperName()) Then Return $p
     ; A same-binary medium worker waits for Windows consent off the GUI thread.
-    Return _MP_Start(@ScriptFullPath, "--elevation-worker " & $action & " " & @AutoItPID & " " & $cycle, $root)
+    Return _MP_Start(@ScriptFullPath, _PB_WorkerVerb() & " " & $action & " " & @AutoItPID & " " & $cycle, $root)
 EndFunc
 
 ; Recovery has an explicit former PID and cycle only, never a path. The
@@ -49,8 +62,8 @@ Func _PB_StartRecover($root, $formerPid, $cycle)
     If Not _PB_Medium() Or Not _PP_RootSafe($root) Or StringLower($root) <> StringLower(@ScriptDir) Then Return $p
     If Not IsInt($formerPid) Or $formerPid < 1 Or $formerPid = @AutoItPID Then Return $p
     If Not IsInt($cycle) Or $cycle < 1 Or $cycle > 999 Then Return $p
-    If Not FileExists($root & "\Portable-VirtualBox-Helper-Test.exe") Then Return $p
-    Return _MP_Start(@ScriptFullPath, "--elevation-worker Recover " & @AutoItPID & " " & $formerPid & " " & $cycle, $root)
+    If Not FileExists($root & "\" & _PB_HelperName()) Then Return $p
+    Return _MP_Start(@ScriptFullPath, _PB_WorkerVerb() & " Recover " & @AutoItPID & " " & $formerPid & " " & $cycle, $root)
 EndFunc
 
 Func _PB_RunRequest($root, $action, $controller, $cycle, $formerPid = 0)
@@ -108,7 +121,7 @@ Func _PB_RequestBlocking($root, $action, $controller, $cycle, $formerPid = 0)
     If $action <> "Prepare" And $action <> "Finish" And $action <> "Recover" Then Return $p
     If Not IsInt($cycle) Or $cycle < 1 Or $cycle > 999 Then Return $p
     If $action == "Recover" And (Not IsInt($formerPid) Or $formerPid < 1 Or $formerPid == $controller) Then Return $p
-    Local $exe = $root & "\Portable-VirtualBox-Helper-Test.exe"
+    Local $exe = $root & "\" & _PB_HelperName()
     If Not FileExists($exe) Then Return $p
     Local $args = $action & " " & $controller & " " & $cycle
     If $action == "Recover" Then $args = $action & " " & $controller & " " & $formerPid & " " & $cycle
@@ -151,6 +164,7 @@ Func _PB_Store()
     Local $path = DllStructCreate("wchar[260]")
     Local $a = DllCall("shell32.dll", "long", "SHGetFolderPathW", "hwnd", 0, "int", 35, "handle", 0, "dword", 0, "struct*", $path)
     If @error Or $a[0] <> 0 Then Return ""
+    If $g_MS_AlphaMode Then Return DllStructGetData($path, 1) & "\PortableVirtualBox.Alpha"
     Return DllStructGetData($path, 1) & "\PortableVirtualBox.Experiment"
 EndFunc
 

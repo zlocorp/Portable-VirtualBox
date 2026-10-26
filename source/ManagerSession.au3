@@ -102,7 +102,29 @@ Func _MS_State(ByRef $s, $state, $detail = "")
     $s["detail"] = $detail
 EndFunc
 
+Func _MS_AlphaPolicy($explicit, $arch, $status, $major, $build, $product)
+    If Not IsBool($explicit) Or Not $explicit Then Return False
+    If Not IsString($arch) Or StringUpper($arch) <> "X64" Then Return False
+    If Not IsString($status) Or $status <> "PRESENT" Then Return False
+    Return _WinObsWorkstationAccepted($build, $product, $major)
+EndFunc
+
+; An ALPHA helper cannot be invoked by a mere environment variable, and the
+; ordinary double-click preview retains its disabled system-operation controls.
+; This policy only enables an explicit opt-in on a real workstation when the
+; paired candidate helper is present. The elevated helper independently
+; validates its own host, exact frontend hash/user and Oracle driver inventory.
+Func _MS_AlphaAllowed($root)
+    If Not _PP_RootSafe($root) Or Not _PP_ParentsSafe($root) Then Return False
+    If StringLower(@ScriptFullPath) <> StringLower($root & "\Portable-VirtualBox.exe") Then Return False
+    If _PA_FileState($root, "Portable-VirtualBox-Helper-Alpha.exe") <> 1 Then Return False
+    If Not _PB_Medium() Then Return False
+    Local $os = _WinObsOS()
+    Return _MS_AlphaPolicy($g_MS_AlphaMode, @OSArch, $os["status"], $os["major"], $os["build"], $os["product_type"])
+EndFunc
+
 Func _MS_Allowed($root, $workspace)
+    If $g_MS_AlphaMode Then Return _MS_AlphaAllowed($root)
     If Not _PVS_Allowed(EnvGet("GITHUB_ACTIONS"), EnvGet("RUNNER_ENVIRONMENT"), EnvGet("RUNNER_OS"), _
             EnvGet("GITHUB_REPOSITORY"), $root, EnvGet("RUNNER_TEMP")) Then Return False
     If Not _PP_RootSafe($workspace) Or Not _PP_ParentsSafe($workspace) Then Return False
@@ -259,7 +281,7 @@ Func _MS_Start(ByRef $s)
         _MS_State($s, "BLOCKED", "disposable-host-only")
         Return False
     EndIf
-    If $s["separated"] And Not _PB_Medium() Then
+    If ($s["separated"] And Not _PB_Medium()) Or ($g_MS_AlphaMode And Not $s["separated"]) Then
         _MS_State($s, "BLOCKED", "frontend-must-be-non-administrator")
         Return False
     EndIf

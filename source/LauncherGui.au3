@@ -58,7 +58,7 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
         $showReadiness = False, $showInventory = False)
     WinSetTitle($hGui, "", _LI("app.title"))
     GUICtrlSetData($idSubtitle, _LI("app.subtitle"))
-    GUICtrlSetData($idWarning, _LI("app.disabled"))
+    GUICtrlSetData($idWarning, _LI($g_MS_AlphaMode ? "app.alpha_warning" : "app.disabled"))
     If $showInventory Then
         GUICtrlSetData($idSection, _LI("vm.header"))
     Else

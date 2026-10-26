@@ -179,6 +179,13 @@ class PrivilegeBoundaryContract(unittest.TestCase):
             for line in matches:
                 self.assertIn('-Encoding UTF8', line, path)
 
+    def test_alpha_store_is_not_ci_experiment_store(self):
+        adapter=self.text('source/PrivilegeBoundary.au3')
+        self.assertIn('PortableVirtualBox.Alpha',adapter)
+        self.assertIn('PortableVirtualBox.Experiment',adapter)
+        self.assertIn('--alpha-elevation-worker',adapter)
+        self.assertIn('_PB_HelperName()',adapter)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
