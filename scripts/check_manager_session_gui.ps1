@@ -1,7 +1,8 @@
 # End-to-end exercise of the actual compiled buttons and Oracle Manager.
 # Test fixture commands operate only on the freshly created, empty, named VM.
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$PortableRoot,[switch]$SeparatePrivileges,[switch]$UnattendedConsentProbe,[switch]$MainLauncher)
+param([Parameter(Mandatory)][string]$PortableRoot,[switch]$SeparatePrivileges,[switch]$UnattendedConsentProbe,[switch]$MainLauncher,
+    [string]$GuestIso='', [string]$GuestIsoSha256='')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -12,6 +13,18 @@ if (-not $root.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase)) { thro
 if ($UnattendedConsentProbe -and -not $SeparatePrivileges) { throw 'Consent probe requires a medium frontend' }
 if ($MainLauncher -and $SeparatePrivileges -and -not $UnattendedConsentProbe) {
     throw 'Main launcher UAC acceptance cannot be automated on hosted Windows'
+}
+if ($GuestIso) {
+    if (-not $MainLauncher -or $SeparatePrivileges -or $UnattendedConsentProbe) {
+        throw 'Guest ISO requires the actual main GUI on the disposable CI runner'
+    }
+    $isoFull=[IO.Path]::GetFullPath($GuestIso)
+    if (-not $isoFull.StartsWith($runner,[StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $isoFull -PathType Leaf) -or
+        $GuestIsoSha256 -notmatch '^[a-fA-F0-9]{64}$' -or
+        (Get-FileHash -LiteralPath $isoFull -Algorithm SHA256).Hash.ToLowerInvariant() -ne $GuestIsoSha256.ToLowerInvariant()) {
+        throw 'Guest ISO missing, outside disposable runner or SHA-256 mismatch'
+    }
 }
 $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
@@ -168,7 +181,7 @@ function Start-Controller([string]$Label) {
     return Start-Process -FilePath $exe -ArgumentList '--lang en' -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
 }
 $front=$null; $other=$null; $badFront=$null
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;guest_iso_attached=$false;guest_screen_capture=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
 try {
     Assert-Clean 'initial baseline'
     if ($SeparatePrivileges) {
@@ -257,9 +270,29 @@ try {
     if ($diskInfo -notmatch '(?im)^Storage format:\s+VDI' -or
         $diskInfo -notmatch '(?im)^UUID:\s+[a-f0-9-]{36}') { throw 'Oracle did not register the VDI' }
     $proof.virtual_disk_created=$true
+    if ($GuestIso) {
+        # Attach real guest boot media, never execute it on the Windows host.
+        $null=Oracle ('modifyvm '+$uuid+' --memory 256 --boot1 dvd --boot2 disk --boot3 none --boot4 none') 'configure-guest-boot'
+        $null=Oracle ('storageattach '+$uuid+' --storagectl SATA --port 1 --device 0 --type dvddrive --medium "'+$isoFull+'"') 'attach-guest-iso'
+        $proof.guest_iso_attached=$true
+    }
     $null=Oracle ('startvm '+$uuid+' --type headless') 'start-guest'
     $running=Oracle ('showvminfo '+$uuid+' --machinereadable') 'guest-running'
     if ($running -notmatch '(?m)^VMState="running"') { throw 'Fixture did not reach running' }
+    if ($GuestIso) {
+        # Oracle screenshotpng captures the *guest display*. It is visual
+        # evidence only, not proof of completed Linux boot or guest disk I/O.
+        Start-Sleep -Seconds 25
+        $screenshot=Join-Path $out 'guest-boot-alpine.png'
+        if (Test-Path -LiteralPath $screenshot) { throw 'Guest screenshot pre-exists' }
+        $null=Oracle ('controlvm '+$uuid+' screenshotpng "'+$screenshot+'"') 'alpine-guest-screen'
+        $png=[IO.File]::ReadAllBytes($screenshot)
+        if ($png.Length -lt 1024 -or [BitConverter]::ToString($png,0,8) -ne '89-50-4E-47-0D-0A-1A-0A') {
+            throw 'Guest display screenshot is not a nonempty PNG'
+        }
+        $proof.guest_screen_capture=$true
+        Write-Host 'Captured VM guest display; Linux boot verification requires inspecting the image'
+    }
     if ($SeparatePrivileges) {
         $guest=Get-Process -Name VBoxHeadless -ErrorAction Stop
         $facts=[PortableVBox.TokenFacts]::Read($guest.Id)
