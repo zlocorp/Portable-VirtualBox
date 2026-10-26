@@ -13,7 +13,12 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
+if ($env:PVBOX_FIXED_HELPER_MODE -eq 'ALPHA') {
+    if (-not (Get-Command -Name Assert-PortableFixedHelper -CommandType Function -ErrorAction SilentlyContinue)) {
+        throw 'Alpha effects require the embedded fixed-helper worker function'
+    }
+    Assert-PortableFixedHelper
+} elseif ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
     $env:GITHUB_REPOSITORY -ne 'zlocorp/Portable-VirtualBox' -or $env:RUNNER_OS -ne 'Windows') {
     throw 'Exact partial recovery restricted to disposable Windows'
 }

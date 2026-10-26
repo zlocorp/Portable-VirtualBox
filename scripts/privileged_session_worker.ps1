@@ -8,6 +8,7 @@ param(
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][long]$ControllerCreated,
     [Parameter(Mandatory)][ValidateSet('Portable-VirtualBox.exe','Portable-VirtualBox-Session-Test.exe')][string]$FrontendName,
+    [Parameter(Mandatory)][ValidateSet('Portable-VirtualBox-Helper-Test.exe','Portable-VirtualBox-Helper-Alpha.exe')][string]$HelperName,
     [ValidateRange(0,2147483647)][int]$OriginalControllerPid = 0,
     [ValidateRange(0,9223372036854775807)][long]$OriginalControllerCreated = 0,
     [switch]$IncompletePreparation,
@@ -20,8 +21,35 @@ $ErrorActionPreference='Stop'
 if ($PSVersionTable.PSEdition -ne 'Desktop' -or $PSVersionTable.PSVersion.Major -ne 5) {
     throw 'Only Windows PowerShell 5.1 is accepted for the protected effect worker'
 }
-if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
-    $env:GITHUB_REPOSITORY -ne 'zlocorp/Portable-VirtualBox' -or $env:RUNNER_OS -ne 'Windows') { throw 'Disposable Windows only' }
+# The candidate mode is supplied only by the pinned C# helper after its
+# independent Windows workstation/owner/SHA-256 checks. Environment markers
+# below are anti-accident checks, NOT authority to mutate system resources.
+function Assert-PortableFixedHelper {
+    if ($env:PVBOX_FIXED_HELPER_MODE -ne 'ALPHA') { throw 'Not a candidate fixed-helper worker' }
+    $expected=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Alpha'
+    if (-not $env:RUNNER_TEMP -or
+        [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\') -ine $expected) {
+        throw 'Protected alpha session base mismatched'
+    }
+    if (-not [Environment]::Is64BitProcess -or -not [Environment]::Is64BitOperatingSystem) {
+        throw 'Only Windows x64 is permitted'
+    }
+    $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+    if ($os.ProductType -ne 1 -or [int]$os.BuildNumber -lt 19041) {
+        throw 'Not a supported Windows 10/11 workstation'
+    }
+}
+if ($env:PVBOX_FIXED_HELPER_MODE -eq 'ALPHA') {
+    if ($FrontendName -ne 'Portable-VirtualBox.exe' -or $HelperName -ne 'Portable-VirtualBox-Helper-Alpha.exe') {
+        throw 'Candidate helper/frontend pair mismatched'
+    }
+    Assert-PortableFixedHelper
+} elseif ($env:PVBOX_FIXED_HELPER_MODE -eq 'CI') {
+    if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
+        $env:GITHUB_REPOSITORY -ne 'zlocorp/Portable-VirtualBox' -or $env:RUNNER_OS -ne 'Windows') {
+        throw 'Disposable Windows only'
+    }
+} else { throw 'Unrecognized fixed-helper build mode' }
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not ([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Elevated helper token required' }
 $root=(Resolve-Path -LiteralPath $PortableRoot).Path
@@ -30,7 +58,7 @@ $app=Join-Path $session 'app64'
 $parentId=(Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId
 $parent=[Diagnostics.Process]::GetProcessById($parentId)
 try {
-    if ($parent.MainModule.FileName -ine (Join-Path $root 'Portable-VirtualBox-Helper-Test.exe')) { throw 'Not the fixed compiled helper' }
+    if ($parent.MainModule.FileName -ine (Join-Path $root $HelperName)) { throw 'Not the exact fixed compiled helper' }
 } finally { $parent.Dispose() }
 $caller=[Diagnostics.Process]::GetProcessById($ControllerPid)
 try {

@@ -199,6 +199,21 @@ class PrivilegeBoundaryContract(unittest.TestCase):
             self.assertIn(key,helper)
         self.assertIn('string testBreak=(PinnedBuild.Mode=="CI"',helper)
 
+    def test_candidate_effects_run_only_under_a_verified_protected_worker(self):
+        worker=self.text('scripts/privileged_session_worker.ps1')
+        for phrase in ('Assert-PortableFixedHelper','Candidate helper/frontend pair mismatched',
+                       'PortableVirtualBox.Alpha', 'Portable-VirtualBox-Helper-Alpha.exe',
+                       "PVBOX_FIXED_HELPER_MODE -eq 'ALPHA'", 'Get-CimInstance Win32_OperatingSystem'):
+            self.assertIn(phrase,worker)
+        for p in ('scripts/vbox_sup_standalone.ps1',
+                  'scripts/vbox_sup_start_owned.ps1',
+                  'scripts/vbox_sup_cleanup.ps1',
+                  'scripts/vbox_sup_partial_cleanup.ps1'):
+            source=self.text(p)
+            self.assertIn("PVBOX_FIXED_HELPER_MODE -eq 'ALPHA'", source)
+            self.assertIn('Assert-PortableFixedHelper', source)
+            self.assertIn("GITHUB_ACTIONS -ne 'true'", source)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
