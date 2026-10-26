@@ -19,6 +19,20 @@ using System.Web.Script.Serialization;
 using Microsoft.Win32.SafeHandles;
 namespace PortableVBox {
     public static partial class SessionHelper {
+        [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]
+        struct HostVersion {
+            public int Size,Major,Minor,Build,Platform;
+            [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)] public string Csd;
+            public ushort ServiceMajor,ServiceMinor,Suite;
+            public byte Product,Reserved;
+        }
+        [DllImport("ntdll.dll",CharSet=CharSet.Unicode)]
+        static extern int RtlGetVersion(ref HostVersion version);
+        static bool WorkstationAlphaHost() {
+            if(!Environment.Is64BitOperatingSystem || IntPtr.Size!=8) return false;
+            var v=new HostVersion();v.Size=Marshal.SizeOf(typeof(HostVersion));
+            return RtlGetVersion(ref v)==0 && v.Major==10 && v.Build>=19041 && v.Product==1;
+        }
         static TokenFacts VerifyController(IntPtr handle,int pid,string root) {
             var user=TokenFacts.ReadHandle(handle,pid);
             var self=TokenFacts.Read(Process.GetCurrentProcess().Id);
@@ -126,12 +140,19 @@ namespace PortableVBox {
                 } else if(args.Length!=3 || (args[0]!="Prepare" && args[0]!="Finish") ||
                           !int.TryParse(args[1],out pid) || pid<1 ||
                           !int.TryParse(args[2],out cycle) || cycle<1 || cycle>999) return 64;
-                // Not a production distribution. These markers do not authenticate anything.
-                if(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")!="true" || Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT")!="github-hosted" || Environment.GetEnvironmentVariable("GITHUB_REPOSITORY")!="zlocorp/Portable-VirtualBox" || Environment.GetEnvironmentVariable("RUNNER_OS")!="Windows") return 9;
+                // CI and interactive alpha are different pinned BUILD FLAVORS.
+                // Ambient GitHub environment variables never authorize alpha.
                 string root=Full(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location));
-                string runner=Full(Environment.GetEnvironmentVariable("RUNNER_TEMP"));
-                if(!Under(root,runner)) return 9;
-                LockParents(root);LockParents(runner);
+                if(!String.Equals(Path.GetFileName(Assembly.GetExecutingAssembly().Location),PinnedBuild.HelperName,StringComparison.OrdinalIgnoreCase)) return 9;
+                string runner=null;
+                if(PinnedBuild.Mode=="CI") {
+                    if(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")!="true" || Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT")!="github-hosted" || Environment.GetEnvironmentVariable("GITHUB_REPOSITORY")!="zlocorp/Portable-VirtualBox" || Environment.GetEnvironmentVariable("RUNNER_OS")!="Windows") return 9;
+                    runner=Full(Environment.GetEnvironmentVariable("RUNNER_TEMP"));
+                    if(!Under(root,runner)) return 9;
+                } else if(PinnedBuild.Mode=="ALPHA") {
+                    if(PinnedBuild.FrontendName!="Portable-VirtualBox.exe" || !WorkstationAlphaHost()) return 9;
+                } else return 9;
+                LockParents(root);if(runner!=null) LockParents(runner);
                 controller=TokenFacts.OpenProcess(0x101000,false,pid);
                 if(controller==IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
                 TokenFacts caller=VerifyController(controller,pid,root);
@@ -141,7 +162,8 @@ namespace PortableVBox {
                 bool created;effectMutex=new System.Threading.Mutex(false,"Global\\PortableVirtualBox.PrivilegedEffect",out created,ms);
                 try { held=effectMutex.WaitOne(0); } catch(System.Threading.AbandonedMutexException) { throw new InvalidOperationException("Abandoned privileged effect; manual inspection required"); }
                 if(!held) throw new InvalidOperationException("Another privileged operation is active");
-                string store=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"PortableVirtualBox.Experiment");
+                string store=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    PinnedBuild.Mode=="ALPHA"?"PortableVirtualBox.Alpha":"PortableVirtualBox.Experiment");
                 LockParents(Path.GetDirectoryName(store));CreateProtectedDirectory(store,caller.Sid,true);
                 session=Path.Combine(store,"pvbox-manager-"+(recovery?oldPid:pid)+"-"+cycle);
                 bool prepare=args[0]=="Prepare";
@@ -190,11 +212,11 @@ namespace PortableVBox {
                 // These single-word injections are exclusively for the
                 // GitHub-hosted disposable fixture. They never enable rescue,
                 // change inputs, or disable any ownership/publisher checks.
-                string testBreak=prepare?(Environment.GetEnvironmentVariable("PVBOX_TEST_BREAK_AT")??""):"";
+                string testBreak=(PinnedBuild.Mode=="CI" && prepare)?(Environment.GetEnvironmentVariable("PVBOX_TEST_BREAK_AT")??""):"";
                 if(testBreak=="Stage" || testBreak=="Start" || testBreak=="Sds")
                     extra+=" -TestBreakAfter "+testBreak;
                 else if(testBreak.Length>0) throw new InvalidOperationException("Unknown controlled test breakpoint");
-                var info=new ProcessStartInfo(powershell,"-NoLogo -NoProfile -NonInteractive -File "+Quote(Path.Combine(working,"privileged_session_worker.ps1"))+" -Action "+args[0]+" -PortableRoot "+Quote(root)+" -SessionDir "+Quote(session)+" -ControllerPid "+pid+" -ControllerCreated "+caller.Created+" -FrontendName "+PinnedBuild.FrontendName+extra);
+                var info=new ProcessStartInfo(powershell,"-NoLogo -NoProfile -NonInteractive -File "+Quote(Path.Combine(working,"privileged_session_worker.ps1"))+" -Action "+args[0]+" -PortableRoot "+Quote(root)+" -SessionDir "+Quote(session)+" -ControllerPid "+pid+" -ControllerCreated "+caller.Created+" -FrontendName "+PinnedBuild.FrontendName+" -HelperName "+PinnedBuild.HelperName+extra);
                 info.UseShellExecute=false;info.CreateNoWindow=true;info.WorkingDirectory=working;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
                 // Never inherit low-user module search paths, PS profiles, PATH,
                 // temp dirs or .NET startup/profiler variables into elevated effects.
@@ -206,8 +228,10 @@ namespace PortableVBox {
                 info.EnvironmentVariables["ProgramData"]=Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
                 info.EnvironmentVariables["TEMP"]=session;info.EnvironmentVariables["TMP"]=session;
                 info.EnvironmentVariables["PSModulePath"]=Path.Combine(Path.GetDirectoryName(powershell),"Modules")+";"+Path.Combine(windows,"System32","WindowsPowerShell","v1.0","Modules");
-                foreach(string key in new[]{"GITHUB_ACTIONS","GITHUB_REPOSITORY","RUNNER_ENVIRONMENT","RUNNER_OS","GITHUB_SHA"}) info.EnvironmentVariables[key]=Environment.GetEnvironmentVariable(key)??"";
-                info.EnvironmentVariables["RUNNER_TEMP"]=store; // fixed protected effect boundary, not an input from the low caller
+                if(PinnedBuild.Mode=="CI")
+                    foreach(string key in new[]{"GITHUB_ACTIONS","GITHUB_REPOSITORY","RUNNER_ENVIRONMENT","RUNNER_OS","GITHUB_SHA"}) info.EnvironmentVariables[key]=Environment.GetEnvironmentVariable(key)??"";
+                info.EnvironmentVariables["PVBOX_FIXED_HELPER_MODE"]=PinnedBuild.Mode;
+                info.EnvironmentVariables["RUNNER_TEMP"]=store; // verified protected cache, never a low caller input
                 using(var process=new Process {StartInfo=info}) {
                     process.Start();var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
                     // If a system operation outlives the expected deadline,

@@ -186,6 +186,19 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn('--alpha-elevation-worker',adapter)
         self.assertIn('_PB_HelperName()',adapter)
 
+    def test_interactive_candidate_is_compile_time_pinned_and_workstation_only(self):
+        build=self.text('scripts/build_session_helper.ps1')
+        helper=self.text('source/privilege/SessionHelper.Main.cs')
+        for key in ('[switch]$AlphaCandidate','Portable-VirtualBox-Helper-Alpha.exe',
+                    'internal const string Mode','internal const string HelperName'):
+            self.assertIn(key,build)
+        for key in ('PinnedBuild.Mode=="CI"','PinnedBuild.Mode=="ALPHA"',
+                    'PinnedBuild.HelperName', 'WorkstationAlphaHost()',
+                    'v.Build>=19041 && v.Product==1','PVBOX_FIXED_HELPER_MODE',
+                    'PortableVirtualBox.Alpha'):
+            self.assertIn(key,helper)
+        self.assertIn('string testBreak=(PinnedBuild.Mode=="CI"',helper)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))
