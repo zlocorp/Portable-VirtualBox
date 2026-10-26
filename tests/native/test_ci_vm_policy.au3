@@ -37,6 +37,8 @@ Local $running = 'UUID="98b45345-621b-43d1-847a-57e466bb09c4"' & @CRLF & 'VMStat
 Check(_PCVM_State($running) == "running", "live VM output parsed")
 Check(_PCVM_UUID($running) == "98b45345-621b-43d1-847a-57e466bb09c4", "VM UUID parsed")
 Check(_PCVM_State('XVMState="running"' & @CRLF) == "", "substring does not impersonate state")
+Check(_PCVM_State('VMState="poweroff"' & @CRLF) == "poweroff", "powered-off observation accepted")
+Check(_PCVM_State('VMState="poweringoff"' & @CRLF) == "poweringoff", "transient shutdown state preserved")
 Check(_PCVM_State('VMState="stuck"' & @CRLF) == "stuck", "failed VM state preserved")
 Check(_PCVM_State('VMState="running"' & @CRLF & 'VMState="poweroff"' & @CRLF) == "", "ambiguous state denied")
 Check(_PCVM_UUID('UUID="BAD-UUID"' & @CRLF) == "", "invalid UUID refused")

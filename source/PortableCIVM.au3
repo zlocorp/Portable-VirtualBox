@@ -117,9 +117,25 @@ Func _PCVM_Execute($root, $receiptPath = "")
         If _PCVM_UUID($r["output"]) <> $uuid Then ExitLoop
         $r = _PCVM_Command($manager, $app, "poweroff", 'controlvm ' & $vm & ' poweroff')
         If Not _PCVM_Succeeded($r) Then ExitLoop
-        $r = _PCVM_Command($manager, $app, "after", 'showvminfo ' & $vm & ' --machinereadable')
-        If Not _PCVM_Succeeded($r) Or _PCVM_State($r["output"]) <> "poweroff" Then ExitLoop
-        If _PCVM_UUID($r["output"]) <> $uuid Then ExitLoop
+        ; The controlvm request can return before Oracle releases its final
+        ; guest/media lock. Bounded READ-ONLY state checks must observe the
+        ; original UUID as powered off, not assume the command was synchronous.
+        ; Any ambiguity beyond this window fails closed without cleanup.
+        Local $offTimer = TimerInit(), $offConfirmed = False
+        While TimerDiff($offTimer) < 30000
+            $r = _PCVM_Command($manager, $app, "after", 'showvminfo ' & $vm & ' --machinereadable')
+            If _PCVM_Succeeded($r) Then
+                If _PCVM_UUID($r["output"]) <> $uuid Then ExitLoop
+                Local $offState = _PCVM_State($r["output"])
+                If $offState == "poweroff" Then
+                    $offConfirmed = True
+                    ExitLoop
+                EndIf
+                If $offState <> "running" And $offState <> "stopping" And $offState <> "poweringoff" Then ExitLoop
+            EndIf
+            Sleep(300)
+        WEnd
+        If Not $offConfirmed Then ExitLoop
         $stopped = True
         ; VBoxSDS and VBoxSup remain owned by the disposable workflow, which
         ; revalidates process absence and removes exact resources afterward.

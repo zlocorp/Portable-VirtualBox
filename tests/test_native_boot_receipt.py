@@ -12,6 +12,13 @@ class NativeReceiptContract(unittest.TestCase):
         self.assertIn('Case "--ci-vm-session"',entry)
         self.assertIn('_PCVM_Execute(@ScriptDir)',entry)
         self.assertNotIn('--ci-vm-session  --',entry.split('Case "--help"')[1].split('Case "--version"')[0])
+    def test_poweroff_requires_bounded_read_only_uuid_confirmation(self):
+        source=(ROOT/"source/PortableCIVM.au3").read_text(encoding="utf-8-sig")
+        self.assertIn('While TimerDiff($offTimer) < 30000',source)
+        self.assertIn('If Not $offConfirmed Then ExitLoop',source)
+        self.assertIn('_PCVM_UUID($r["output"]) <> $uuid',source)
+        self.assertIn('Sleep(300)',source)
+        self.assertLess(source.index('If Not $offConfirmed Then ExitLoop'),source.index('$stopped = True'))
     def test_receipt_requires_independent_probe(self):
         script=(ROOT/"scripts/check_native_vm_boot.ps1").read_text(encoding="utf-8")
         for fragment in (

@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · CI VM poweroff confirmation race (2026-10-26)
+
+- A genuine disposable-host run found a transient VBoxManage exit code 1 immediately after a successful guest power-off. The compiled AutoIt VM acceptance now waits up to 30 seconds for a read-only `showvminfo` result with the same UUID and `poweroff` state before issuing its boot receipt or allowing exact-owned cleanup. A still-running or unknown VM is never treated as stopped.
+
 ### Fixed · Windows 10/11 host compatibility (2026-10-26)
 
 - Corrected read-only host preflight to support **Windows 10 x64 build 19041+**, alongside Windows 11 x64. Oracle VirtualBox 7.2 lists both client OS families as supported hosts. Server editions, unsupported older builds and ARM64 are still rejected. Updated native policy checks, startup self-test and RU/EN diagnostics. No driver operations were enabled by this change.
