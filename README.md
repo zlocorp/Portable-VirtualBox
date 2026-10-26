@@ -26,6 +26,17 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 **Manager and guests are not the same process.** Diagnostics separately report Manager, GUI/headless guest processes and background activity. These are observations, not proof that a guest is running or permission to stop/delete anything.
 
+## Workstation alpha, isolated testing only
+
+A separate, **non-release** developer candidate can be launched with
+`Portable-VirtualBox.exe --alpha-runtime` on an isolated Windows 10/11 x64
+workstation. Its exact-build helper asks for UAC only for driver/service
+operations; the Oracle Manager and VMs remain non-elevated. The normal
+double-click preview is still diagnostic-only and does not bundle this helper.
+No interactive Windows 11 UAC acceptance has been performed. See
+[alpha acceptance instructions](docs/ALPHA-WINDOWS-TEST.md), not a production
+installation guide.
+
 ## Try the current preview
 
 Double-click the compiled launcher for the GUI, or use the ordinary CLI:

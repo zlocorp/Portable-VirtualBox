@@ -214,6 +214,20 @@ class PrivilegeBoundaryContract(unittest.TestCase):
             self.assertIn('Assert-PortableFixedHelper', source)
             self.assertIn("GITHUB_ACTIONS -ne 'true'", source)
 
+    def test_nonrelease_alpha_bundle_requires_pinned_main_and_notices(self):
+        p=self.text('scripts/package_alpha.ps1')
+        for value in ('Portable-VirtualBox-Helper-Alpha.exe','Portable-VirtualBox-Setup.exe',
+                      'SHA256SUMS.txt','ALPHA-TEST-ONLY.md','FrontendSha256'):
+            self.assertIn(value,p)
+        self.assertNotIn('app64',p)
+        wf=self.text('.github/workflows/alpha-candidate.yml')
+        for value in ('workflow_dispatch','-AlphaCandidate','Win10-11-ALPHA-TEST-ONLY',
+                      'Windows Server', 'retention-days: 7'):
+            self.assertIn(value,wf)
+        instructions=self.text('docs/ALPHA-WINDOWS-TEST.md')
+        self.assertIn('--alpha-runtime',instructions)
+        self.assertIn('not a stable',instructions)
+
     def test_helper_not_in_preview(self):
         import sys
         sys.path.insert(0,str(ROOT / 'scripts'))

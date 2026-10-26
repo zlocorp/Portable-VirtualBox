@@ -56,6 +56,20 @@ Do not run it as a current launcher.
 
 Original author credit and licensing: [LICENSE.md](LICENSE.md).
 
+## Temporary interactive workstation alpha (not a release)
+
+`alpha-candidate.yml` builds an isolated-host test ZIP and checks that
+both the frontend and its SHA256-bound helper reject Windows Server 2022
+without changing system state. Its `-AlphaCandidate` helper mode is a
+different pinned binary from the CI-only research helper, and its
+`%ProgramData%/PortableVirtualBox.Alpha` receipts cannot collide with
+CI experiments. The alpha includes no Oracle executables; regular first-run
+preparation downloads those separately.
+
+The archive is a temporary GitHub Actions artifact, not a release or
+Windows 11 certification. See [manual isolated host acceptance](docs/ALPHA-WINDOWS-TEST.md).
+The normal diagnostic ZIP retains its original seven-file allowlist.
+
 ## Separate Manager-session experiment
 
 `./scripts/build.ps1 -AutoItRoot <official-toolchain-root> -SessionExperiment`

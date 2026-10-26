@@ -4,6 +4,12 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · isolated Windows workstation alpha (2026-10-26)
+
+- The existing main launcher now has an **explicit developer opt-in** `--alpha-runtime`, separate from ordinary double-click. It uses the existing protected driver/Manager lifecycle and a helper bound to the exact compiled EXE hash. The elevated helper independently refuses non-workstation or non-x64 Windows, checks the original process/user integrity and pins Oracle. Alpha receipts use a separate `%ProgramData%/PortableVirtualBox.Alpha` store. The diagnostic ZIP remains nonprivileged and unchanged.
+- An isolated-host candidate ZIP is built as a temporary **Actions artifact**, **not a release**; it contains the ordinary main EXE, non-admin frozen Oracle Setup, paired alpha helper, README RU/EN, attribution/license and a SHA256 manifest. It includes no Oracle binaries or user VM files. On hosted Windows Server the CI test must prove both alpha entrypoints refuse all system effects.
+- **Not yet accepted:** human UAC approval/cancel on Windows 11, real workstation driver operations, guest OS disk I/O and power-cut recovery. Only disposable Windows client hosts should be used for manual acceptance.
+
 ### Fixed · CI VM poweroff confirmation race (2026-10-26)
 
 - A genuine disposable-host run found a transient VBoxManage exit code 1 immediately after a successful guest power-off. The compiled AutoIt VM acceptance now waits up to 30 seconds for a read-only `showvminfo` result with the same UUID and `poweroff` state before issuing its boot receipt or allowing exact-owned cleanup. A still-running or unknown VM is never treated as stopped.

@@ -69,6 +69,14 @@ class MainManagerWiring(unittest.TestCase):
             self.assertIn(needle, session)
         self.assertIn('Portable-VirtualBox-Helper-Alpha.exe', (R/'source/PrivilegeBoundary.au3').read_text(encoding='utf-8-sig'))
 
+    def test_alpha_build_does_not_change_standard_diagnostic_zip(self):
+        from pathlib import Path
+        source=(R/'source/Portable-VirtualBox.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('Case "--alpha-runtime"',source)
+        build=(R/'scripts/package_preview.py').read_text(encoding='utf-8-sig')
+        self.assertNotIn('Portable-VirtualBox-Helper-Alpha.exe',build)
+        self.assertIn('alpha-runtime', (R/'docs/ALPHA-WINDOWS-TEST.md').read_text(encoding='utf-8'))
+
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
         w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
