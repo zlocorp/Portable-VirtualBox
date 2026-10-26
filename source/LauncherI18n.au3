@@ -404,8 +404,8 @@ Func _LI_Blocker($sEnglish, $sLanguage = "")
     Switch $sEnglish
         Case "Unsupported architecture (x64 required)"
             Return "Необходима 64-разрядная архитектура x64."
-        Case "Unsupported Windows product/build (Windows 11 workstation required)"
-            Return "Нужна поддерживаемая клиентская Windows 11 x64."
+        Case "Unsupported Windows product/build (Windows 10/11 workstation required)"
+            Return "Нужна клиентская Windows 10/11 x64 (сборка 19041 или новее)."
         Case "VirtualBox installation state is unknown"
             Return "Не удалось определить, установлен ли системный VirtualBox."
         Case "VirtualBox service state is unknown"

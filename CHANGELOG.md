@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · Windows 10/11 host compatibility (2026-10-26)
+
+- Corrected read-only host preflight to support **Windows 10 x64 build 19041+**, alongside Windows 11 x64. Oracle VirtualBox 7.2 lists both client OS families as supported hosts. Server editions, unsupported older builds and ARM64 are still rejected. Updated native policy checks, startup self-test and RU/EN diagnostics. No driver operations were enabled by this change.
+
 ### CI-bound main EXE UAC transport · 2026-10-25
 
 - The unattended, noninteractive Windows UAC regression now launches the **actual ordinary compiled main EXE** with a medium user token, clicks its own Manager/Start controls, and follows its real same-EXE request-worker to ShellExecuteExW runas. The test requires the GUI to remain responsive in CONSENT_PREPARE with no VBox service/driver effects. It does not approve/cancel the secure-desktop dialog and cannot replace interactive Windows 11 testing.

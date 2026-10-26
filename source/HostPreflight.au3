@@ -81,7 +81,7 @@ EndFunc
 Func _PortablePreflightBlocker($iWindowsBuild, $sArch, $bHasVBoxExecutable, $sVersion, _
         $bInstalled, $iServices, $iProcesses, $iProductType = 1)
     If Not IsString($sArch) Or StringUpper($sArch) <> "X64" Then Return "Unsupported architecture (x64 required)"
-    If Not _WinObsWorkstationAccepted($iWindowsBuild, $iProductType) Then Return "Unsupported Windows product/build (Windows 11 workstation required)"
+    If Not _WinObsWorkstationAccepted($iWindowsBuild, $iProductType) Then Return "Unsupported Windows product/build (Windows 10/11 workstation required)"
     If Not IsBool($bInstalled) Then Return "VirtualBox installation state is unknown"
     If Not IsInt($iServices) Or $iServices < 0 Then Return "VirtualBox service state is unknown"
     If Not IsInt($iProcesses) Or $iProcesses < 0 Then Return "VirtualBox process state is unknown"
@@ -97,7 +97,7 @@ EndFunc
 Func _PortableReadOnlyPreflight($root = @ScriptDir)
     Local $os = _WinObsOS()
     If Not ($os["status"] == "PRESENT") Then Return "Windows version observation is unknown"
-    If Not _WinObsWorkstationAccepted($os["build"], $os["product_type"], $os["major"]) Then Return "Unsupported Windows product/build (Windows 11 workstation required)"
+    If Not _WinObsWorkstationAccepted($os["build"], $os["product_type"], $os["major"]) Then Return "Unsupported Windows product/build (Windows 10/11 workstation required)"
     Local $sApp = $root & "\app64\VirtualBox.exe"
     Local $bPresent = FileExists($sApp) <> 0, $sVersion = ""
     If $bPresent Then $sVersion = FileGetVersion($sApp)

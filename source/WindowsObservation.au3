@@ -38,7 +38,10 @@ EndFunc
 
 Func _WinObsWorkstationAccepted($build, $product, $major = 10)
     If Not IsInt($build) Or Not IsInt($product) Or Not IsInt($major) Then Return False
-    Return $major = 10 And $build >= 22000 And $product = 1
+    ; Oracle VirtualBox 7.2 supports Windows 10 and 11 x64 hosts.
+    ; Minimum Windows 10 build 19041 is intentionally conservative.
+    ; Windows Server remains forbidden even when it has a newer build.
+    Return $major = 10 And $build >= 19041 And $product = 1
 EndFunc
 
 Func _WinObsOS()

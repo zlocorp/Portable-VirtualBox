@@ -7,6 +7,16 @@ ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = re.compile(r'\b(?:Run|RunWait|ProcessClose|RegWrite|RegDelete|FileDelete)\s*\(', re.IGNORECASE)
 
 class ObservationContractTests(unittest.TestCase):
+    def test_windows10_11_host_policy_and_server_exclusion(self):
+        obs=(ROOT / 'source/WindowsObservation.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('$build >= 19041 And $product = 1',obs)
+        p=(ROOT / 'source/HostPreflight.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('Windows 10/11 workstation required',p)
+        self.assertNotIn('Windows 11 workstation required',p)
+        native=(ROOT / 'tests/native/test_windows_observation.au3').read_text(encoding='utf-8')
+        for code in ('19041, 1', '19045, 1', '18363, 1', '26100, 3'):
+            self.assertIn(code,native)
+
     def test_diagnostics_do_not_use_ambiguous_registry_reads(self):
         source = (ROOT / 'source/Portable-VirtualBox.au3').read_text(encoding='utf-8-sig')
         active = '\n'.join(line for line in source.splitlines() if not line.lstrip().startswith(';'))

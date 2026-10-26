@@ -18,6 +18,8 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 **No bundled obsolete executables.** Old AutoIt compilers, 7za, DevCon, SnetCfg, fourteen legacy translation INIs and the old splash were removed. The build uses official external AutoIt **3.3.18.0**. The tested Oracle package is pinned to **7.2.22 r175245**, with exact hashes, publisher checks and file-only MSI/CAB preparation rather than silently running an installer.
 
+**Supported target host family:** Oracle VirtualBox 7.2 supports Windows 10/11 x64 workstations. The launcher preflight now accepts **Windows 10 build 19041+** and Windows 11, while rejecting Server editions, ARM64 and unknown hosts. This is a compatibility policy, not a Windows 10/11 runtime acceptance claim. See Oracle's [official supported-host list](https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/installation.html).
+
 **Checks that distinguish failure states.** Missing directories, incomplete `app64`, inaccessible/reparse paths, existing installations and unknown host observations are not treated as “ready”. The application inspection names missing or empty required EXEs, DLLs and VBoxSup files. Presence alone is explicitly **not** a signature check or permission to launch.
 
 **Portable user preferences and data.** Explicit first-run creation of `data/.VirtualBox`, `data/Machines` and `logs` preserves existing files. The only preference file is `data/launcher.ini`; malformed/foreign settings are not overwritten. Saving uses a same-directory staged replacement and refuses stale `.pending` files. No Oracle XML is rewritten by these public features.

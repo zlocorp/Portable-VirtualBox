@@ -243,7 +243,9 @@ If $CmdLine[0] >= $iFirst Then
             If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", True, 0, 0) = "" Then $iFailure += 1
             If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", False, 1, 0) = "" Then $iFailure += 1
             If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", False, 0, 1) = "" Then $iFailure += 1
-            If _PortablePreflightBlocker(20348, "X64", True, "7.2.20", False, 0, 0) = "" Then $iFailure += 1
+            If _PortablePreflightBlocker(18363, "X64", True, "7.2.20", False, 0, 0) = "" Then $iFailure += 1
+            If _PortablePreflightBlocker(19045, "X64", True, "7.2.20", False, 0, 0) <> "" Then $iFailure += 1
+            If _PortablePreflightBlocker(26100, "X64", True, "7.2.20", False, 0, 0, 3) = "" Then $iFailure += 1
 
             If $iFailure <> 0 Then
                 ConsoleWriteError("Safety helper selftest FAIL: " & $iFailure & @CRLF)
