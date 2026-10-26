@@ -46,6 +46,18 @@ class ManagerSessionContract(unittest.TestCase):
         self.assertIn('worker-failed-no-guessed-cleanup-exit-',source)
         self.assertIn('$worker["exit_code"]',source)
 
+    def test_transient_unknown_child_is_reobserved_not_marked_clean(self):
+        s=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
+        for marker in ('worker_uncertain','Func _MS_WorkerUnknownWait(',
+                       'If $status == "UNKNOWN" Then',
+                       'TimerDiff($s["worker_uncertain"])',
+                       'If $status <> "EXITED" Then',
+                       '_MP_Release($worker)'):
+            self.assertIn(marker,s)
+        self.assertLess(s.index('If $status == "UNKNOWN" Then'),
+                        s.index('If $status <> "EXITED" Then'))
+        self.assertIn('elapsedMs < 5000',s)
+
     def test_delayed_oracle_background_never_claims_clean_early(self):
         source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
         gui=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')

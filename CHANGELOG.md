@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · real Manager worker exit-race (2026-10-26)
+
+- One actual compiled Manager Start/Stop CI run hit `worker-not-confirmed-UNKNOWN` after successfully staging VBoxSup and writing the protected session receipt. A fast child can exit between the retained-handle wait and Windows read-only identity query. ManagerSession now re-observes the **same process handle** for at most five seconds; only a confirmed exit and zero code advance the session, while persistent unknown remains fail-closed. No process-name lookup, termination or guessed cleanup was added.
+
 ### Added · isolated Windows workstation alpha (2026-10-26)
 
 - The existing main launcher now has an **explicit developer opt-in** `--alpha-runtime`, separate from ordinary double-click. It uses the existing protected driver/Manager lifecycle and a helper bound to the exact compiled EXE hash. The elevated helper independently refuses non-workstation or non-x64 Windows, checks the original process/user integrity and pins Oracle. Alpha receipts use a separate `%ProgramData%/PortableVirtualBox.Alpha` store. The diagnostic ZIP remains nonprivileged and unchanged.

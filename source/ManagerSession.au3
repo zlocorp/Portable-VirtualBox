@@ -90,6 +90,7 @@ Func _MS_New($root, $workspace)
     $s["quiet"] = 0
     $s["guests"] = 0
     $s["uncertain"] = 0
+    $s["worker_uncertain"] = 0
     Return $s
 EndFunc
 
@@ -161,8 +162,13 @@ Func _MS_ConsentPhase($separated, $action)
     EndSwitch
 EndFunc
 
+Func _MS_WorkerUnknownWait($elapsedMs)
+    Return IsNumber($elapsedMs) And $elapsedMs >= 0 And $elapsedMs < 5000
+EndFunc
+
 Func _MS_Worker(ByRef $s, $action)
     If $action <> "Prepare" And $action <> "Finish" And $action <> "Recover" Then Return False
+    $s["worker_uncertain"] = 0
     If $s["separated"] Then
         Local $privileged = _MP_New()
         If $action == "Recover" Then
@@ -432,10 +438,18 @@ Func _MS_Tick(ByRef $s)
             If Not _MS_ConsentPending($state) And TimerDiff($s["clock"]) > 180000 Then _MS_State($s, "FAILED", "worker-timeout-no-guessed-cleanup")
             Return
         EndIf
+        If $status == "UNKNOWN" Then
+            ; Windows can release a fast VBoxManage/pwsh child between the
+            ; retained-handle WAIT_TIMEOUT and its read-only identity probe.
+            ; Poll the SAME handle again; never synthesize a successful exit.
+            If $s["worker_uncertain"] = 0 Then $s["worker_uncertain"] = TimerInit()
+            If _MS_WorkerUnknownWait(TimerDiff($s["worker_uncertain"])) Then Return
+        EndIf
         If $status <> "EXITED" Then
             _MS_State($s, "FAILED", "worker-not-confirmed-" & $status)
             Return
         EndIf
+        $s["worker_uncertain"] = 0
         _MP_Release($worker)
         $s["worker"] = $worker
         If $s["separated"] And $worker["exit_code"] = 1223 Then
@@ -490,6 +504,7 @@ Func _MS_Tick(ByRef $s)
             Local $configure = _MP_Start($s["app_system"] & "\VBoxManage.exe", 'setproperty machinefolder "' & $profile["machines"] & '"', _
                 $s["app_system"], $profile["profile"])
             $s["worker"] = $configure
+            $s["worker_uncertain"] = 0
             If $configure["status"] <> "STARTED" Then
                 _MS_State($s, "FAILED", "user-profile-configuration-not-started")
             Else
