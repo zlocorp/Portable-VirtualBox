@@ -97,6 +97,13 @@ Func _MSW_Text($key)
     Return $key
 EndFunc
 
+; A window X/Alt+F4 message still arrives even when the Close button is
+; disabled. Never allow those paths to abandon a tracked system-action worker.
+Func _MSW_MayProcessClose($worker)
+    If Not IsMap($worker) Or Not MapExists($worker, "handle") Then Return False
+    Return $worker["handle"] = 0
+EndFunc
+
 Func _MSW_Show($root, $workspace)
     Local $h = GUICreate(_MSW_Text("title"), 760, 360)
     Local $warning = GUICtrlCreateLabel(_MSW_Text("warning"), 20, 16, 720, 48)
@@ -125,6 +132,9 @@ Func _MSW_Show($root, $workspace)
                 _MS_Recover($s)
             Case $close, $GUI_EVENT_CLOSE
                 Local $runningWorker = $s["worker"]
+                ; Disabling a GUI button never disables the window's native X.
+                ; This guard applies equally to both events and Alt+F4.
+                If Not _MSW_MayProcessClose($runningWorker) Then ContinueLoop
                 If _MS_CanLeaveDeclined($s["state"], $s["owned"], $runningWorker["handle"]) Then
                     ; An explicit Yes leaves the original protected receipts for
                     ; next-launch Recover. Never silently request UAC again.
@@ -153,11 +163,11 @@ Func _MSW_Show($root, $workspace)
             GUICtrlSetState($reopen, ($canReopen ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($recover, ((($s["state"] == "IDLE" Or $s["state"] == "BLOCKED") And $s["separated"]) ? $GUI_ENABLE : $GUI_DISABLE))
             Local $workerNow = $s["worker"]
-            Local $canClose = $s["state"] == "IDLE" Or $s["state"] == "CLEAN" Or _
+            Local $canClose = _MSW_MayProcessClose($workerNow) And ($s["state"] == "IDLE" Or $s["state"] == "CLEAN" Or _
                 $s["state"] == "BLOCKED" Or $s["state"] == "MANAGER_OPEN" Or _
                 $s["state"] == "OPENING" Or _
                 (_MS_CanLeaveDeclined($s["state"], $s["owned"], $workerNow["handle"])) Or _
-                ($s["state"] == "FAILED" And $workerNow["handle"] = 0)
+                ($s["state"] == "FAILED" And $workerNow["handle"] = 0))
             GUICtrlSetState($close, ($canClose ? $GUI_ENABLE : $GUI_DISABLE))
             $last = $display
         EndIf

@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · window X cannot abandon an in-flight helper (2026-10-26)
+
+- Closing the Manager session with the native window X or Alt+F4 now uses the **same** live-helper guard as the disabled Close button. Before this fix the system-close event could bypass the disabled control, exit a failed session and leave a privileged worker in-flight. All close requests are now ignored while the exact worker handle remains active; no driver cleanup or process termination is guessed.
+
 ### Fixed · cleanup UAC refusal and unknown worker lifetime (2026-10-26)
 
 - A denied Finish UAC no longer turns a Close click into another automatic elevation prompt. Close instead requires an explicit warning/confirmation that own system components will remain; it then exits the **entire original controller** so a fresh alpha session can use its protected one-shot Recover. The ordinary Finish button still retries the exact-owned cleanup immediately.

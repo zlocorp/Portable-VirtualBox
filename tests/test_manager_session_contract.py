@@ -71,6 +71,14 @@ class ManagerSessionContract(unittest.TestCase):
         self.assertIn('Case "leave_declined"',window)
         self.assertNotIn('_MS_State($s, "FAILED", "worker-timeout',manager)
 
+    def test_window_system_close_cannot_bypass_live_helper_lock(self):
+        window=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('Func _MSW_MayProcessClose(', window)
+        self.assertIn('Case $close, $GUI_EVENT_CLOSE', window)
+        self.assertIn('If Not _MSW_MayProcessClose($runningWorker) Then ContinueLoop', window)
+        self.assertIn('Local $canClose = _MSW_MayProcessClose($workerNow) And (', window)
+        self.assertLess(window.index('If Not _MSW_MayProcessClose($runningWorker) Then ContinueLoop'),
+                        window.index('If _MS_CanLeaveDeclined($s["state"]'))
     def test_delayed_oracle_background_never_claims_clean_early(self):
         source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
         gui=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
