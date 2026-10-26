@@ -98,9 +98,13 @@ try {
         $status = 'EXITED'
         $exitCode = $process.ExitCode
     } else {
+        # PnP driver mutation must NEVER continue beyond its tracked helper.
+        # Retain the exact handle and wait for its real exit, even after the
+        # ordinary deadline. TIMEOUT evidence still refuses advancement.
         $status = 'TIMEOUT'
-        try { $process.Kill(); [void]$process.WaitForExit(5000) }
-        catch { $exception = 'Bounded pnputil process could not be terminated' }
+        $process.WaitForExit()
+        $exitCode = $process.ExitCode
+        $exception = 'PnPUtil completed only after the safety deadline; effects need inspection'
     }
 } catch {
     $exception = $_.Exception.Message

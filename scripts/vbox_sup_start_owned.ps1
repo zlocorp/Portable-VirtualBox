@@ -76,9 +76,13 @@ try {
     if ($proc.WaitForExit($TimeoutSeconds*1000)) {
         $status='EXITED'; $exitCode=$proc.ExitCode
     } else {
+        # Never abort an in-flight SCM driver Start by killing its controller.
+        # Wait for the exact native process before releasing ownership locks;
+        # the TIMEOUT status still fails the next step.
         $status='TIMEOUT'
-        try { $proc.Kill(); [void]$proc.WaitForExit(5000) }
-        catch { $problem='Timed-out direct service-control command could not be terminated' }
+        $proc.WaitForExit()
+        $exitCode=$proc.ExitCode
+        $problem='Driver-start command completed after safety deadline'
     }
 } catch { $problem=$_.Exception.Message }
 finally { $clock.Stop(); if ($null -ne $proc) { $proc.Dispose() } }

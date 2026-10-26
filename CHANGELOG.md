@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · do not orphan native driver operations after safety deadline (2026-10-27)
+
+- All five existing protected Windows driver/SDS native-command paths now retain their exact spawned process after the normal timeout and wait for confirmed termination before releasing helper ownership locks. Former `Kill()` calls on PnPUtil / service control could interrupt live system modifications; one partial-recovery timeout previously discarded an active child handle. A late native exit now remains a **failure requiring protected-receipt inspection**, never inferred success or arbitrary cleanup. Main GUI stays responsive through its separate user/privileged worker processes.
+
 ### Extended real guest OS acceptance · 2026-10-27
 
 - The existing isolated main-EXE Manager/VDI/snapshot Windows workflow now mounts the official version-fixed Alpine Linux 3.24.3 virtual ISO (SHA-256 compared to the release's official HTTPS manifest) as a **guest-only** optical disk, starts the headless VM and captures the actual guest display via Oracle's supported `VBoxManage controlvm screenshotpng`. This adds a visual guest-boot witness without inventing another VM runner or shipping ISO/guest files to users. The screenshot still needs inspection before claiming a booted Linux system or guest disk writes.

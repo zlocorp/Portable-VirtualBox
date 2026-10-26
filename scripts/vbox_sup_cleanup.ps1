@@ -205,9 +205,10 @@ function Run-Bounded([string]$Executable,[string]$Argv,[string]$Label) {
         $ownedHandle=$p.Handle
         if ($ownedHandle -eq [IntPtr]::Zero) { throw 'Cleanup tool process handle unavailable' }
         if (-not $p.WaitForExit($TimeoutSeconds*1000)) {
-            # Kill only the subprocess started by this script, never by image name.
-            try { $p.Kill(); [void]$p.WaitForExit(5000) } catch {}
-            throw "$Label timed out"
+            # Service/package teardown may be mutating the host right now.
+            # Wait on the exact native child rather than killing/detaching it.
+            $p.WaitForExit()
+            throw "$Label exceeded safety deadline; native child has exited, ownership must be inspected"
         }
         return [int]$p.ExitCode
     } finally {

@@ -79,7 +79,13 @@ function Run-Sds([string]$Argument,[string]$Label) {
     try {
         $ownedHandle=$p.Handle
         if ($ownedHandle -eq [IntPtr]::Zero) { throw 'SDS process handle unavailable' }
-        if (-not $p.WaitForExit(30000) -or $p.ExitCode -ne 0) { throw 'SDS operation unconfirmed; retain resources' }
+        if (-not $p.WaitForExit(30000)) {
+            # Registration/unregistration is a persistent Windows service
+            # mutation. Retain the exact child even when it runs too long.
+            $p.WaitForExit()
+            throw 'SDS operation exceeded safety deadline; child exited, state requires inspection'
+        }
+        if ($p.ExitCode -ne 0) { throw 'SDS operation unconfirmed; retain resources' }
     } finally { $p.Dispose() }
 }
 try {

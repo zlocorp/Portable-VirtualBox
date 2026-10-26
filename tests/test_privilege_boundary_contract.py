@@ -158,6 +158,24 @@ class PrivilegeBoundaryContract(unittest.TestCase):
             self.assertIn('$' + variable + '.Handle', contents)
             self.assertIn('WaitForExit(', contents)
 
+    def test_privileged_native_commands_never_detach_or_kill_on_timeout(self):
+        fixtures = (
+            ('scripts/vbox_sup_standalone.ps1', '$process'),
+            ('scripts/vbox_sup_start_owned.ps1', '$proc'),
+            ('scripts/vbox_sup_cleanup.ps1', '$p'),
+            ('scripts/vbox_sup_partial_cleanup.ps1', '$p'),
+            ('scripts/privileged_session_worker.ps1', '$p'),
+        )
+        for path, child in fixtures:
+            source=self.text(path)
+            self.assertIn(child+'.WaitForExit()', source, path)
+            self.assertIn('WaitForExit(', source, path)
+            self.assertNotIn(child+'.Kill()', source, path)
+            self.assertNotIn('Stop-Process', source, path)
+            self.assertNotIn('taskkill', source, path)
+        for path in ('scripts/vbox_sup_standalone.ps1', 'scripts/vbox_sup_start_owned.ps1'):
+            self.assertIn("status = 'TIMEOUT'" if 'standalone' in path else "status='TIMEOUT'",self.text(path))
+
     def test_inbox_powershell_required_in_effect_worker(self):
         s=self.text('scripts/privileged_session_worker.ps1')
         self.assertIn("$PSVersionTable.PSEdition -ne 'Desktop'", s)
