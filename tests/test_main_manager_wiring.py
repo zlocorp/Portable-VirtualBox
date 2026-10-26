@@ -77,6 +77,18 @@ class MainManagerWiring(unittest.TestCase):
         self.assertNotIn('Portable-VirtualBox-Helper-Alpha.exe',build)
         self.assertIn('alpha-runtime', (R/'docs/ALPHA-WINDOWS-TEST.md').read_text(encoding='utf-8'))
 
+    def test_real_guest_iso_uses_same_main_gui_and_preserves_visual_evidence(self):
+        workflow=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
+        fixture=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
+        self.assertIn('alpine-virt-3.24.3-x86_64.iso', workflow)
+        self.assertIn('Get-FileHash -LiteralPath $iso -Algorithm SHA256', workflow)
+        self.assertIn('-MainLauncher -GuestIso $env:MANAGER_GUEST_ISO', workflow)
+        for phrase in ('attach-guest-iso', '--boot1 dvd', 'guest-boot-alpine.png',
+                       'screenshotpng', 'guest_screen_capture=$true', 'GuestIsoSha256'):
+            self.assertIn(phrase, fixture)
+        self.assertIn('guest_os_booted=$false', fixture)
+        self.assertIn('retention-days: 7', workflow)
+
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
         w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')

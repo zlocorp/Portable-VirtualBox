@@ -74,11 +74,32 @@ jobs:
           $p=Start-Process -FilePath $exe -ArgumentList '--version' -PassThru -Wait -NoNewWindow
           if ($p.ExitCode -ne 0) { throw 'Read-only public version probe failed' }
           Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox.exe')
-      - name: Exercise real buttons, Manager, live guest, refusal and two-cycle cleanup
+      - name: Download exact official Alpine guest ISO for disposable VM only
+        shell: pwsh
+        run: |
+          # ISO is guest input, NOT a trusted driver/system executable.
+          # Verify an exact version against the official HTTPS checksum.
+          $name='alpine-virt-3.24.3-x86_64.iso'
+          $base='https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/'
+          $iso=Join-Path $env:RUNNER_TEMP $name
+          $sum=Join-Path $env:RUNNER_TEMP ($name+'.sha256')
+          Invoke-WebRequest -Uri ($base+$name+'.sha256') -OutFile $sum -ErrorAction Stop
+          $manifest=(Get-Content -LiteralPath $sum -Raw -Encoding utf8).Trim()
+          if ($manifest -notmatch ('(?i)^([0-9a-f]{64})\s+\*?'+[regex]::Escape($name)+'$')) {
+            throw 'Official Alpine manifest does not identify the exact ISO'
+          }
+          $expected=$Matches[1].ToLowerInvariant()
+          Invoke-WebRequest -Uri ($base+$name) -OutFile $iso -ErrorAction Stop
+          if ((Get-FileHash -LiteralPath $iso -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'Official Alpine ISO SHA256 mismatch'
+          }
+          "MANAGER_GUEST_ISO=$iso" >> $env:GITHUB_ENV
+          "MANAGER_GUEST_SHA=$expected" >> $env:GITHUB_ENV
+      - name: Exercise real buttons, Alpine guest display, VDI, snapshot and two-cycle cleanup
         shell: pwsh
         run: |
           try {
-            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher
+            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher -GuestIso $env:MANAGER_GUEST_ISO -GuestIsoSha256 $env:MANAGER_GUEST_SHA
           } catch {
             # Capture before the step's process tree is released by the runner.
             ./scripts/snapshot_manager_windows.ps1 -PortableRoot $env:MANAGER_ROOT

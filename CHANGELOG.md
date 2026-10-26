@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Extended real guest OS acceptance · 2026-10-27
+
+- The existing isolated main-EXE Manager/VDI/snapshot Windows workflow now mounts the official version-fixed Alpine Linux 3.24.3 virtual ISO (SHA-256 compared to the release's official HTTPS manifest) as a **guest-only** optical disk, starts the headless VM and captures the actual guest display via Oracle's supported `VBoxManage controlvm screenshotpng`. This adds a visual guest-boot witness without inventing another VM runner or shipping ISO/guest files to users. The screenshot still needs inspection before claiming a booted Linux system or guest disk writes.
+
 ### Fixed · window X cannot abandon an in-flight helper (2026-10-26)
 
 - Closing the Manager session with the native window X or Alt+F4 now uses the **same** live-helper guard as the disabled Close button. Before this fix the system-close event could bypass the disabled control, exit a failed session and leave a privileged worker in-flight. All close requests are now ignored while the exact worker handle remains active; no driver cleanup or process termination is guessed.
