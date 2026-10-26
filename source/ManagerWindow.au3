@@ -36,6 +36,9 @@ Func _MSW_Text($key)
         Case "leave_declined"
             If $ru Then Return "Очистка отменена в UAC. Драйверы и службы этой сессии ОСТАНУТСЯ в системе. Завершить лаунчер без очистки и при следующем запуске явно выбрать «Восстановить после сбоя»? Для безопасной очистки сейчас нажмите «Нет», затем «Завершить сессию»."
             Return "Cleanup UAC was declined. This session's drivers/services WILL REMAIN installed. Exit without cleanup and use explicit Recover on the next launch? Choose No and Finish session to retry cleanup now."
+        Case "leave_failed"
+            If $ru Then Return "ALPHA: состояние ВМ, служб или драйвера НЕ ПОДТВЕРЖДЕНО. Если выйти, ресурсы могут остаться работающими. После закрытия гостевых ВМ потребуется отдельное восстановление по защищённым квитанциям, а при неопределённости откат снимка тестовой Windows. Закрыть весь лаунчер без очистки?"
+            Return "ALPHA: VM, driver or service state is NOT VERIFIED. Exit may leave them running. After all guests stop, explicit protected-receipt recovery is required; unknown states need restoring the disposable Windows snapshot. Exit the entire launcher without cleanup?"
         Case "IDLE"
             If $ru Then Return "Готов к началу изолированной тестовой сессии."
             Return "Ready to start the isolated test session."
@@ -139,6 +142,14 @@ Func _MSW_Show($root, $workspace)
                     ; An explicit Yes leaves the original protected receipts for
                     ; next-launch Recover. Never silently request UAC again.
                     If MsgBox(0x34, _MSW_Text("title"), _MSW_Text("leave_declined"), 0, $h) == 6 Then
+                        $leftOwned = True
+                        ExitLoop
+                    EndIf
+                ElseIf $g_MS_AlphaMode And $s["state"] == "FAILED" Then
+                    ; A confirmed helper failure can follow partial driver
+                    ; installation, service registration, or Manager startup.
+                    ; Never silently return to the main GUI holding a mutex.
+                    If MsgBox(0x34, _MSW_Text("title"), _MSW_Text("leave_failed"), 0, $h) == 6 Then
                         $leftOwned = True
                         ExitLoop
                     EndIf

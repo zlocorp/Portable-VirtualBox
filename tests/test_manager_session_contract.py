@@ -71,6 +71,15 @@ class ManagerSessionContract(unittest.TestCase):
         self.assertIn('Case "leave_declined"',window)
         self.assertNotIn('_MS_State($s, "FAILED", "worker-timeout',manager)
 
+    def test_alpha_failed_state_needs_unsafe_exit_confirmation(self):
+        window=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
+        gui=(ROOT/'source/LauncherGui.au3').read_text(encoding='utf-8-sig')
+        for phrase in ('Case "leave_failed"','ElseIf $g_MS_AlphaMode And $s["state"] == "FAILED" Then',
+                       'MsgBox(0x34, _MSW_Text("title"), _MSW_Text("leave_failed")',
+                       '$leftOwned = True','If $leftOwned Then Return 4'):
+            self.assertIn(phrase,window)
+        self.assertIn('If $managerExit = 4 Then Exit 4',gui)
+
     def test_window_system_close_cannot_bypass_live_helper_lock(self):
         window=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
         self.assertIn('Func _MSW_MayProcessClose(', window)

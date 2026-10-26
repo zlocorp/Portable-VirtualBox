@@ -34,6 +34,11 @@ resources were deleted. If a
 controller crashed, Recover abandoned session uses one-shot protected receipts.
 Uncertain original owner, disk or driver status requires restoring the disposable
 host snapshot, never forced process kills or guessed `sc delete` commands.
+If the Manager window reports **FAILED**, the ALPHA build now explicitly warns
+that VM processes, services or drivers may remain active. A confirmed exit
+closes the whole controller and preserves receipts for manual inspection or
+later one-shot recovery. Canceling the warning keeps the controller running;
+never interpret FAILED as proof that cleanup completed.
 
 Protected alpha receipts live in `%ProgramData%/PortableVirtualBox.Alpha`,
 separate from CI experiments. Do not edit those receipts. The package includes

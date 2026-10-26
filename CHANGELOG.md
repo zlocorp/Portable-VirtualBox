@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · explicit ALPHA exit after indeterminate system failure (2026-10-27)
+
+- A failed Manager/helper session is **not** evidence of driver cleanup. ALPHA no longer lets closing its session window silently return to the main GUI after a FAILED state. With no live helper handle, exit requires an explicit warning that VirtualBox services and guests may remain; confirming leaves protected receipts and exits the entire original controller for subsequent careful recovery. The CI-only experiment keeps its existing automation semantics.
+
 ### Fixed · Alpine guest x86-64 CPU configuration (2026-10-27)
 
 - [Actual main GUI ISO screenshot 40405065168](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40405065168) exposed a genuine guest startup error despite green lifecycle CI: Oracle's Other VM default reported `longmode="off"`, so Alpine 64-bit stopped on an i686 CPU check. The existing CI fixture now requests Linux_64, enables x86 long mode and checks the independent Oracle machine-readable report for `longmode="on"` before accepting guest-display capture. A VM running state and screenshot alone do not prove the OS booted.
