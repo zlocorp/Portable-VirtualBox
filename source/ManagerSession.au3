@@ -387,6 +387,11 @@ Func _MS_Reopen(ByRef $s)
     Return _MS_OpenManager($s)
 EndFunc
 
+Func _MS_CanLeaveDeclined($state, $owned, $workerHandle)
+    Return IsString($state) And $state == "CLEANUP_DECLINED" And IsBool($owned) And $owned And _
+        IsNumber($workerHandle) And $workerHandle = 0
+EndFunc
+
 Func _MS_Stop(ByRef $s)
     If $s["state"] == "CLEANUP_DECLINED" Then
         $s["quiet"] = 0
@@ -435,7 +440,10 @@ Func _MS_Tick(ByRef $s)
         Local $worker = $s["worker"], $status = _MP_Poll($worker)
         $s["worker"] = $worker
         If $status == "PRESENT" Then
-            If Not _MS_ConsentPending($state) And TimerDiff($s["clock"]) > 180000 Then _MS_State($s, "FAILED", "worker-timeout-no-guessed-cleanup")
+            ; Never dismiss a still-live fixed helper because of elapsed time.
+            ; The GUI stays responsive and retains its worker/controller handle.
+            If Not _MS_ConsentPending($state) And TimerDiff($s["clock"]) > 180000 Then _
+                _MS_State($s, $state, "worker-still-running-no-cleanup")
             Return
         EndIf
         If $status == "UNKNOWN" Then
@@ -446,7 +454,10 @@ Func _MS_Tick(ByRef $s)
             If _MS_WorkerUnknownWait(TimerDiff($s["worker_uncertain"])) Then Return
         EndIf
         If $status <> "EXITED" Then
-            _MS_State($s, "FAILED", "worker-not-confirmed-" & $status)
+            ; A persistent unknown handle must not allow the controller to
+            ; vanish while its elevated effect could still be in progress.
+            ; Remain in the same pending phase, retaining all locks/handles.
+            _MS_State($s, $state, "worker-not-confirmed-" & $status & "-retain-session")
             Return
         EndIf
         $s["worker_uncertain"] = 0

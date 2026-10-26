@@ -33,6 +33,9 @@ Func _MSW_Text($key)
         Case "close"
             If $ru Then Return "Закрыть"
             Return "Close"
+        Case "leave_declined"
+            If $ru Then Return "Очистка отменена в UAC. Драйверы и службы этой сессии ОСТАНУТСЯ в системе. Завершить лаунчер без очистки и при следующем запуске явно выбрать «Восстановить после сбоя»? Для безопасной очистки сейчас нажмите «Нет», затем «Завершить сессию»."
+            Return "Cleanup UAC was declined. This session's drivers/services WILL REMAIN installed. Exit without cleanup and use explicit Recover on the next launch? Choose No and Finish session to retry cleanup now."
         Case "IDLE"
             If $ru Then Return "Готов к началу изолированной тестовой сессии."
             Return "Ready to start the isolated test session."
@@ -105,7 +108,7 @@ Func _MSW_Show($root, $workspace)
     Local $reopen = GUICtrlCreateButton(_MSW_Text("reopen"), 512, 232, 228, 38)
     Local $recover = GUICtrlCreateButton(_MSW_Text("recover"), 20, 294, 228, 36)
     Local $close = GUICtrlCreateButton(_MSW_Text("close"), 512, 294, 228, 36)
-    Local $s = _MS_New($root, $workspace), $last = "", $tick = TimerInit()
+    Local $s = _MS_New($root, $workspace), $last = "", $tick = TimerInit(), $leftOwned = False
     GUISetState(@SW_SHOW, $h)
     While 1
         Local $event = GUIGetMsg()
@@ -121,8 +124,19 @@ Func _MSW_Show($root, $workspace)
                 ; an explicit click AND a separate Windows consent action.
                 _MS_Recover($s)
             Case $close, $GUI_EVENT_CLOSE
-                If $s["state"] == "IDLE" Or $s["state"] == "CLEAN" Or $s["state"] == "BLOCKED" Or $s["state"] == "FAILED" Then ExitLoop
-                _MS_Stop($s) ; do not abandon a live normal session on window close
+                Local $runningWorker = $s["worker"]
+                If _MS_CanLeaveDeclined($s["state"], $s["owned"], $runningWorker["handle"]) Then
+                    ; An explicit Yes leaves the original protected receipts for
+                    ; next-launch Recover. Never silently request UAC again.
+                    If MsgBox(0x34, _MSW_Text("title"), _MSW_Text("leave_declined"), 0, $h) == 6 Then
+                        $leftOwned = True
+                        ExitLoop
+                    EndIf
+                ElseIf $s["state"] == "IDLE" Or $s["state"] == "CLEAN" Or $s["state"] == "BLOCKED" Or $s["state"] == "FAILED" Then
+                    ExitLoop
+                Else
+                    _MS_Stop($s) ; normal Manager close, never kill a guest
+                EndIf
         EndSwitch
         If TimerDiff($tick) > 250 Then
             _MS_Tick($s)
@@ -138,11 +152,19 @@ Func _MSW_Show($root, $workspace)
             GUICtrlSetState($stop, ($canStop ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($reopen, ($canReopen ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($recover, ((($s["state"] == "IDLE" Or $s["state"] == "BLOCKED") And $s["separated"]) ? $GUI_ENABLE : $GUI_DISABLE))
+            Local $workerNow = $s["worker"]
+            Local $canClose = $s["state"] == "IDLE" Or $s["state"] == "CLEAN" Or _
+                $s["state"] == "BLOCKED" Or $s["state"] == "MANAGER_OPEN" Or _
+                $s["state"] == "OPENING" Or _
+                (_MS_CanLeaveDeclined($s["state"], $s["owned"], $workerNow["handle"])) Or _
+                ($s["state"] == "FAILED" And $workerNow["handle"] = 0)
+            GUICtrlSetState($close, ($canClose ? $GUI_ENABLE : $GUI_DISABLE))
             $last = $display
         EndIf
         Sleep(15)
     WEnd
     GUIDelete($h)
+    If $leftOwned Then Return 4 ; caller must EXIT, not reopen its main GUI
     If $s["state"] == "FAILED" Then Return 3
     Return 0
 EndFunc

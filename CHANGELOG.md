@@ -4,6 +4,11 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · cleanup UAC refusal and unknown worker lifetime (2026-10-26)
+
+- A denied Finish UAC no longer turns a Close click into another automatic elevation prompt. Close instead requires an explicit warning/confirmation that own system components will remain; it then exits the **entire original controller** so a fresh alpha session can use its protected one-shot Recover. The ordinary Finish button still retries the exact-owned cleanup immediately.
+- A pending or unknown worker is retained and re-observed even after its normal deadline; the launcher does not report completion or allow Close while a privileged operation might still mutate Windows. Transient handle-observation races are retried without guessing success or terminating processes.
+
 ### Fixed · real Manager worker exit-race (2026-10-26)
 
 - One actual compiled Manager Start/Stop CI run hit `worker-not-confirmed-UNKNOWN` after successfully staging VBoxSup and writing the protected session receipt. A fast child can exit between the retained-handle wait and Windows read-only identity query. ManagerSession now re-observes the **same process handle** for at most five seconds; only a confirmed exit and zero code advance the session, while persistent unknown remains fail-closed. No process-name lookup, termination or guessed cleanup was added.

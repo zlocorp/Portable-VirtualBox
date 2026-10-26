@@ -190,7 +190,8 @@ Func _LG_Show()
                     ; selected for medium-token CI; no blanket elevation.
                     $g_MS_Separated = _PB_Medium()
                     GUISetState(@SW_HIDE, $hGui)
-                    _MSW_Show(@ScriptDir, EnvGet("GITHUB_WORKSPACE"))
+                    Local $managerExit = _MSW_Show(@ScriptDir, EnvGet("GITHUB_WORKSPACE"))
+                    If $managerExit = 4 Then Exit 4 ; old controller must depart before explicit Recover
                     GUISetState(@SW_SHOW, $hGui)
                     ; Previous services and activity are not assumed clean.
                     _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _

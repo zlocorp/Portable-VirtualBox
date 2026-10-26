@@ -58,6 +58,19 @@ class ManagerSessionContract(unittest.TestCase):
                         s.index('If $status <> "EXITED" Then'))
         self.assertIn('elapsedMs < 5000',s)
 
+    def test_declined_cleanup_has_explicit_exit_and_recover_without_reprompt(self):
+        manager=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
+        window=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
+        gui=(ROOT/'source/LauncherGui.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('Func _MS_CanLeaveDeclined(',manager)
+        self.assertIn('worker-not-confirmed-',manager)
+        self.assertIn('worker-still-running-no-cleanup',manager)
+        self.assertIn('MsgBox(0x34',window)
+        self.assertIn('If $leftOwned Then Return 4',window)
+        self.assertIn('If $managerExit = 4 Then Exit 4',gui)
+        self.assertIn('Case "leave_declined"',window)
+        self.assertNotIn('_MS_State($s, "FAILED", "worker-timeout',manager)
+
     def test_delayed_oracle_background_never_claims_clean_early(self):
         source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
         gui=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')

@@ -26,7 +26,11 @@ close/reopen Manager, verify VM disk and snapshots, then Finish session.
 Confirm owned VBoxSup/VBoxSDS are absent and user VM files remain. Repeat once.
 
 Deny UAC on a clean Start, then test a successful Start and a cancelled Finish.
-Cancelled Finish retains protected resources; explicitly retry Finish. If a
+Cancelled Finish retains protected resources; explicitly retry Finish. You may
+also click Close and **confirm** leaving drivers/services installed. That action
+exits the entire original controller and leaves exact protected receipts so a
+fresh `--alpha-runtime` launch can choose Recover. Never assume cancel means
+resources were deleted. If a
 controller crashed, Recover abandoned session uses one-shot protected receipts.
 Uncertain original owner, disk or driver status requires restoring the disposable
 host snapshot, never forced process kills or guessed `sc delete` commands.
