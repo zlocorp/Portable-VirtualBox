@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Extended guest VDI read/write acceptance (2026-10-27)
+
+- The existing real Alpine Linux GUI test now sends an isolated fixed login/write sequence through Oracle's virtual PS/2 keyboard. The Linux guest must write a unique marker to sector 2048 of the already attached empty VDI; after power-off, exact-owned driver cleanup and a second Manager session, the test clones the disk to a temporary RAW readback and verifies the actual bytes at that sector before reporting guest-OS disk I/O success. Screenshots alone cannot satisfy this assertion. RAW test copies are removed and never included in a distribution. This check requires passing real Windows CI before the result is considered verified.
+
 ### Fixed · explicit ALPHA exit after indeterminate system failure (2026-10-27)
 
 - A failed Manager/helper session is **not** evidence of driver cleanup. ALPHA no longer lets closing its session window silently return to the main GUI after a FAILED state. With no live helper handle, exit requires an explicit warning that VirtualBox services and guests may remain; confirming leaves protected receipts and exits the entire original controller for subsequent careful recovery. The CI-only experiment keeps its existing automation semantics.

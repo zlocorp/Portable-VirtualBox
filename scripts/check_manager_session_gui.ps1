@@ -181,7 +181,7 @@ function Start-Controller([string]$Label) {
     return Start-Process -FilePath $exe -ArgumentList '--lang en' -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
 }
 $front=$null; $other=$null; $badFront=$null
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;guest_iso_attached=$false;guest_64bit_cpu_configured=$false;guest_screen_capture=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;guest_iso_attached=$false;guest_64bit_cpu_configured=$false;guest_screen_capture=$false;guest_disk_io_confirmed=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
 try {
     Assert-Clean 'initial baseline'
     if ($SeparatePrivileges) {
@@ -296,7 +296,20 @@ try {
             throw 'Guest display screenshot is not a nonempty PNG'
         }
         $proof.guest_screen_capture=$true
-        Write-Host 'Captured VM guest display; Linux boot verification requires inspecting the image'
+        # Alpine's ISO console uses root without a password. Send all keys
+        # through Oracle's supported virtual keyboard to the guest, never a
+        # host shell. The marker can only be accepted from raw disk readback.
+        $marker='PVBOX_GUEST_WRITE_OK_20261027'
+        $guestCommand='echo '+$marker+' | dd of=/dev/sda bs=512 seek=2048 conv=notrunc; sync'
+        $null=Oracle ('controlvm '+$uuid+' keyboardputstring root') 'guest-root-login'
+        $null=Oracle ('controlvm '+$uuid+' keyboardputscancode 1c 9c') 'guest-login-enter'
+        Start-Sleep -Seconds 3
+        $null=Oracle ('controlvm '+$uuid+' keyboardputstring "'+$guestCommand+'"') 'guest-disk-write-command'
+        $null=Oracle ('controlvm '+$uuid+' keyboardputscancode 1c 9c') 'guest-command-enter'
+        Start-Sleep -Seconds 8
+        $guestCommandScreen=Join-Path $out 'guest-disk-command.png'
+        $null=Oracle ('controlvm '+$uuid+' screenshotpng "'+$guestCommandScreen+'"') 'guest-write-screen'
+        Write-Host 'Guest disk write requested via virtual keyboard; not yet trusted until offline sector readback'
     }
     if ($SeparatePrivileges) {
         $guest=Get-Process -Name VBoxHeadless -ErrorAction Stop
@@ -343,6 +356,34 @@ try {
     $againDisk=Oracle ('showmediuminfo disk "'+$disk+'"') 'same-virtual-disk'
     if ($againDisk -notmatch '(?im)^Storage format:\s+VDI' -or
         $againDisk -notmatch '(?im)^UUID:\s+[a-f0-9-]{36}') { throw 'VDI not registered after restart' }
+    if ($GuestIso) {
+        # Read the *same VDI* after actual VM shutdown and a full driver
+        # teardown/restart. VBoxManage clones the logical disk to RAW;
+        # only the exact fixed guest-written sector marker proves guest I/O.
+        $raw=Join-Path $out 'guest-vdi-readback.raw'
+        if (Test-Path -LiteralPath $raw) { throw 'Disk readback unexpectedly exists' }
+        $null=Oracle ('clonemedium disk "'+$disk+'" "'+$raw+'" --format RAW') 'guest-vdi-offline-readback'
+        try {
+            $fs=[IO.File]::Open($raw,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+            try {
+                [void]$fs.Seek(2048*512,[IO.SeekOrigin]::Begin)
+                $expected=[Text.Encoding]::ASCII.GetBytes($marker)
+                $observed=New-Object byte[] $expected.Length
+                $n=$fs.Read($observed,0,$observed.Length)
+                if ($n -ne $expected.Length -or
+                    [Text.Encoding]::ASCII.GetString($observed) -cne $marker) {
+                    throw 'No guest-written VDI sector marker after restart and cleanup'
+                }
+                $proof.guest_disk_io_confirmed=$true
+                $proof.guest_os_booted=$true
+                Write-Host 'PASS: real Alpine guest booted and wrote verified bytes to the portable VDI'
+            } finally { $fs.Dispose() }
+        } finally {
+            # This disposable RAW copy is not part of the portable VM, and
+            # must not be included in public artifacts or user ZIP files.
+            Remove-Item -LiteralPath $raw -Force -ErrorAction SilentlyContinue
+        }
+    }
     # Snapshot is taken while the guest is powered off; Oracle creates a
     # differencing VDI under this VM's portable Snapshots directory.
     $null=Oracle ('snapshot '+$uuid+' take portable-baseline') 'take-snapshot'
