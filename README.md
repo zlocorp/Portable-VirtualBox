@@ -4,7 +4,7 @@
 
 A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portable-VirtualBox), focused on a small bilingual launcher, verifiable dependencies and portable user data.
 
-> **Development preview, not a usable VM launcher yet.** The normal GUI does not start VirtualBox Manager or VMs and does not install drivers. Actual driver/empty-VM tests run only on disposable Windows CI hosts. Windows 11 standard-user/UAC acceptance is still pending.
+> **Development preview, not an approved everyday VM launcher.** Normal double-click does not install drivers or start VMs. An explicitly opted-in ALPHA and a CI-only path use the integrated real Oracle Manager, but Windows 10/11 workstation UAC and driver installation acceptance remain pending. Real Alpine Linux x86-64 boot and VDI writes have passed isolated Windows Server CI.
 
 **First-run setup without installed Python.** Click **Prepare VirtualBox / folders**: **Yes** downloads pinned Oracle VirtualBox 7.2.22 over official HTTPS, **No** selects an already-downloaded installer. The separate non-admin `Portable-VirtualBox-Setup.exe` checks its built-in SHA-256 and prepares `app64` without executing an MSI or installing drivers. Existing `app64` is not overwritten. CLI: `--download-app64` or `--prepare-app64 "INSTALLER_PATH"`. Both routes passed [compiled Windows acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40209800549). Download progress shows transferred MiB (and a percentage when Oracle provides its content length), then separate verification/extraction phases. The status is informational; only the validated app64 receipt marks success.
 
@@ -83,7 +83,7 @@ Data backups are folders containing `data/` plus `SHA256SUMS.txt`; failed/cancel
 
 The community-adoption implementation `183f35da` passed [x64 build, ordinary compiled CLI and ZIP checks](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219426), [18 native AutoIt harnesses](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548219415) and [compiled empty-VM boot plus exact-owned driver teardown](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/39548214487). The downloaded preview ZIP was independently inspected: its checksum matches, and credits, notices and both READMEs are included. [Full evidence and environment limits](https://github.com/zlocorp/Portable-VirtualBox/blob/dev/modernization-2026/docs/EXECUTION-2026-10-21-community-adoption.md).
 
-**Not implemented:** production Manager Start/Stop, reviewed privilege-separated UAC helper, general VM migration, power-loss and arbitrary mid-driver-operation recovery, transactional Oracle updates, optional USB/bridged networking. No real guest OS/disk or interactive Windows 11 GUI/DPI acceptance is claimed. A Linux/Windows Server CI pass is not Windows 11 approval.
+**Not yet production-verified:** ordinary-user Manager Start/Stop, interactive workstation UAC approval/denial, general VM relocation and power-loss recovery, transactional Oracle updates, optional USB/bridged networking. Actual Alpine guest boot and VDI disk I/O **are** verified on a disposable Windows Server CI host ([proof](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40407596523)); Windows 11 UAC and everyday-host safety are **not**.
 
 ## Build and packaging
 
