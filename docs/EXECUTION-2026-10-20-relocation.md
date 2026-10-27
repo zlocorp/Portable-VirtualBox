@@ -36,6 +36,19 @@ The initial snapshot attempts also exposed a useful Oracle CLI peculiarity: diff
 
 **Not shown:** real USB physical removal, another host CPU/security state, a running VM move, a power-loss during rebind or an approved end-user migration wizard. A manual opt-in repair must still validate local registrations, preserve backups and avoid deleting files.
 
+## Safe user-facing plan and backup (2026-10-27)
+
+The public AutoIt launcher now has `--plan-vm-rebind` and
+`--prepare-vm-rebind NEW_BACKUP_FOLDER` as the first user-facing
+recovery stage. It checks **one** stale absolute `MachineEntry`, original
+path absent, new-root UUID identical, snapshot/VDI chain wholly local,
+no second registered or unregistered VM, no symlinks/junctions and an idle
+host. Preparation performs a non-overwriting SHA-256 verified backup of
+the entire `data/` folder and revalidates exact source hashes afterward.
+No Oracle command is executed: updating the registration remains separate
+and requires an explicitly approved/owned session. This safely avoids
+launching VBoxManage just to *inspect* a moved USB disk.
+
 ## Next deliverables
 
 1. Implement an explicit, non-destructive **relocation preflight/plan**, not an automatic migration, that records old/new paths, VM UUIDs, media references and creates recovery backups before any mutation. The plan must remain read-only until the user authorizes migration.

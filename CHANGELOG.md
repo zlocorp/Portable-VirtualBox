@@ -4,6 +4,11 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · user-facing moved-VM plan and verified offline backup (2026-10-27)
+
+- The **ordinary compiled main EXE** now offers `--plan-vm-rebind` (read-only, bilingual) and `--prepare-vm-rebind NEW_BACKUP_FOLDER`. Its normal GUI VM audit displays an exact stale-entry candidate. The planner accepts only a single relocated VM whose original `MachineEntry` points to an absent old local root and whose UUID matches an existing new-root `.vbox`; it checks all local media and snapshots, forbids foreign/unknown VBox activity, duplicate/unregistered machines, junctions and DTD/XXE.
+- Backup preparation uses the established durable, SHA-256 verified full `data/` copier, refuses overwrites, then rechecks the source VM, registry identity and hashes. **Neither operation runs VBoxManage, edits VirtualBox.xml or changes a Windows driver/service.** Completing the user-approved Oracle re-registration remains a separate release gate.
+
 ### Fixed · reject pre-existing unowned VBoxSup driver leftovers (2026-10-27)
 
 - Signed VBoxSup staging now refuses a host that has the kernel image in `System32\drivers` or a previously published OEM INF referencing VBoxSup, **even if no VBox service/Oracle installation is currently registered**. The scan reads Windows INF data as possible ANSI/UTF-8 and UTF-16LE before the first `pnputil` mutation. This closes an ownership ambiguity that could otherwise adopt and later delete a foreign/stale package. No service/driver deletion is performed by the preflight.

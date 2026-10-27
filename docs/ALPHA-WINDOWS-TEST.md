@@ -51,7 +51,12 @@ unsigned frontend executables may trigger Windows publisher warnings; do not
 disable UAC, AV, HVCI or SmartScreen to bypass them.
 
 Before attempting any relocation, finish all guests and verify exact-owned
-driver cleanup. A moved VM with a stale VirtualBox.xml registration is NOT
+driver cleanup. On an idle host, the normal main EXE now supports a read-only
+`--plan-vm-rebind` and verified `--prepare-vm-rebind NEW_BACKUP_FOLDER`
+for **one** local moved VM/snapshot chain. This makes a full data copy but
+**does not edit VirtualBox.xml or run Oracle to repair the stale entry**.
+Keep the original and backup intact until a separate supported registration
+step has been accepted on the isolated workstation. A moved VM with a stale VirtualBox.xml registration is NOT
 automatically rewritten or repaired by this alpha. Read-only VM portability
 audit warns about inconsistent paths; the four-mode Oracle rebind sequence has
 been verified **only** on fresh CI hosts
