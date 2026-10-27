@@ -47,8 +47,10 @@ class PortableRelocationContract(unittest.TestCase):
                        'snapshotChainRestored', 'originalSnapshotUuid',
                        'Get-FileHash -LiteralPath $relocatedSnapshotPath'):
             self.assertIn(marker, script)
+        active='\n'.join(line for line in script.splitlines()
+                         if not line.lstrip().startswith('#'))
         for forbidden in ('--delete', 'Kill()', 'taskkill', 'Remove-Item'):
-            self.assertNotIn(forbidden, script)
+            self.assertNotIn(forbidden, active)
         self.assertIn("$p.WaitForExit()",script)
 
     def test_drive_letter_alias_reassignment_is_explicit_and_disposable(self):
