@@ -26,6 +26,10 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 **Manager and guests are not the same process.** Diagnostics separately report Manager, GUI/headless guest processes and background activity. These are observations, not proof that a guest is running or permission to stop/delete anything.
 
+## Portable-root relocation and snapshot chains (research status)
+
+Powered-off VirtualBox VMs with **snapshot/differencing VDI media** now survived four real disposable Windows tests: moving the Unicode directory and changing a test VHDX from `P:` to `Q:`, both with a clean prior unregister and with an **old absolute registration left in VirtualBox.xml**. Oracle's official unregister/register operations restored the same VM and snapshot UUIDs, identical virtual-disk hashes and new-root media paths without deleting the files. [Four-mode Windows evidence](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40462477639). The public launcher still provides **read-only** VM portability audit; it does NOT yet automatically repair moved registrations. Use no valuable VM for the ALPHA acceptance.
+
 ## Workstation alpha, isolated testing only
 
 A separate, **non-release** developer candidate can be launched with

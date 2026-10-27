@@ -50,4 +50,12 @@ no Oracle binaries, guest OS disks or running VMs. It is **not a release**:
 unsigned frontend executables may trigger Windows publisher warnings; do not
 disable UAC, AV, HVCI or SmartScreen to bypass them.
 
+Before attempting any relocation, finish all guests and verify exact-owned
+driver cleanup. A moved VM with a stale VirtualBox.xml registration is NOT
+automatically rewritten or repaired by this alpha. Read-only VM portability
+audit warns about inconsistent paths; the four-mode Oracle rebind sequence has
+been verified **only** on fresh CI hosts
+([results](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40462477639)).
+Do not experiment with manual unregister/delete on valuable data.
+
 A real interactive isolated Windows host is required to complete acceptance.

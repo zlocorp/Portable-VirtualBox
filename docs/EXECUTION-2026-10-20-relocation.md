@@ -26,6 +26,16 @@ Actual logger summary in BOTH jobs:
 - The experiment deliberately did not modify arbitrary `VirtualBox.xml` with text replacement, did not force-kill unrelated processes and did not use `unregistervm --delete`.
 - Existing checkout `master` and archived legacy code remain unchanged, and the new production AutoIt launcher is still not connected to privileged operations.
 
+## Expanded real snapshot and stale-registration acceptance (2026-10-27)
+
+[Four independent Windows Server 2022 jobs #40462477639](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40462477639) passed on `392579d7`. Two test modes physically moved the Unicode root directory, and two changed the backing test VHDX letter **P: -> Q:**. For each, the fixture created a real powered-off Oracle snapshot and its differencing VDI. In each geography, one scenario unregistered before the move, while the `-stale` scenario intentionally preserved the old absolute `MachineEntry` until after the move.
+
+Downloaded evidence from all modes confirms `same_uuid`, `same_snapshot_uuid`, `attached_disk_survived`, `snapshot_bytes_preserved`, `snapshot_path_relocated`, `disk_attachment_points_to_new_root` and `machinefolder_points_to_new_root` all **true**. `stale_registration_unregistered` is also **true** in both stale scenarios; Oracle's supported `unregistervm` did not use `--delete`. Every run performed **two** exact-image VBoxSDS cleanups (old/new root), with `services_remaining=[]`, `processes_remaining=[]`, `succeeded=true`, `problems=[]`.
+
+The initial snapshot attempts also exposed a useful Oracle CLI peculiarity: differencing VDI `Location` prints `Snapshots/{UUID}.vdi` inside a Windows path. The test now normalizes **only the read-only listing** before comparing, and never rewrites arbitrary `.vbox` / `VirtualBox.xml` text.
+
+**Not shown:** real USB physical removal, another host CPU/security state, a running VM move, a power-loss during rebind or an approved end-user migration wizard. A manual opt-in repair must still validate local registrations, preserve backups and avoid deleting files.
+
 ## Next deliverables
 
 1. Implement an explicit, non-destructive **relocation preflight/plan**, not an automatic migration, that records old/new paths, VM UUIDs, media references and creates recovery backups before any mutation. The plan must remain read-only until the user authorizes migration.
