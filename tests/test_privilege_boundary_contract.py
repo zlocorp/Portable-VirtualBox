@@ -188,6 +188,19 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn('main-launcher',workflow)
         self.assertIn('retention-days: 7',workflow)
 
+    def test_driver_preflight_refuses_preexisting_unowned_oem_inf_or_kernel_image(self):
+        s=self.text('scripts/vbox_sup_standalone.ps1')
+        for fragment in ('System32\\drivers\\VBoxSup.sys',
+                         "if (Test-Path -LiteralPath $systemSup)",
+                         "'oem*.inf'", 'Get-ChildItem -LiteralPath $publishedInfRoot',
+                         "[Text.Encoding]::Unicode.GetString($rawBytes)",
+                         "IndexOf('VBoxSup'",
+                         'Pre-existing published VBoxSup OEM INF'):
+            self.assertIn(fragment,s)
+        self.assertLess(s.index('Pre-existing published VBoxSup OEM INF'),
+                        s.index("$arguments = '/add-driver"))
+        self.assertNotIn('Remove-Item',s)
+
     def test_inbox_powershell_required_in_effect_worker(self):
         s=self.text('scripts/privileged_session_worker.ps1')
         self.assertIn("$PSVersionTable.PSEdition -ne 'Desktop'", s)

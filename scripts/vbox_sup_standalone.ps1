@@ -70,6 +70,27 @@ function Get-VBoxProcesses {
         Where-Object { $_.ProcessName -match '^(?:VBox|VirtualBox)' } |
         ForEach-Object { "$($_.Id):$($_.ProcessName)" } | Sort-Object -Unique)
 }
+# A service-free host can STILL contain a former VBoxSup kernel binary or
+# already published OEM INF. Never claim ownership of that package and later
+# delete it during exact-owned cleanup. Read-only collision checks happen
+# before the first PnP install or driver/service mutation.
+$systemSup=Join-Path $env:SystemRoot 'System32\drivers\VBoxSup.sys'
+if (Test-Path -LiteralPath $systemSup) {
+    throw 'Pre-existing VBoxSup kernel image; do not adopt or clean its driver package'
+}
+$publishedInfRoot=Join-Path $env:SystemRoot 'INF'
+$publishedInf=@(Get-ChildItem -LiteralPath $publishedInfRoot -Filter 'oem*.inf' -File -ErrorAction Stop)
+foreach ($infEntry in $publishedInf) {
+    $rawBytes=[IO.File]::ReadAllBytes($infEntry.FullName)
+    # Windows OEM INF files can be ANSI/UTF-8 or UTF-16LE. Scan both decoded
+    # views for any older/foreign VBoxSup reference, not only our pinned hash.
+    $plain=[Text.Encoding]::ASCII.GetString($rawBytes)
+    $wide=[Text.Encoding]::Unicode.GetString($rawBytes)
+    if ($plain.IndexOf('VBoxSup',[StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+        $wide.IndexOf('VBoxSup',[StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        throw 'Pre-existing published VBoxSup OEM INF; ownership not exclusive'
+    }
+}
 $beforeServices = @(Get-VBoxServiceKeys)
 $beforeProcesses = @(Get-VBoxProcesses)
 if ($beforeServices.Count -ne 0 -or $beforeProcesses.Count -ne 0 -or

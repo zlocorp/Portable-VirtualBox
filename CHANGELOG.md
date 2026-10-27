@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · reject pre-existing unowned VBoxSup driver leftovers (2026-10-27)
+
+- Signed VBoxSup staging now refuses a host that has the kernel image in `System32\drivers` or a previously published OEM INF referencing VBoxSup, **even if no VBox service/Oracle installation is currently registered**. The scan reads Windows INF data as possible ANSI/UTF-8 and UTF-16LE before the first `pnputil` mutation. This closes an ownership ambiguity that could otherwise adopt and later delete a foreign/stale package. No service/driver deletion is performed by the preflight.
+
 ### Extended protected-user guest I/O acceptance (2026-10-27)
 
 - The **main EXE** in the existing medium-token/privileged-helper Windows CI matrix now receives the same verified official Alpine Linux x86-64 ISO as ordinary user data. It exercises real Oracle VBoxHeadless under medium integrity while *only the pinned helper* runs elevated, refuses cleanup during live guest execution, performs an Alpine `dd` to the attached portable VDI, then powers off and confirms no process/service survives the first protected teardown. During the second protected session it clones the same VDI to a temporary RAW file, requires the exact Linux-written bytes, creates a powered-off snapshot and verifies its differencing VDI. This remains **direct-helper CI**, not interactive Windows 11 UAC acceptance; results are not claimed until the actual Windows run succeeds.
