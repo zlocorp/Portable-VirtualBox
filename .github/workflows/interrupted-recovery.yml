@@ -19,6 +19,8 @@ on:
       - scripts/manager_session_worker.ps1
       - scripts/check_manager_session_gui.ps1
       - scripts/snapshot_manager_windows.ps1
+      - scripts/vbox_sup_standalone.ps1
+      - scripts/vbox_sup_start_owned.ps1
       - scripts/vbox_sup_cleanup.ps1
       - scripts/build.ps1
       - tests/test_manager_session_contract.py
