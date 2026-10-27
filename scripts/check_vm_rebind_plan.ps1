@@ -35,9 +35,20 @@ $utf8=[Text.UTF8Encoding]::new($false)
 [IO.File]::WriteAllText($registry,$regHead+$entry+$regTail,$utf8)
 function Invoke-Launcher([string]$Args,[int]$Expect,[string]$Label) {
     $log=Join-Path $env:RUNNER_TEMP ($Label+'-'+[guid]::NewGuid().ToString('N')+'.txt')
-    $p=Start-Process -FilePath $launcher -ArgumentList $Args -Wait -PassThru -NoNewWindow -RedirectStandardOutput $log -ErrorAction Stop
-    if($p.ExitCode -ne $Expect) {
-        throw ($Label+': exit '+$p.ExitCode+' expected '+$Expect+': '+(Get-Content -LiteralPath $log -Raw -Encoding utf8))
+    Write-Host ("Compiled moved-VM CLI: "+$Label)
+    $p=Start-Process -FilePath $launcher -ArgumentList $Args -PassThru -NoNewWindow -RedirectStandardOutput $log -ErrorAction Stop
+    try {
+      $exactHandle=$p.Handle
+      if ($exactHandle -eq [IntPtr]::Zero) { throw "$Label: no exact child handle" }
+      if (-not $p.WaitForExit(45000)) {
+        # Never guess that an in-flight user process has exited, and never
+        # terminate another process by name. The CI host is disposable.
+        throw "$Label exceeded 45s without confirmed exit"
+      }
+      $code=$p.ExitCode
+    } finally { $p.Dispose() }
+    if($code -ne $Expect) {
+        throw ($Label+': exit '+$code+' expected '+$Expect+': '+(Get-Content -LiteralPath $log -Raw -Encoding utf8))
     }
     return [string](Get-Content -LiteralPath $log -Raw -Encoding utf8)
 }
