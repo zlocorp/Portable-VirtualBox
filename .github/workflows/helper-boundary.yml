@@ -112,6 +112,9 @@ jobs:
           $name='alpine-virt-3.24.3-x86_64.iso'
           $base='https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/'
           $sum=Join-Path $env:RUNNER_TEMP ($name+'.sha256')
+          # The test fixture creates the portable user-data layout later.
+          # Create its data directory before downloading the guest-only ISO.
+          New-Item -ItemType Directory -Path (Join-Path $env:MANAGER_ROOT 'data') -Force -ErrorAction Stop | Out-Null
           $iso=Join-Path $env:MANAGER_ROOT ('data\'+$name)
           if (Test-Path -LiteralPath $iso) { throw 'Guest ISO must start absent' }
           Invoke-WebRequest -Uri ($base+$name+'.sha256') -OutFile $sum -ErrorAction Stop
