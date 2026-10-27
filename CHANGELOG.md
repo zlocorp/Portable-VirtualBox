@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Expanded removable-root portability acceptance (2026-10-27)
+
+- The existing isolated Windows directory-move and test-VHDX P: -> Q: relocation matrix now creates a real Oracle powered-off snapshot with differencing VDI before `unregistervm` (never `--delete`). After moving the **entire** portable root, it re-registers the unchanged VM via Oracle's supported CLI and requires the same VM/snapshot UUIDs, byte-identical base/differencing VDI files, new-root medium graph paths and exact VBoxSDS cleanup. Timed-out VBoxManage, signed VBoxSDS and VHDX DiskPart operations retain their native subprocess handles until exit rather than killing live state mutations. This is still CI-only research pending successful two-mode Windows acceptance and explicit user-consent relocation tooling.
+
 ### Extended guest VDI read/write acceptance (2026-10-27)
 
 - The existing real Alpine Linux GUI test now sends an isolated fixed login/write sequence through Oracle's virtual PS/2 keyboard. The Linux guest must write a unique marker to sector 2048 of the already attached empty VDI; after power-off, exact-owned driver cleanup and a second Manager session, the test clones the disk to a temporary RAW readback and verifies the actual bytes at that sector before reporting guest-OS disk I/O success. Screenshots alone cannot satisfy this assertion. RAW test copies are removed and never included in a distribution. [Real compiled-main-EXE Windows #40407596523](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40407596523) **passed**: 64-bit Alpine login, executed guest `dd` (30-byte write), matched RAW sector bytes after driver teardown and second Manager session; VDI, same VM UUID, powered-off snapshot and clean VBoxSup/VBoxSDS after two cycles. Confirmed from downloaded GUI proof and guest console screenshot. Windows 11 interactive UAC is still untested.

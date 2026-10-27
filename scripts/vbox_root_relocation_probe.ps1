@@ -88,6 +88,14 @@ $relocatedUuid=''
 $oldDiskHash=''
 $newDiskHash=''
 $originalVboxHash=''
+$snapshotName='portable-relocation-baseline'
+$originalSnapshotHash=''
+$relocatedSnapshotHash=''
+$originalSnapshotPath=''
+$relocatedSnapshotPath=''
+$originalSnapshotUuid=''
+$relocatedSnapshotUuid=''
+$snapshotChainRestored=$false
 $profileMoved=$false
 $diskAttachedNewRoot=$false
 $machinefolderNewRoot=$false
@@ -105,11 +113,16 @@ function Invoke-Bounded-CLI {
     $clock=[Diagnostics.Stopwatch]::StartNew()
     try {
         $p=Start-Process -FilePath $script:cli -ArgumentList $argv -WorkingDirectory $script:app -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr -ErrorAction Stop
+        $ownedHandle=$p.Handle
+        if ($ownedHandle -eq [IntPtr]::Zero) { throw 'Exact VBoxManage child handle unavailable' }
         if ($p.WaitForExit($TimeoutSeconds*1000)) { $status='EXITED';$exitCode=$p.ExitCode }
         else {
+            # VBoxManage may be changing the media/registration graph. Never
+            # detach or kill the exact child while that mutation is in flight.
             $status='TIMEOUT'
-            try { $p.Kill(); [void]$p.WaitForExit(5000) }
-            catch { $errorText='Could not stop timed-out directly launched process' }
+            $p.WaitForExit()
+            $exitCode=$p.ExitCode
+            $errorText='VBoxManage completed after deadline; preserve state and fail closed'
         }
     } catch { $errorText=$_.Exception.Message }
     finally { $clock.Stop(); if ($null -ne $p) { $p.Dispose() } }
@@ -165,9 +178,13 @@ function Clear-Exact-VBoxSDS([string]$Binary,[string]$Phase) {
     $p=$null; $exitCode=$null
     try {
         $p=Start-Process -FilePath $Binary -ArgumentList '--unregservice' -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr -ErrorAction Stop
+        $ownedHandle=$p.Handle
+        if ($ownedHandle -eq [IntPtr]::Zero) { throw 'Exact VBoxSDS child handle unavailable' }
         if (-not $p.WaitForExit(20000)) {
-            try {$p.Kill();[void]$p.WaitForExit(5000)} catch {}
-            throw 'Owned VBoxSDS unregistration timed out'
+            # Unregistering this precise signed service is an irreversible
+            # system effect: retain the process through its actual exit.
+            $p.WaitForExit()
+            throw 'Owned VBoxSDS unregistration exceeded deadline; inspect host state'
         }
         $exitCode=$p.ExitCode
     } finally { if ($null -ne $p) { $p.Dispose() } }
@@ -194,6 +211,22 @@ try {
     if (-not (Test-Path -LiteralPath $vboxFile -PathType Leaf)) { throw 'Original machine definition missing' }
     Invoke-Bounded-CLI 'old_create_disk' @('createmedium','disk','--filename',$diskFile,'--size','8','--format','VDI') | Out-Null
     Invoke-Bounded-CLI 'old_attach_disk' @('storageattach',$vm,'--storagectl','SATA','--port','0','--device','0','--type','hdd','--medium',$diskFile) | Out-Null
+    # Deliberately capture the *entire* powered-off snapshot media graph,
+    # not just a .vbox and a base VDI. No guest or VM process may be running.
+    Invoke-Bounded-CLI 'old_snapshot_take' @('snapshot',$vm,'take',$snapshotName) | Out-Null
+    Invoke-Bounded-CLI 'old_snapshot_list' @('snapshot',$vm,'list','--machinereadable') | Out-Null
+    $snapshotText=Get-Content -LiteralPath (Join-Path $out 'old_snapshot_list.stdout.txt') -Raw -Encoding UTF8
+    if ($snapshotText -notmatch [regex]::Escape($snapshotName) -or
+        $snapshotText -notmatch '(?im)\{?([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})\}?') {
+        throw 'Oracle did not list an actual named snapshot with a UUID'
+    }
+    $originalSnapshotUuid=$Matches[1].ToLowerInvariant()
+    $snapshotFiles=@(Get-ChildItem -LiteralPath (Join-Path $vmDirectory 'Snapshots') -File -Filter '*.vdi' -ErrorAction Stop)
+    if ($snapshotFiles.Count -ne 1 -or $snapshotFiles[0].Length -lt 4096) {
+        throw 'Exactly one Oracle differencing VDI was not created'
+    }
+    $originalSnapshotPath=$snapshotFiles[0].FullName
+    $originalSnapshotHash=(Get-FileHash -LiteralPath $originalSnapshotPath -Algorithm SHA256).Hash.ToLowerInvariant()
     Invoke-Bounded-CLI 'old_showvminfo' @('showvminfo',$vm,'--machinereadable') | Out-Null
     $originalUuid=Assert-Vm-Uuid 'old_showvminfo'
     Invoke-Bounded-CLI 'old_list_hdds' @('list','hdds') | Out-Null
@@ -215,8 +248,10 @@ try {
         throw 'VM still registered after non-deleting unregister'
     }
     if (-not (Test-Path -LiteralPath $vboxFile -PathType Leaf) -or
-        (Get-FileHash -LiteralPath $diskFile -Algorithm SHA256).Hash.ToLowerInvariant() -ne $oldDiskHash) {
-        throw 'Unregister unexpectedly deleted/modified portable VM data'
+        (Get-FileHash -LiteralPath $diskFile -Algorithm SHA256).Hash.ToLowerInvariant() -ne $oldDiskHash -or
+        -not (Test-Path -LiteralPath $originalSnapshotPath -PathType Leaf) -or
+        (Get-FileHash -LiteralPath $originalSnapshotPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $originalSnapshotHash) {
+        throw 'Unregister unexpectedly deleted/modified VM, base disk or snapshot media'
     }
     Clear-Exact-VBoxSDS -Binary $oldSds -Phase 'old'
     # Move the whole portable folder, INCLUDING app64, profile and VDI.
@@ -240,16 +275,28 @@ try {
     $newMachines=Join-Path $newRoot 'data\Machines Тест'
     $newVbox=Join-Path (Join-Path $newMachines $vm) ($vm+'.vbox')
     $newDisk=Join-Path (Join-Path $newMachines $vm) 'attached Test Диск.vdi'
+    $relocatedSnapshotPath=Join-Path (Join-Path (Join-Path $newMachines $vm) 'Snapshots') (Split-Path -Leaf $originalSnapshotPath)
     $env:VBOX_USER_HOME=$newHome
-    foreach ($path in @($newVbox,$newDisk,(Join-Path $newHome 'VirtualBox.xml'))) {
+    foreach ($path in @($newVbox,$newDisk,$relocatedSnapshotPath,(Join-Path $newHome 'VirtualBox.xml'))) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Relocated VM file missing' }
     }
     $newDiskHash=(Get-FileHash -LiteralPath $newDisk -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($newDiskHash -ne $oldDiskHash) { throw 'Relocation modified VDI bytes' }
+    if ($newDiskHash -ne $oldDiskHash) { throw 'Relocation modified base VDI bytes' }
+    $relocatedSnapshotHash=(Get-FileHash -LiteralPath $relocatedSnapshotPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($relocatedSnapshotHash -ne $originalSnapshotHash) {
+        throw 'Relocation modified differencing snapshot VDI bytes'
+    }
     Invoke-Bounded-CLI 'new_set_machinefolder' @('setproperty','machinefolder',$newMachines) | Out-Null
     Invoke-Bounded-CLI 'new_registervm' @('registervm',$newVbox) | Out-Null
     Invoke-Bounded-CLI 'new_showvminfo' @('showvminfo',$vm,'--machinereadable') | Out-Null
     $relocatedUuid=Assert-Vm-Uuid 'new_showvminfo'
+    Invoke-Bounded-CLI 'new_snapshot_list' @('snapshot',$vm,'list','--machinereadable') | Out-Null
+    $newSnapshots=Get-Content -LiteralPath (Join-Path $out 'new_snapshot_list.stdout.txt') -Raw -Encoding UTF8
+    if ($newSnapshots -notmatch [regex]::Escape($snapshotName) -or
+        $newSnapshots -notmatch [regex]::Escape($originalSnapshotUuid)) {
+        throw 'Relocated VM lost its original snapshot identity'
+    }
+    $relocatedSnapshotUuid=$originalSnapshotUuid
     Invoke-Bounded-CLI 'new_list_vms' @('list','vms') | Out-Null
     Invoke-Bounded-CLI 'new_list_hdds' @('list','hdds') | Out-Null
     Invoke-Bounded-CLI 'new_systemproperties' @('list','systemproperties') | Out-Null
@@ -258,10 +305,14 @@ try {
     $properties=Get-Content -LiteralPath (Join-Path $out 'new_systemproperties.stdout.txt') -Raw
     $diskAttachedNewRoot=($hddListing -match [regex]::Escape($newDisk) -and
         $hddListing -notmatch [regex]::Escape($oldRoot))
+    $snapshotChainRestored=($hddListing -match [regex]::Escape($relocatedSnapshotPath) -and
+        $hddListing -notmatch [regex]::Escape($originalSnapshotPath) -and
+        $relocatedSnapshotHash -eq $originalSnapshotHash -and
+        $relocatedSnapshotUuid -eq $originalSnapshotUuid)
     $machinefolderNewRoot=($properties -match [regex]::Escape($newMachines))
     if ($relocatedUuid -ne $originalUuid -or
         $vmListing -notmatch [regex]::Escape($originalUuid) -or
-        -not $diskAttachedNewRoot -or -not $machinefolderNewRoot) {
+        -not $diskAttachedNewRoot -or -not $machinefolderNewRoot -or -not $snapshotChainRestored) {
         throw 'Re-registration did not preserve identity and new-root disk/machine paths'
     }
     Clear-Exact-VBoxSDS -Binary (Join-Path $script:app 'VBoxSDS.exe') -Phase 'new'
@@ -288,6 +339,14 @@ try {
         original_disk_sha256=$oldDiskHash
         relocated_disk_sha256=$newDiskHash
         attached_disk_survived=($newDiskHash -ne '' -and $oldDiskHash -eq $newDiskHash)
+        snapshot_name=$snapshotName
+        original_snapshot_uuid=$originalSnapshotUuid
+        relocated_snapshot_uuid=$relocatedSnapshotUuid
+        same_snapshot_uuid=($originalSnapshotUuid -ne '' -and $originalSnapshotUuid -eq $relocatedSnapshotUuid)
+        original_snapshot_sha256=$originalSnapshotHash
+        relocated_snapshot_sha256=$relocatedSnapshotHash
+        snapshot_bytes_preserved=($originalSnapshotHash -ne '' -and $originalSnapshotHash -eq $relocatedSnapshotHash)
+        snapshot_path_relocated=[bool]$snapshotChainRestored
         disk_attachment_points_to_new_root=[bool]$diskAttachedNewRoot
         machinefolder_points_to_new_root=[bool]$machinefolderNewRoot
         service_cleanup=$serviceCleanups
@@ -299,5 +358,5 @@ try {
     }
     $report | ConvertTo-Json -Depth 9 | Set-Content -LiteralPath (Join-Path $out 'relocation-results.json') -Encoding utf8
 }
-Write-Host "Portable root relocation: moved=$profileMoved, UUID=$($report.same_uuid), VDI=$($report.attached_disk_survived), path=$diskAttachedNewRoot, service-cleanups=$($serviceCleanups.Count), succeeded=$($report.succeeded)"
+Write-Host "Portable root relocation: moved=$profileMoved, UUID=$($report.same_uuid), VDI=$($report.attached_disk_survived), snapshot=$($report.snapshot_bytes_preserved), chain=$($report.snapshot_path_relocated), service-cleanups=$($serviceCleanups.Count), succeeded=$($report.succeeded)"
 if (-not $report.succeeded) { throw ('Portable root relocation failed: ' + ($problems -join ' | ')) }

@@ -59,9 +59,13 @@ if ($Action -eq 'Create') {
     $p=$null
     try {
         $p=Start-Process -FilePath $exe -ArgumentList ('/s "'+$diskpartScript+'"') -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr -ErrorAction Stop
+        $ownedHandle=$p.Handle
+        if ($ownedHandle -eq [IntPtr]::Zero) { throw 'Owned DiskPart child handle unavailable' }
         if (-not $p.WaitForExit(120000)) {
-            try { $p.Kill(); [void]$p.WaitForExit(5000) } catch {}
-            throw 'New disposable VHDX creation timed out'
+            # Formatting the *owned* VHDX must not be interrupted halfway by
+            # killing DiskPart. Retain its process until it exits, then refuse.
+            $p.WaitForExit()
+            throw 'Disposable VHDX creation exceeded deadline; state requires inspection'
         }
         if ($p.ExitCode -ne 0) { throw "DiskPart exited $($p.ExitCode)" }
     } finally { if ($null -ne $p) { $p.Dispose() } }

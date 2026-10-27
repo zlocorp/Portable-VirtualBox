@@ -27,6 +27,9 @@ class PortableRelocationContract(unittest.TestCase):
             'original_uuid', 'relocated_uuid', 'same_uuid',
             'original_disk_sha256', 'relocated_disk_sha256',
             'machinefolder', 'profile_moved', 'relocation-results.json',
+            'old_snapshot_take', 'old_snapshot_list', 'new_snapshot_list',
+            'same_snapshot_uuid', 'snapshot_bytes_preserved',
+            'snapshot_path_relocated', 'original_snapshot_sha256',
         ):
             self.assertIn(expected,s)
         active='\n'.join(l for l in s.splitlines() if not l.lstrip().startswith('#'))
@@ -37,6 +40,16 @@ class PortableRelocationContract(unittest.TestCase):
             r'(?i)\b(?:Start-Process)[^\r\n]*VirtualBoxVM',
         ):
             self.assertNotRegex(active,pattern)
+
+    def test_snapshot_chain_never_uses_xml_text_substitution_or_removal(self):
+        script=SCRIPT.read_text(encoding='utf-8')
+        for marker in ("'Snapshots'", "snapshot',$vm,'take'", "'new_snapshot_list'",
+                       'snapshotChainRestored', 'originalSnapshotUuid',
+                       'Get-FileHash -LiteralPath $relocatedSnapshotPath'):
+            self.assertIn(marker, script)
+        for forbidden in ('--delete', 'Kill()', 'taskkill', 'Remove-Item'):
+            self.assertNotIn(forbidden, script)
+        self.assertIn("$p.WaitForExit()",script)
 
     def test_drive_letter_alias_reassignment_is_explicit_and_disposable(self):
         s=SCRIPT.read_text(encoding='utf-8')
