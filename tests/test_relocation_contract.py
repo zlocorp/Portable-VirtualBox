@@ -52,6 +52,9 @@ class PortableRelocationContract(unittest.TestCase):
         for forbidden in ('--delete', 'Kill()', 'taskkill', 'Remove-Item'):
             self.assertNotIn(forbidden, active)
         self.assertIn("$p.WaitForExit()",script)
+        self.assertIn("hddListing.Replace('/', '\\')", script)
+        self.assertIn('normalizedHdds -match [regex]::Escape($relocatedSnapshotPath)',script)
+        self.assertIn('SnapshotUUID=',script)
 
     def test_drive_letter_alias_reassignment_is_explicit_and_disposable(self):
         s=SCRIPT.read_text(encoding='utf-8')

@@ -217,8 +217,8 @@ try {
     Invoke-Bounded-CLI 'old_snapshot_list' @('snapshot',$vm,'list','--machinereadable') | Out-Null
     $snapshotText=Get-Content -LiteralPath (Join-Path $out 'old_snapshot_list.stdout.txt') -Raw -Encoding UTF8
     if ($snapshotText -notmatch [regex]::Escape($snapshotName) -or
-        $snapshotText -notmatch '(?im)\{?([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})\}?') {
-        throw 'Oracle did not list an actual named snapshot with a UUID'
+        $snapshotText -notmatch '(?im)^SnapshotUUID="([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})"\r?$') {
+        throw 'Oracle did not list the exact named snapshot UUID'
     }
     $originalSnapshotUuid=$Matches[1].ToLowerInvariant()
     $snapshotFiles=@(Get-ChildItem -LiteralPath (Join-Path $vmDirectory 'Snapshots') -File -Filter '*.vdi' -ErrorAction Stop)
@@ -293,7 +293,7 @@ try {
     Invoke-Bounded-CLI 'new_snapshot_list' @('snapshot',$vm,'list','--machinereadable') | Out-Null
     $newSnapshots=Get-Content -LiteralPath (Join-Path $out 'new_snapshot_list.stdout.txt') -Raw -Encoding UTF8
     if ($newSnapshots -notmatch [regex]::Escape($snapshotName) -or
-        $newSnapshots -notmatch [regex]::Escape($originalSnapshotUuid)) {
+        $newSnapshots -notmatch ('(?im)^SnapshotUUID="'+[regex]::Escape($originalSnapshotUuid)+'"\r?$')) {
         throw 'Relocated VM lost its original snapshot identity'
     }
     $relocatedSnapshotUuid=$originalSnapshotUuid
@@ -303,10 +303,14 @@ try {
     $vmListing=Get-Content -LiteralPath (Join-Path $out 'new_list_vms.stdout.txt') -Raw
     $hddListing=Get-Content -LiteralPath (Join-Path $out 'new_list_hdds.stdout.txt') -Raw
     $properties=Get-Content -LiteralPath (Join-Path $out 'new_systemproperties.stdout.txt') -Raw
-    $diskAttachedNewRoot=($hddListing -match [regex]::Escape($newDisk) -and
-        $hddListing -notmatch [regex]::Escape($oldRoot))
-    $snapshotChainRestored=($hddListing -match [regex]::Escape($relocatedSnapshotPath) -and
-        $hddListing -notmatch [regex]::Escape($originalSnapshotPath) -and
+    # Oracle's Windows VBoxManage output sometimes mixes separators inside a
+    # Location: root\data\Machines\Snapshots/{uuid}.vdi. Normalize only
+    # this human-readable observation for comparison; never rewrite VM XML.
+    $normalizedHdds=$hddListing.Replace('/', '\')
+    $diskAttachedNewRoot=($normalizedHdds -match [regex]::Escape($newDisk) -and
+        $normalizedHdds -notmatch [regex]::Escape($oldRoot))
+    $snapshotChainRestored=($normalizedHdds -match [regex]::Escape($relocatedSnapshotPath) -and
+        $normalizedHdds -notmatch [regex]::Escape($originalSnapshotPath) -and
         $relocatedSnapshotHash -eq $originalSnapshotHash -and
         $relocatedSnapshotUuid -eq $originalSnapshotUuid)
     $machinefolderNewRoot=($properties -match [regex]::Escape($newMachines))

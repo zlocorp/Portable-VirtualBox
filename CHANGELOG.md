@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · Oracle mixed-separator snapshot Location display (2026-10-27)
+
+- Both real Windows relocation variants already preserved VM UUID, powered-off snapshot UUID and byte-identical base/differencing VDI files, but the final medium-graph assertion falsely failed: Oracle printed the differencing VDI `Location:` as `Snapshots/{uuid}.vdi` inside an otherwise backslash-separated Windows path. The test now normalizes separators **only in read-only VBoxManage output**, never in .vbox/VirtualBox.xml data. Snapshot identity checks also match the explicit `SnapshotUUID` field rather than any UUID in a transcript. Full new-root VBoxSDS teardown still has to be verified by the rerun.
+
 ### Expanded removable-root portability acceptance (2026-10-27)
 
 - The existing isolated Windows directory-move and test-VHDX P: -> Q: relocation matrix now creates a real Oracle powered-off snapshot with differencing VDI before `unregistervm` (never `--delete`). After moving the **entire** portable root, it re-registers the unchanged VM via Oracle's supported CLI and requires the same VM/snapshot UUIDs, byte-identical base/differencing VDI files, new-root medium graph paths and exact VBoxSDS cleanup. Timed-out VBoxManage, signed VBoxSDS and VHDX DiskPart operations retain their native subprocess handles until exit rather than killing live state mutations. This is still CI-only research pending successful two-mode Windows acceptance and explicit user-consent relocation tooling.
