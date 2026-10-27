@@ -31,19 +31,22 @@ $regHead='<VirtualBox xmlns="http://www.virtualbox.org/"><Global><MachineRegistr
 $regTail='</MachineRegistry></Global></VirtualBox>'
 $entry='<MachineEntry uuid="'+$uuid+'" src="'+$oldSource+'"/>'
 $utf8=[Text.UTF8Encoding]::new($false)
+$env:PVBOX_CI_REBIND_TRACE='1'
 [IO.File]::WriteAllText($config,$xmlHead+$media+$xmlTail,$utf8)
 [IO.File]::WriteAllText($registry,$regHead+$entry+$regTail,$utf8)
 function Invoke-Launcher([string]$Args,[int]$Expect,[string]$Label) {
     $log=Join-Path $env:RUNNER_TEMP ($Label+'-'+[guid]::NewGuid().ToString('N')+'.txt')
+    $stderr=$log+'.stderr'
     Write-Host ("Compiled moved-VM CLI: "+$Label)
-    $p=Start-Process -FilePath $launcher -ArgumentList $Args -PassThru -NoNewWindow -RedirectStandardOutput $log -ErrorAction Stop
+    $p=Start-Process -FilePath $launcher -ArgumentList $Args -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $stderr -ErrorAction Stop
     try {
       $exactHandle=$p.Handle
       if ($exactHandle -eq [IntPtr]::Zero) { throw "${Label}: no exact child handle" }
       if (-not $p.WaitForExit(45000)) {
         # Never guess that an in-flight user process has exited, and never
         # terminate another process by name. The CI host is disposable.
-        throw "$Label exceeded 45s without confirmed exit"
+        $tail=if(Test-Path -LiteralPath $stderr){Get-Content -LiteralPath $stderr -Raw -ErrorAction SilentlyContinue}else{''}
+        throw "$Label exceeded 45s without confirmed exit; trace=$tail"
       }
       $code=$p.ExitCode
     } finally { $p.Dispose() }

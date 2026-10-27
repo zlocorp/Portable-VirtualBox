@@ -7,6 +7,12 @@
 ; rewrite VirtualBox.xml, change a snapshot, or delete a MachineEntry.
 ; Native Oracle registration changes require a separate approved live session.
 
+Func _PVR_Trace($label)
+    ; Diagnostic hints only. No tracing, path logging or performance work
+    ; is performed in normal GUI or CLI mode.
+    If EnvGet("PVBOX_CI_REBIND_TRACE") == "1" Then ConsoleWriteError("PVR_STAGE_" & $label & @CRLF)
+EndFunc
+
 Func _PVR_New($status = "BLOCKED", $reason = "unsafe-or-ambiguous")
     Local $r[]
     $r["status"] = $status
@@ -70,10 +76,12 @@ Func _PVR_LocalMachine($root, $relative)
 EndFunc
 
 Func _PVR_Plan($root)
+    _PVR_Trace("BEGIN")
     Local $r = _PVR_New()
     If Not _PP_RootSafe($root) Or Not _PP_ParentsSafe($root) Then Return $r
     ; All candidate discovery must be read-only and offline. An existing
     ; VBoxSDS/VBoxSup or even UNKNOWN host state refuses a relocation plan.
+    _PVR_Trace("ROOT")
     If Not _PBK_Offline() Then
         $r["reason"] = "host-not-offline"
         Return $r
@@ -85,6 +93,7 @@ Func _PVR_Plan($root)
         $r["reason"] = "missing-or-unsafe-portable-profile"
         Return $r
     EndIf
+    _PVR_Trace("OFFLINE")
     Local $xml = _PVI_LoadXml($registry)
     If Not IsObj($xml) Then Return $r
     Local $entries = $xml.selectNodes('//*[local-name()="MachineEntry"]')
@@ -97,6 +106,7 @@ Func _PVR_Plan($root)
     If Not IsString($source) Or Not IsString($registeredUuid) Then Return $r
     If Not StringRegExp($registeredUuid, "(?i)^\{[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\}$") Then Return $r
     If _PVI_RegistryTarget($root, $source) <> "" Then Return _PVR_New("NONE", "already-local")
+    _PVR_Trace("REGISTRY")
     Local $candidate = _PVR_StaleSource($root, $source)
     If Not $candidate["ok"] Then
         $r["reason"] = "nonportable-or-ambiguous-registered-path"
@@ -113,6 +123,7 @@ Func _PVR_Plan($root)
         $r["reason"] = "new-machine-missing-or-unsafe"
         Return $r
     EndIf
+    _PVR_Trace("CANDIDATE")
     Local $config = _PVI_LoadXml($newPath)
     If Not IsObj($config) Then Return $r
     Local $machines = $config.selectNodes('//*[local-name()="Machine"]')
@@ -141,6 +152,7 @@ Func _PVR_Plan($root)
     Next
     ; Reject any other VM/registry entries, unregistered configs or additional
     ; external media. Only this ONE fully local saved machine can be proposed.
+    _PVR_Trace("MEDIA")
     Local $audit = _PVI_Inspect($root)
     If $audit["status"] <> "REVIEW" Or $audit["vm_count"] <> 1 Or _
             $audit["registered_count"] <> 1 Or $audit["external_registry_count"] <> 1 Or _
@@ -148,8 +160,11 @@ Func _PVR_Plan($root)
         $r["reason"] = "additional-registered-or-unregistered-vm"
         Return $r
     EndIf
+    _PVR_Trace("AUDIT")
     Local $regHash = _PBK_Hash($registry), $vmHash = _PBK_Hash($newPath)
+    _PVR_Trace("HASH")
     If StringLen($regHash) <> 64 Or StringLen($vmHash) <> 64 Then Return $r
+    _PVR_Trace("READY")
     $r["status"] = "READY"
     $r["reason"] = "exact-moved-vm-no-changes-applied"
     $r["uuid"] = StringLower($uuid)
@@ -199,6 +214,7 @@ Func _PVR_Backup($root, $dest)
 EndFunc
 
 Func _PVR_Text($r)
+    _PVR_Trace("TEXT")
     If Not IsMap($r) Or Not MapExists($r, "status") Then Return ""
     Local $ru = _LI_Language() == "ru"
     Switch $r["status"]
