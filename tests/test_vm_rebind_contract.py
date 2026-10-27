@@ -37,6 +37,9 @@ class RelocationPlanContract(unittest.TestCase):
         self.assertIn('--plan-vm-rebind',win)
         self.assertIn('--prepare-vm-rebind',win)
         self.assertIn('--verify-backup',win)
+        self.assertIn('function Invoke-Launcher([string]$CommandLine',win)
+        self.assertIn('-ArgumentList $CommandLine',win)
+        self.assertNotIn('function Invoke-Launcher([string]$Args',win)
         workflow=self.text(".github/workflows/ci.yml")
         self.assertIn('check_vm_rebind_plan.ps1',workflow)
 if __name__=="__main__":

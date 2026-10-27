@@ -31,14 +31,17 @@ $regHead='<VirtualBox xmlns="http://www.virtualbox.org/"><Global><MachineRegistr
 $regTail='</MachineRegistry></Global></VirtualBox>'
 $entry='<MachineEntry uuid="'+$uuid+'" src="'+$oldSource+'"/>'
 $utf8=[Text.UTF8Encoding]::new($false)
-$env:PVBOX_CI_REBIND_TRACE='1'
+
 [IO.File]::WriteAllText($config,$xmlHead+$media+$xmlTail,$utf8)
 [IO.File]::WriteAllText($registry,$regHead+$entry+$regTail,$utf8)
-function Invoke-Launcher([string]$Args,[int]$Expect,[string]$Label) {
+function Invoke-Launcher([string]$CommandLine,[int]$Expect,[string]$Label) {
+    # $Args is a reserved PowerShell automatic variable and would silently
+    # drop the forwarded CLI command line, opening the GUI by mistake.
+    if ($CommandLine -notmatch '^--[a-z]') { throw 'Missing explicit forwarded launcher command' }
     $log=Join-Path $env:RUNNER_TEMP ($Label+'-'+[guid]::NewGuid().ToString('N')+'.txt')
     $stderr=$log+'.stderr'
     Write-Host ("Compiled moved-VM CLI: "+$Label)
-    $p=Start-Process -FilePath $launcher -ArgumentList $Args -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $stderr -ErrorAction Stop
+    $p=Start-Process -FilePath $launcher -ArgumentList $CommandLine -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $stderr -ErrorAction Stop
     try {
       $exactHandle=$p.Handle
       if ($exactHandle -eq [IntPtr]::Zero) { throw "${Label}: no exact child handle" }
