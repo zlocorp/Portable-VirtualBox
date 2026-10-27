@@ -154,6 +154,9 @@ jobs:
       - name: Audit real VM XML references from compiled ordinary RU/EN launcher
         shell: pwsh
         run: ./scripts/check_vm_inventory.ps1 -Launcher build/Portable-VirtualBox_x64.exe
+      - name: Verify moved VM planning and protected-copy-safe offline backup using the compiled main EXE
+        shell: pwsh
+        run: ./scripts/check_vm_rebind_plan.ps1 -Launcher build/Portable-VirtualBox_x64.exe
       - name: Offline portable data backup with SHA-256, Unicode paths and corruption refusal
         shell: pwsh
         run: ./scripts/check_offline_backup.ps1 -Launcher build/Portable-VirtualBox_x64.exe

@@ -7,6 +7,7 @@
 #include "LauncherAbout.au3"
 #include "PortableAppSetup.au3"
 #include "PortableVmInventory.au3"
+#include "PortableVmRebind.au3"
 #include "ManagedProcess.au3"
 #include "ManagerWindow.au3"
 #include <GUIConstantsEx.au3>
@@ -93,7 +94,10 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     Local $diagnostic = _PortableDiagnosticCollect()
     If $showInventory Then
         Local $inventory = _PVI_Inspect(@ScriptDir)
-        GUICtrlSetData($idReport, $inventory["report"])
+        Local $show = $inventory["report"]
+        Local $rebind = _PVR_Plan(@ScriptDir)
+        If $rebind["status"] == "READY" Then $show &= @CRLF & _PVR_Text($rebind)
+        GUICtrlSetData($idReport, $show)
     Else
         GUICtrlSetData($idReport, $diagnostic["text"])
     EndIf
@@ -245,8 +249,11 @@ Func _LG_Show()
             Case $idVmAudit
                 $showInventory = True
                 Local $inventory = _PVI_Inspect(@ScriptDir)
+                Local $show = $inventory["report"]
+                Local $rebind = _PVR_Plan(@ScriptDir)
+                If $rebind["status"] == "READY" Then $show &= @CRLF & _PVR_Text($rebind)
                 GUICtrlSetData($idSection, _LI("vm.header"))
-                GUICtrlSetData($idReport, $inventory["report"])
+                GUICtrlSetData($idReport, $show)
             Case $idRefresh
                 _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
                     $idRefresh, $idCopy, $idClose, $idRu, $idEn, $idPath, $idProfile, $idPrepare, $idManager, $idReady, $idVmAudit, $idResult, $idSave, $idAuto, $idSettings, $idAbout, $idBackup, $idVerify, $idRestore, $idCancel, $checked, $showInventory)
