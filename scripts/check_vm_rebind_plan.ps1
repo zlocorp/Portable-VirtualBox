@@ -39,7 +39,7 @@ function Invoke-Launcher([string]$Args,[int]$Expect,[string]$Label) {
     $p=Start-Process -FilePath $launcher -ArgumentList $Args -PassThru -NoNewWindow -RedirectStandardOutput $log -ErrorAction Stop
     try {
       $exactHandle=$p.Handle
-      if ($exactHandle -eq [IntPtr]::Zero) { throw "$Label: no exact child handle" }
+      if ($exactHandle -eq [IntPtr]::Zero) { throw "${Label}: no exact child handle" }
       if (-not $p.WaitForExit(45000)) {
         # Never guess that an in-flight user process has exited, and never
         # terminate another process by name. The CI host is disposable.
