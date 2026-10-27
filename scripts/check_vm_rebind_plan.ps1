@@ -46,7 +46,10 @@ function Invoke-Launcher([string]$Args,[int]$Expect,[string]$Label) {
         # Never guess that an in-flight user process has exited, and never
         # terminate another process by name. The CI host is disposable.
         $tail=if(Test-Path -LiteralPath $stderr){Get-Content -LiteralPath $stderr -Raw -ErrorAction SilentlyContinue}else{''}
-        throw "$Label exceeded 45s without confirmed exit; trace=$tail"
+        $output=if(Test-Path -LiteralPath $log){Get-Content -LiteralPath $log -Raw -ErrorAction SilentlyContinue}else{''}
+        $p.Refresh()
+        $title=$p.MainWindowTitle
+        throw "$Label exceeded 45s without confirmed exit; window=$title; stdout=$output; stderr=$tail"
       }
       $code=$p.ExitCode
     } finally { $p.Dispose() }

@@ -10,7 +10,7 @@
 Func _PVR_Trace($label)
     ; Diagnostic hints only. No tracing, path logging or performance work
     ; is performed in normal GUI or CLI mode.
-    If EnvGet("PVBOX_CI_REBIND_TRACE") == "1" Then ConsoleWriteError("PVR_STAGE_" & $label & @CRLF)
+    If EnvGet("PVBOX_CI_REBIND_TRACE") == "1" Then _LI_Write("PVR_STAGE_" & $label & @CRLF)
 EndFunc
 
 Func _PVR_New($status = "BLOCKED", $reason = "unsafe-or-ambiguous")
