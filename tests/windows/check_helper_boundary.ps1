@@ -3,7 +3,8 @@
 # Real frontend/Manager/VBoxManage/guest tokens remain medium/non-admin. This
 # proves helper effects and boundaries, not GUI ShellExecute/UAC consent.
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$PortableRoot,[switch]$MainLauncher)
+param([Parameter(Mandatory)][string]$PortableRoot,[switch]$MainLauncher,
+    [string]$GuestIso='', [string]$GuestIsoSha256='')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -11,6 +12,18 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hoste
 $root=(Resolve-Path -LiteralPath $PortableRoot).Path
 $temp=(Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path.TrimEnd('\')+'\'
 if (-not $root.StartsWith($temp,[StringComparison]::OrdinalIgnoreCase)) { throw 'Private runner input required' }
+if ($GuestIso) {
+    # A guest ISO is never executable host code or part of the protected
+    # driver inventory. Restrict this test to a fresh, user-owned root file.
+    $guestPath=[IO.Path]::GetFullPath($GuestIso)
+    if (-not $MainLauncher -or
+        -not $guestPath.StartsWith(($root+'\'),[StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $guestPath -PathType Leaf) -or
+        $GuestIsoSha256 -notmatch '^[a-fA-F0-9]{64}$' -or
+        (Get-FileHash -LiteralPath $guestPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $GuestIsoSha256.ToLowerInvariant()) {
+        throw 'Not a verified root-local Alpine guest ISO for this main-launcher fixture'
+    }
+}
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $out=Join-Path $env:RUNNER_TEMP 'helper-boundary-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
@@ -79,7 +92,7 @@ function Await-GuestLog([Diagnostics.Process]$Process) {
     }
     throw 'Fresh guest log never reached RUNNING'
 }
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';frontend=$(if($MainLauncher){'main-launcher'}else{'separate-experiment'});gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';frontend=$(if($MainLauncher){'main-launcher'}else{'separate-experiment'});gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;guest_disk_write_checked=$false;guest_disk_survived_teardown=$false;guest_snapshot_preserved=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
 $front=$null;$manager=$null;$guest=$null
 try {
     Clean-System
@@ -122,9 +135,21 @@ try {
             Start-Sleep -Milliseconds 250
         } until ($manager.MainWindowHandle -ne [IntPtr]::Zero)
         if ($cycle -eq 2) {
-            $created=Oracle 'createvm --name pvbox_helper_boundary_fixture --ostype Other --register' 'create-vm'
+            $guestType=if ($GuestIso) { 'Linux_64' } else { 'Other' }
+            $created=Oracle ('createvm --name pvbox_helper_boundary_fixture --ostype '+$guestType+' --register') 'create-vm'
             if ($created -notmatch '(?im)^UUID:\s*([0-9a-f-]{36})\s*$') { throw 'Missing fixture UUID' };$uuid=$Matches[1]
-            $null=Oracle ('modifyvm '+$uuid+' --memory 128 --nic1 none --audio-driver none') 'configure-vm'
+            $memory=if ($GuestIso) { 256 } else { 128 }
+            $config='modifyvm '+$uuid+' --memory '+$memory+' --nic1 none --audio-driver none'
+            if ($GuestIso) { $config+=' --x86-long-mode on --boot1 dvd --boot2 disk --boot3 none --boot4 none' }
+            $null=Oracle $config 'configure-vm'
+            if ($GuestIso) {
+                $disk=Join-Path $root 'data\Machines\pvbox_helper_boundary_fixture\protected-guest.vdi'
+                if (Test-Path -LiteralPath $disk) { throw 'Protected medium guest disk unexpectedly exists' }
+                $null=Oracle ('createmedium disk --filename "'+$disk+'" --size 64 --format VDI') 'guest-create-vdi'
+                $null=Oracle ('storagectl '+$uuid+' --name SATA --add sata --controller IntelAhci') 'guest-create-sata'
+                $null=Oracle ('storageattach '+$uuid+' --storagectl SATA --port 0 --device 0 --type hdd --medium "'+$disk+'"') 'guest-attach-vdi'
+                $null=Oracle ('storageattach '+$uuid+' --storagectl SATA --port 1 --device 0 --type dvddrive --medium "'+$guestPath+'"') 'guest-attach-alpine'
+            }
             # The detached-console startup is still unverified under this
             # synthetic restricted token. Use Oracle's supported direct entry
             # to test the helper/driver boundary, never label this as UAC or
@@ -137,6 +162,26 @@ try {
             Await-GuestLog $guest
             $running=Oracle ('showvminfo '+$uuid+' --machinereadable') 'running-vm'
             if ($running -notmatch '(?m)^VMState="running"') { throw 'Independent guest state was not running' }
+            if ($GuestIso) {
+                if ($running -notmatch '(?m)^longmode="on"') { throw 'Medium Linux guest long mode was not enabled' }
+                Start-Sleep -Seconds 25
+                $null=Oracle ('controlvm '+$uuid+' keyboardputstring root') 'protected-guest-login'
+                $null=Oracle ('controlvm '+$uuid+' keyboardputscancode 1c 9c') 'protected-guest-login-enter'
+                Start-Sleep -Seconds 3
+                $marker='PVBOX_PROTECTED_MEDIUM_GUEST_WRITE_20261027'
+                $guestCommand='echo '+$marker+' | dd of=/dev/sda bs=512 seek=2048 conv=notrunc; sync'
+                $null=Oracle ('controlvm '+$uuid+' keyboardputstring "'+$guestCommand+'"') 'protected-guest-write'
+                $null=Oracle ('controlvm '+$uuid+' keyboardputscancode 1c 9c') 'protected-guest-write-enter'
+                Start-Sleep -Seconds 8
+                $screen=Join-Path $out 'protected-guest-disk-command.png'
+                $null=Oracle ('controlvm '+$uuid+' screenshotpng "'+$screen+'"') 'protected-guest-screen'
+                $bytes=[IO.File]::ReadAllBytes($screen)
+                if ($bytes.Length -lt 1024 -or
+                    [BitConverter]::ToString($bytes,0,8) -ne '89-50-4E-47-0D-0A-1A-0A') {
+                    throw 'Protected medium guest did not render a valid screen'
+                }
+                $proof.guest_disk_write_checked=$true
+            }
             $guests=@(Get-Process -Name VBoxHeadless -ErrorAction Stop)
             if ($guests.Count -lt 1) { throw 'No headless test guest' }
             foreach ($g in $guests) {
@@ -154,6 +199,39 @@ try {
         } else {
             $again=Oracle ('showvminfo '+$uuid+' --machinereadable') 'same-uuid'
             if ($again -notmatch ('(?mi)^UUID="'+[regex]::Escape($uuid)+'"') -or $again -notmatch '(?m)^VMState="poweroff"') { throw 'UUID/state changed on repeat' }
+            if ($GuestIso) {
+                # Read logical bytes from the same VDI after a COMPLETELY
+                # cleaned first protected session and new driver preparation.
+                $raw=Join-Path $root 'data\protected-medium-readback.raw'
+                if (Test-Path -LiteralPath $raw) { throw 'Raw readback target already exists' }
+                $null=Oracle ('clonemedium disk "'+$disk+'" "'+$raw+'" --format RAW') 'protected-guest-raw-clone'
+                try {
+                    $stream=[IO.File]::Open($raw,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+                    try {
+                        [void]$stream.Seek(2048*512,[IO.SeekOrigin]::Begin)
+                        $expected=[Text.Encoding]::ASCII.GetBytes($marker)
+                        $observed=New-Object byte[] $expected.Length
+                        $read=$stream.Read($observed,0,$observed.Length)
+                        if ($read -ne $expected.Length -or
+                            [Text.Encoding]::ASCII.GetString($observed) -cne $marker) {
+                            throw 'Protected medium guest VDI has no exact Linux-written sector bytes'
+                        }
+                        $proof.guest_disk_survived_teardown=$true
+                        $proof.guest_os_booted=$true
+                    } finally { $stream.Dispose() }
+                } finally {
+                    Remove-Item -LiteralPath $raw -Force -ErrorAction SilentlyContinue
+                }
+                # Oracle snapshot creation remains under the non-admin
+                # user's portable VM folder; elevated code never owns VDI.
+                $null=Oracle ('snapshot '+$uuid+' take protected-guest-baseline') 'protected-guest-snapshot'
+                $snapshots=Oracle ('snapshot '+$uuid+' list --machinereadable') 'protected-guest-snapshot-list'
+                if ($snapshots -notmatch 'protected-guest-baseline' -or
+                    @(Get-ChildItem -LiteralPath (Join-Path $root 'data\Machines\pvbox_helper_boundary_fixture\Snapshots') -File -Filter '*.vdi').Count -lt 1) {
+                    throw 'Oracle did not preserve user-owned guest snapshot chain'
+                }
+                $proof.guest_snapshot_preserved=$true
+            }
         }
         # Do not race Oracle's deferred window geometry save with teardown.
         Start-Sleep -Milliseconds 1000
@@ -170,7 +248,7 @@ try {
     $proof.uuid=$uuid;$proof.two_cycles_clean=$true
     if (-not $front.CloseMainWindow()) { throw 'Idle frontend could not close' }
     Wait-Exit $front $(if($MainLauncher){2}else{0}) 'frontend close' 10
-    Write-Host 'PASS: direct-invoker helper boundary with actual medium Manager/guest, pinned-input refusal, protected write denial and two clean cycles; UAC NOT VERIFIED'
+    Write-Host ('PASS: main/medium helper + protected Oracle guest + two clean sessions; Linux VDI write/readback=' + $proof.guest_disk_survived_teardown + '; UAC NOT VERIFIED')
 } catch { $proof.error=$_.Exception.Message;throw } finally {
     $proof | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'helper-boundary-proof.json') -Encoding utf8
     if ($null -ne $front) { $front.Dispose() };if ($null -ne $manager) { $manager.Dispose() };if ($null -ne $guest) { $guest.Dispose() }

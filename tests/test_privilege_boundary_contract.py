@@ -176,6 +176,18 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         for path in ('scripts/vbox_sup_standalone.ps1', 'scripts/vbox_sup_start_owned.ps1'):
             self.assertIn("status = 'TIMEOUT'" if 'standalone' in path else "status='TIMEOUT'",self.text(path))
 
+    def test_medium_main_helper_guest_io_after_protected_teardown(self):
+        workflow=self.text('.github/workflows/helper-boundary.yml')
+        fixture=self.text('tests/windows/check_helper_boundary.ps1')
+        for marker in ('GuestIsoSha256','guest_disk_survived_teardown=$false',
+                       'PVBOX_PROTECTED_MEDIUM_GUEST_WRITE_20261027',
+                       'keyboardputstring', 'clonemedium disk',
+                       'guest_snapshot_preserved=$true', 'Remove-Item -LiteralPath $raw'):
+            self.assertIn(marker,fixture)
+        self.assertIn('GuestIsoSha256', workflow)
+        self.assertIn('main-launcher',workflow)
+        self.assertIn('retention-days: 7',workflow)
+
     def test_inbox_powershell_required_in_effect_worker(self):
         s=self.text('scripts/privileged_session_worker.ps1')
         self.assertIn("$PSVersionTable.PSEdition -ne 'Desktop'", s)
