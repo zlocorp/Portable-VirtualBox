@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Extended protected-user guest I/O acceptance (2026-10-27)
+
+- The **main EXE** in the existing medium-token/privileged-helper Windows CI matrix now receives the same verified official Alpine Linux x86-64 ISO as ordinary user data. It exercises real Oracle VBoxHeadless under medium integrity while *only the pinned helper* runs elevated, refuses cleanup during live guest execution, performs an Alpine `dd` to the attached portable VDI, then powers off and confirms no process/service survives the first protected teardown. During the second protected session it clones the same VDI to a temporary RAW file, requires the exact Linux-written bytes, creates a powered-off snapshot and verifies its differencing VDI. This remains **direct-helper CI**, not interactive Windows 11 UAC acceptance; results are not claimed until the actual Windows run succeeds.
+
 ### Added · recovery probe for already-relocated VM registrations (2026-10-27)
 
 - Two further disposable Windows matrix variants simulate moving the USB-root folder or reassigning its VHDX drive letter **without first unregistering** an existing powered-off VM. The moved `VirtualBox.xml` retains the stale former absolute `MachineEntry`. At the new location, the fixture inspects the exact old UUID, requests supported Oracle `unregistervm` **without `--delete`**, checks that .vbox/base/differencing VDI bytes survive and re-registers the same UUID and snapshot chain under the new root. This is non-production research, intended to establish a safe recovery sequence before adding any opt-in ordinary-user relocation tool.

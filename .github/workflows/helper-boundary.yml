@@ -105,9 +105,30 @@ jobs:
           $engine=& $builtIn -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.Major'
           if ($LASTEXITCODE -ne 0 -or $engine -ne 5) { throw 'Windows PowerShell 5.1 not available' }
           Write-Host 'Using built-in Windows PowerShell 5.1 for signed, fixed-action VBox worker'
-      - name: Verify helper effects with medium callers, without claiming UAC delivery
+      - name: Fetch pinned-identity Alpine ISO as user-owned guest-only input
+        if: matrix.frontend == 'main-launcher'
         shell: pwsh
-        run: ./tests/windows/check_helper_boundary.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher:('${{ matrix.frontend }}' -eq 'main-launcher')
+        run: |
+          $name='alpine-virt-3.24.3-x86_64.iso'
+          $base='https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/'
+          $sum=Join-Path $env:RUNNER_TEMP ($name+'.sha256')
+          $iso=Join-Path $env:MANAGER_ROOT ('data\'+$name)
+          if (Test-Path -LiteralPath $iso) { throw 'Guest ISO must start absent' }
+          Invoke-WebRequest -Uri ($base+$name+'.sha256') -OutFile $sum -ErrorAction Stop
+          $manifest=(Get-Content -LiteralPath $sum -Raw -Encoding utf8).Trim()
+          if ($manifest -notmatch ('(?i)^([a-f0-9]{64})\s+\*?'+[regex]::Escape($name)+'$')) {
+            throw 'Official Linux checksum manifest mismatched expected release'
+          }
+          $expected=$Matches[1].ToLowerInvariant()
+          Invoke-WebRequest -Uri ($base+$name) -OutFile $iso -ErrorAction Stop
+          if ((Get-FileHash -LiteralPath $iso -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'Guest Alpine ISO failed official SHA-256'
+          }
+          "MEDIUM_GUEST_ISO=$iso" >> $env:GITHUB_ENV
+          "MEDIUM_GUEST_SHA=$expected" >> $env:GITHUB_ENV
+      - name: Verify helper, medium-token Alpine disk I/O, and exact owned cleanup (no UAC acceptance)
+        shell: pwsh
+        run: ./tests/windows/check_helper_boundary.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher:('${{ matrix.frontend }}' -eq 'main-launcher') -GuestIso $env:MEDIUM_GUEST_ISO -GuestIsoSha256 $env:MEDIUM_GUEST_SHA
       - name: Collect bounded evidence only, no executable or Oracle payload
         if: always()
         shell: pwsh
