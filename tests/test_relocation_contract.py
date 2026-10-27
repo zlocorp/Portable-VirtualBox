@@ -64,6 +64,12 @@ class PortableRelocationContract(unittest.TestCase):
         workflow=WORKFLOW.read_text(encoding='utf-8')
         self.assertIn('relocation_mode',workflow)
         self.assertIn('vhd-letter',workflow)
+        self.assertIn('directory-stale',workflow)
+        self.assertIn('vhd-letter-stale',workflow)
+        self.assertIn('StaleRegistration',s)
+        self.assertIn('new_stale_unregister',s)
+        self.assertIn('new_stale_list_vms',s)
+        self.assertNotIn("'unregistervm',$originalUuid,'--delete'",s)
 
     def test_workflow_only_artifacts_metadata(self):
         text=WORKFLOW.read_text(encoding='utf-8')

@@ -8,7 +8,8 @@ param(
     [Parameter(Mandatory)][string]$OutputDirectory,
     [ValidateRange(5,120)][int]$TimeoutSeconds=30,
     [switch]$VhdDriveLetterChange,
-    [string]$VhdBackingFile=''
+    [string]$VhdBackingFile='',
+    [switch]$StaleRegistration
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -96,6 +97,7 @@ $relocatedSnapshotPath=''
 $originalSnapshotUuid=''
 $relocatedSnapshotUuid=''
 $snapshotChainRestored=$false
+$staleRegistrationUnregistered=$false
 $profileMoved=$false
 $diskAttachedNewRoot=$false
 $machinefolderNewRoot=$false
@@ -242,10 +244,16 @@ try {
     Copy-Item -LiteralPath $globalXml -Destination (Join-Path $backup 'VirtualBox.xml') -ErrorAction Stop
     Copy-Item -LiteralPath $vboxFile -Destination (Join-Path $backup 'original-machine.vbox') -ErrorAction Stop
     # Supported API removes ONLY registration; no --delete or XML string replacement.
-    Invoke-Bounded-CLI 'old_unregistervm' @('unregistervm',$originalUuid) | Out-Null
-    Invoke-Bounded-CLI 'old_after_unregister' @('list','vms') | Out-Null
-    if ((Get-Content -LiteralPath (Join-Path $out 'old_after_unregister.stdout.txt') -Raw) -match [regex]::Escape($vm)) {
-        throw 'VM still registered after non-deleting unregister'
+    if (-not $StaleRegistration) {
+        Invoke-Bounded-CLI 'old_unregistervm' @('unregistervm',$originalUuid) | Out-Null
+        Invoke-Bounded-CLI 'old_after_unregister' @('list','vms') | Out-Null
+        if ((Get-Content -LiteralPath (Join-Path $out 'old_after_unregister.stdout.txt') -Raw) -match [regex]::Escape($vm)) {
+            throw 'VM still registered after non-deleting unregister'
+        }
+    } else {
+        # Emulate an unplugged or moved portable disk: its global XML retains
+        # the former absolute MachineEntry. Do not pre-clean this fixture.
+        Write-Host 'Stale registration preserved until after relocating the portable root'
     }
     if (-not (Test-Path -LiteralPath $vboxFile -PathType Leaf) -or
         (Get-FileHash -LiteralPath $diskFile -Algorithm SHA256).Hash.ToLowerInvariant() -ne $oldDiskHash -or
@@ -285,6 +293,22 @@ try {
     $relocatedSnapshotHash=(Get-FileHash -LiteralPath $relocatedSnapshotPath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($relocatedSnapshotHash -ne $originalSnapshotHash) {
         throw 'Relocation modified differencing snapshot VDI bytes'
+    }
+    if ($StaleRegistration) {
+        # Recover the original exact UUID via supported Oracle operations at
+        # the NEW path. Never delete any machine or snapshot media.
+        Invoke-Bounded-CLI 'new_stale_list_vms' @('list','vms') | Out-Null
+        $listBefore=Get-Content -LiteralPath (Join-Path $out 'new_stale_list_vms.stdout.txt') -Raw -Encoding UTF8
+        if ($listBefore -notmatch [regex]::Escape($originalUuid)) {
+            throw 'Old machine UUID is not present in moved global XML; cannot safely rebind'
+        }
+        Invoke-Bounded-CLI 'new_stale_unregister' @('unregistervm',$originalUuid) | Out-Null
+        if ((Get-FileHash -LiteralPath $newDisk -Algorithm SHA256).Hash.ToLowerInvariant() -ne $oldDiskHash -or
+            (Get-FileHash -LiteralPath $relocatedSnapshotPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $originalSnapshotHash -or
+            -not (Test-Path -LiteralPath $newVbox -PathType Leaf)) {
+            throw 'Stale-registration removal altered original VM or snapshot bytes'
+        }
+        $staleRegistrationUnregistered=$true
     }
     Invoke-Bounded-CLI 'new_set_machinefolder' @('setproperty','machinefolder',$newMachines) | Out-Null
     Invoke-Bounded-CLI 'new_registervm' @('registervm',$newVbox) | Out-Null
@@ -336,6 +360,8 @@ try {
         visible_old_root=$oldRoot
         visible_new_root=$newRoot
         drive_letters_changed=[bool]($VhdDriveLetterChange -and $profileMoved)
+        stale_registration_fixture=[bool]$StaleRegistration
+        stale_registration_unregistered=[bool]$staleRegistrationUnregistered
         profile_moved=[bool]$profileMoved
         original_uuid=$originalUuid
         relocated_uuid=$relocatedUuid

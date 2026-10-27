@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        relocation_mode: [directory, vhd-letter]
+        relocation_mode: [directory, vhd-letter, directory-stale, vhd-letter-stale]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -48,7 +48,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if ('${{ matrix.relocation_mode }}' -eq 'vhd-letter') {
+          if ('${{ matrix.relocation_mode }}' -like 'vhd-letter*') {
             $vhd = Join-Path $env:RUNNER_TEMP 'portable-only-test.vhdx'
             ./scripts/vbox_vhd_volume.ps1 -Action Create -BackingFile $vhd
             $source = 'P:\Portable USB Тест'
@@ -66,12 +66,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $switches = @{}
-          if ('${{ matrix.relocation_mode }}' -eq 'vhd-letter') {
+          if ('${{ matrix.relocation_mode }}' -like 'vhd-letter*') {
             $switches['VhdDriveLetterChange'] = $true
             $switches['VhdBackingFile'] = Join-Path $env:RUNNER_TEMP 'portable-only-test.vhdx'
             $destination = 'Q:\Portable USB Тест'
           } else {
             $destination = Join-Path $env:RUNNER_TEMP 'Portable USB Перенесено Тест'
+          }
+          if ('${{ matrix.relocation_mode }}' -like '*-stale') {
+            $switches['StaleRegistration'] = $true
           }
           ./scripts/vbox_root_relocation_probe.ps1 -PortableRoot $env:ORIGINAL_PORTABLE_ROOT -DestinationRoot $destination -OutputDirectory (Join-Path $env:RUNNER_TEMP 'portable-relocation-evidence') -TimeoutSeconds 30 @switches
       - name: Publish only bounded diagnostic report and CLI logs

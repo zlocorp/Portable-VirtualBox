@@ -4,6 +4,10 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · recovery probe for already-relocated VM registrations (2026-10-27)
+
+- Two further disposable Windows matrix variants simulate moving the USB-root folder or reassigning its VHDX drive letter **without first unregistering** an existing powered-off VM. The moved `VirtualBox.xml` retains the stale former absolute `MachineEntry`. At the new location, the fixture inspects the exact old UUID, requests supported Oracle `unregistervm` **without `--delete`**, checks that .vbox/base/differencing VDI bytes survive and re-registers the same UUID and snapshot chain under the new root. This is non-production research, intended to establish a safe recovery sequence before adding any opt-in ordinary-user relocation tool.
+
 ### Fixed · Oracle mixed-separator snapshot Location display (2026-10-27)
 
 - Both real Windows relocation variants already preserved VM UUID, powered-off snapshot UUID and byte-identical base/differencing VDI files, but the final medium-graph assertion falsely failed: Oracle printed the differencing VDI `Location:` as `Snapshots/{uuid}.vdi` inside an otherwise backslash-separated Windows path. The test now normalizes separators **only in read-only VBoxManage output**, never in .vbox/VirtualBox.xml data. Snapshot identity checks also match the explicit `SnapshotUUID` field rather than any UUID in a transcript. Full new-root VBoxSDS teardown still has to be verified by the rerun.
