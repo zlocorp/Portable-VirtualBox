@@ -17,10 +17,14 @@ class RelocationPlanContract(unittest.TestCase):
             "_PBK_Offline()", "_PBK_Create(", "_PBK_Verify(", "_PBK_Hash(",
             "old-machine-still-present-or-unreadable", "source-changed-after-verified-backup"):
             self.assertIn(requirement,p)
+        # A warning comment may mention Oracle verbs; only executable
+        # AutoIt lines must be incapable of triggering them.
+        active="\n".join(line for line in p.splitlines()
+                         if not line.lstrip().startswith(";"))
         for forbidden in ("VBoxManage.exe", "Run(", "RunWait(", "ProcessClose(",
                           "FileDelete(", "FileMove(", "FileWrite(", "RegWrite(",
                           "unregistervm", "registervm", "#RequireAdmin"):
-            self.assertNotIn(forbidden,p)
+            self.assertNotIn(forbidden,active)
     def test_public_executable_has_readonly_plan_and_verified_backup(self):
         entry=self.text("source/Portable-VirtualBox.au3")
         gui=self.text("source/LauncherGui.au3")
