@@ -156,7 +156,7 @@ Func _MSW_Show($root, $workspace)
                     MsgBox(48, _MSW_Text("title"), _PVR_Text($plan), 0, $h)
                     ContinueLoop
                 EndIf
-                Local $backup = FileSelectFolder(_MSW_Text("rebind_backup"), "", 0, "", $h)
+                Local $backup = FileSelectFolder(_MSW_Text("rebind_backup"), "", 0x11, "", $h) ; filesystem folders only + editable path
                 If $backup == "" Then ContinueLoop
                 If MsgBox(0x34, _MSW_Text("title"), _PVR_Text($plan) & @CRLF & _
                         _MSW_Text("rebind_confirm"), 0, $h) <> 6 Then ContinueLoop
