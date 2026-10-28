@@ -198,6 +198,86 @@ Func _PVR_Backup($root, $dest)
     Return $before
 EndFunc
 
+; Read-only binding of an independently verified full backup to the *current*
+; data tree. A matching VDI alone is insufficient: all VM snapshots and the
+; portable profile must have the same paths, lengths and SHA-256 bytes.
+Func _PVR_BackupMatchesData($root, $backup)
+    If Not _PP_RootSafe($root) Or Not _PP_ParentsSafe($root) Or _
+            Not _PP_RootSafe($backup) Or Not _PP_ParentsSafe($backup) Or _
+            _PBK_IsUnder($root, $backup) Or _PBK_IsUnder($backup, $root) Then Return False
+    If Not _PBK_Verify($backup) Then Return False
+    Local $before[], $after[], $countA = 0, $countB = 0, $equal = True
+    _Crypt_Startup()
+    If Not _PBK_Scan($root, "data", $before, $countA) Or _
+            Not _PBK_Scan($backup, "data", $after, $countB) Or _
+            $countA <> $countB Then
+        $equal = False
+    Else
+        Local $keys = MapKeys($before)
+        For $key In $keys
+            If Not MapExists($after, $key) Or $before[$key] <> $after[$key] Then
+                $equal = False
+                ExitLoop
+            EndIf
+        Next
+    EndIf
+    _Crypt_Shutdown()
+    Return $equal
+EndFunc
+
+; This is a preparation proof, not an authorization token. Only an already
+; separated, owned Manager session with explicit user confirmation may request
+; Oracle's fixed unregister/register operations after independent revalidation.
+Func _PVR_VerifyBackup($root, $backup)
+    Local $plan = _PVR_Plan($root)
+    If $plan["status"] <> "READY" Then Return $plan
+    If Not _PVR_BackupMatchesData($root, $backup) Then
+        $plan["status"] = "BLOCKED"
+        $plan["reason"] = "backup-missing-changed-or-does-not-match-current-data"
+        Return $plan
+    EndIf
+    $plan["status"] = "VERIFIED"
+    $plan["reason"] = "complete-byte-identical-backup-ready-for-confirmed-session"
+    $plan["backup"] = $backup
+    Return $plan
+EndFunc
+
+; Revalidate frozen, user-owned source metadata BEFORE any unregistervm.
+; Do not call the offline-only planner when our own signed VBoxSup is loaded.
+; The first Oracle command must be blocked if paths, UUID or backup changed.
+Func _PVR_StillExact($root, $proof)
+    If Not IsMap($proof) Or $proof["status"] <> "VERIFIED" Or _
+            Not _PP_RootSafe($root) Or Not _PP_ParentsSafe($root) Then Return False
+    If _PVI_PathState($proof["old_path"]) <> 0 Or _
+            _PVI_PathState($proof["new_path"]) <> 1 Then Return False
+    If _PBK_Hash($root & "\data\.VirtualBox\VirtualBox.xml") <> $proof["registry_sha256"] Or _
+            _PBK_Hash($proof["new_path"]) <> $proof["machine_sha256"] Then Return False
+    Return _PVR_BackupMatchesData($root, $proof["backup"])
+EndFunc
+
+; Read-only postcondition after the *exact* Oracle unregister/register sequence.
+; It does not make a second mutation or invent a deleted/registered VM state.
+Func _PVR_Rebound($root, $proof)
+    If Not IsMap($proof) Or $proof["status"] <> "VERIFIED" Then Return False
+    Local $audit = _PVI_Inspect($root)
+    If $audit["status"] <> "CLEAN" Or $audit["vm_count"] <> 1 Or _
+            $audit["registered_count"] <> 1 Or $audit["external_registry_count"] <> 0 Or _
+            $audit["external_count"] <> 0 Or $audit["missing_count"] <> 0 Or _
+            $audit["snapshot_count"] <> $proof["snapshots"] Or _
+            $audit["media_count"] <> $proof["media"] Then Return False
+    Local $registry = _PVI_LoadXml($root & "\data\.VirtualBox\VirtualBox.xml")
+    Local $machine = _PVI_LoadXml($proof["new_path"])
+    If Not IsObj($registry) Or Not IsObj($machine) Then Return False
+    Local $refs = $registry.selectNodes('//*[local-name()="MachineEntry"]')
+    Local $machines = $machine.selectNodes('//*[local-name()="Machine"]')
+    If Not IsObj($refs) Or Not IsObj($machines) Or $refs.length <> 1 Or $machines.length <> 1 Then Return False
+    Local $entry = $refs.item(0)
+    Local $target = _PVI_RegistryTarget($root, $entry.getAttribute("src"))
+    Return StringLower($target) == StringLower($proof["new_path"]) And _
+        StringLower($entry.getAttribute("uuid")) == $proof["uuid"] And _
+        StringLower($machines.item(0).getAttribute("uuid")) == $proof["uuid"]
+EndFunc
+
 Func _PVR_Text($r)
     If Not IsMap($r) Or Not MapExists($r, "status") Then Return ""
     Local $ru = _LI_Language() == "ru"
@@ -205,7 +285,7 @@ Func _PVR_Text($r)
         Case "NONE"
             If $ru Then Return "Перенесенная регистрация ВМ не обнаружена. Изменения не нужны."
             Return "No relocated VM registration found. No changes required."
-        Case "READY", "BACKED_UP"
+        Case "READY", "BACKED_UP", "VERIFIED"
             Local $out = ""
             If $ru Then
                 $out = "Обнаружена одна перенесенная ВМ (план только для чтения): " & $r["name"] & @CRLF & _
@@ -217,6 +297,10 @@ Func _PVR_Text($r)
                     "UUID: " & $r["uuid"] & @CRLF & _
                     "Snapshots / media: " & $r["snapshots"] & " / " & $r["media"] & @CRLF & _
                     "Old registration: " & $r["old_path"] & @CRLF & "New file: " & $r["new_path"] & @CRLF
+            EndIf
+            If $r["status"] == "VERIFIED" Then
+                If $ru Then Return $out & "Проверена полная SHA-256 копия: " & $r["backup"] & @CRLF & "Исправление регистрации возможно только с отдельным подтверждением внутри изолированной сессии."
+                Return $out & "Full matching SHA-256 backup verified: " & $r["backup"] & @CRLF & "Registration changes require explicit consent inside an isolated session."
             EndIf
             If $r["status"] == "BACKED_UP" Then
                 If $ru Then Return $out & "Резервная копия с SHA-256 подтверждена: " & $r["backup"] & @CRLF & "Регистрация не изменена."
