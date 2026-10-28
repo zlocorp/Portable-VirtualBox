@@ -11,6 +11,8 @@ class RelocationPlanContract(unittest.TestCase):
         p=self.text("source/PortableVmRebind.au3")
         for requirement in (
             "Func _PVR_Plan(", "Func _PVR_Backup(", "Func _PVR_StaleSource(",
+            "Func _PVR_VerifyBackup(", "Func _PVR_StillExact(", "Func _PVR_Rebound(",
+            "Func _PVR_BackupMatchesData(",
             "exact-moved-vm-no-changes-applied",
             "registered-uuid-differs-from-machine", "external-missing-or-unsafe-medium",
             "_PVI_LoadXml(", "_PVI_Inspect(", "_PVI_MediaLocation(",
