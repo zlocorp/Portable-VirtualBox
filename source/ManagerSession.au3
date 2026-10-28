@@ -373,8 +373,9 @@ EndFunc
 
 Func _MS_RebindStep(ByRef $s, $action)
     Local $proof = $s["rebind"]
+    Local $active = $s["worker"]
     If Not IsMap($proof) Or $proof["status"] <> "VERIFIED" Or _
-            Not $s["owned"] Or $s["worker"]["handle"] <> 0 Then Return False
+            Not $s["owned"] Or $active["handle"] <> 0 Then Return False
     Local $profile = _PP_Inspect($s["root"])
     If $profile["status"] <> "READY" Then Return False
     Local $args = ""
@@ -585,7 +586,8 @@ Func _MS_Tick(ByRef $s)
             Return
         EndIf
         $s["owned"] = True
-        If $s["rebind"]["status"] == "VERIFIED" Then
+        Local $rebindProof = $s["rebind"]
+        If $rebindProof["status"] == "VERIFIED" Then
             ; The user confirmed this *specific* backup and UUID in the GUI.
             ; No new elevated verb or arbitrary filesystem command is exposed.
             If Not _MS_RebindStep($s, "unregister") Then _
