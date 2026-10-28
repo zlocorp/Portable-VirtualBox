@@ -417,6 +417,12 @@ try {
             Remove-Item -LiteralPath $raw -Force -ErrorAction SilentlyContinue
         }
     }
+    # The downloaded Alpine ISO lives outside the portable root and must
+    # NEVER be treated as backed-up VM media. Eject it before creating the
+    # snapshot; otherwise the strict rebind planner correctly refuses the VM.
+    if ($GuestIso) {
+        $null=Oracle ('storageattach '+$uuid+' --storagectl SATA --port 1 --device 0 --type dvddrive --medium none') 'eject-external-ci-iso'
+    }
     # Snapshot is taken while the guest is powered off; Oracle creates a
     # differencing VDI under this VM's portable Snapshots directory.
     $null=Oracle ('snapshot '+$uuid+' take portable-baseline') 'take-snapshot'
