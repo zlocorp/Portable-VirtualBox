@@ -501,7 +501,7 @@ try {
         $dlg=Wait-Dialog $repair 'Select the existing verified full data/ backup folder.'
         if(-not [ManagerUiProbe]::ChooseFolder($dlg,$backup)) { throw 'Cannot select original verified backup in Shell dialog' }
         $confirmation=Wait-Dialog $repair 'Portable-VirtualBox'
-        if(-not [ManagerUiProbe]::PostMessageW($confirmation,0x0111,(IntPtr)6,[IntPtr]::Zero)) {
+        if(-not [ManagerUiProbe]::PostMessageW($confirmation,0x0111,[IntPtr]6,[IntPtr]::Zero)) {
             throw 'Cannot confirm explicit rebind prompt'
         }
         $proof.rebind_gui_confirmed=$true
