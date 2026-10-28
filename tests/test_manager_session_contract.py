@@ -91,6 +91,7 @@ class ManagerSessionContract(unittest.TestCase):
     def test_exact_owned_rebind_is_only_an_explicit_manager_session(self):
         session=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
         window=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('$state == "REBIND_UNREGISTER" Or $state == "REBIND_REGISTER" Or _',session)
         for phrase in ('Func _MS_Start(ByRef $s, $backup = "")',
                        '_PVR_VerifyBackup($s["root"], $backup)',
                        '_PVR_StillExact($s["root"], $proof)',

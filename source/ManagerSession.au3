@@ -485,6 +485,7 @@ Func _MS_Tick(ByRef $s)
         Return
     EndIf
     If $state == "PREPARING" Or $state == "CLEANING" Or $state == "CONFIGURING" Or _
+            $state == "REBIND_UNREGISTER" Or $state == "REBIND_REGISTER" Or _
             _MS_ConsentPending($state) Or $state == "RECOVERING" Then
         Local $worker = $s["worker"], $status = _MP_Poll($worker)
         $s["worker"] = $worker
