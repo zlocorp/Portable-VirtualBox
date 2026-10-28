@@ -422,6 +422,10 @@ try {
     # snapshot; otherwise the strict rebind planner correctly refuses the VM.
     if ($GuestIso) {
         $null=Oracle ('storageattach '+$uuid+' --storagectl SATA --port 1 --device 0 --type dvddrive --medium none') 'eject-external-ci-iso'
+        # Oracle can retain the detached DVD in its MediaRegistry even when
+        # it is no longer attached. Close only that exact disposable ISO
+        # WITHOUT --delete, so the saved VM/snapshot has fully local media.
+        $null=Oracle ('closemedium dvd "'+$isoFull+'"') 'close-external-ci-iso-registry'
     }
     # Snapshot is taken while the guest is powered off; Oracle creates a
     # differencing VDI under this VM's portable Snapshots directory.

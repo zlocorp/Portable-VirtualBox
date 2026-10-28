@@ -91,6 +91,8 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('--x86-long-mode on', fixture)
         self.assertIn('longmode="on"', fixture)
         self.assertIn('guest_64bit_cpu_configured=$true', fixture)
+        self.assertIn('closemedium dvd',fixture)
+        self.assertIn('eject-external-ci-iso',fixture)
         for expected in ('keyboardputstring root', 'keyboardputscancode 1c 9c',
                          'dd of=/dev/sda bs=512 seek=2048 conv=notrunc',
                          'clonemedium disk', 'guest_disk_io_confirmed=$true',
