@@ -1,0 +1,114 @@
+name: Compiled AutoIt portable session + VBoxSDS (disposable Windows only)
+
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - .github/workflows/native-runtime-smoke.yml
+      - source/PortableCISession.au3
+      - source/PortableProfile.au3
+      - source/Portable-VirtualBox.au3
+      - scripts/build.ps1
+      - tests/native/test_ci_session_policy.au3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compiled-ci-session-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  hosted-native-session:
+    if: github.repository == 'zlocorp/Portable-VirtualBox'
+    runs-on: windows-2022
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Validate official signed VirtualBox wrapper and passive packages
+        shell: pwsh
+        run: ./scripts/inspect_oracle.ps1 -WorkDirectory (Join-Path $env:RUNNER_TEMP 'native-vbox-verified')
+      - name: Reconstruct signed app64 into the private portable root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'Portable Session Тест'
+          New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
+          $exe = Join-Path $env:RUNNER_TEMP 'native-vbox-verified\VirtualBox-7.2.22-175245-Win.exe'
+          $app = Join-Path $root 'app64'
+          python -X utf8 scripts/prepare_app64.py $exe $app --sha256 afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f --version 7.2.22
+          if ($LASTEXITCODE -ne 0) { throw 'Signed app64 file preparation failed' }
+          $sig = Get-AuthenticodeSignature -LiteralPath (Join-Path $app 'VBoxSDS.exe')
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Oracle') { throw 'VBoxSDS publisher signature missing' }
+          "PORTABLE_SESSION_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Verify and use signed official AutoIt 3.3.18.0 compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $uri = 'https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.18.0.zip'
+          Invoke-WebRequest -Uri $uri -OutFile (Join-Path $env:RUNNER_TEMP 'native-autoit.zip')
+          Expand-Archive -LiteralPath (Join-Path $env:RUNNER_TEMP 'native-autoit.zip') -DestinationPath (Join-Path $env:RUNNER_TEMP 'native-autoit') -Force
+          $bins = @(Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'native-autoit') -Recurse -File -Filter 'Aut2exe_x64.exe')
+          if ($bins.Count -ne 1) { throw 'Ambiguous compiler' }
+          $sig = Get-AuthenticodeSignature -LiteralPath $bins[0].FullName
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'Compiler publisher invalid' }
+          $root = Split-Path (Split-Path $bins[0].FullName -Parent) -Parent
+          ./scripts/build.ps1 -AutoItRoot $root
+          Copy-Item -LiteralPath 'build/Portable-VirtualBox_x64.exe' -Destination (Join-Path $env:PORTABLE_SESSION_ROOT 'Portable-VirtualBox_x64.exe') -ErrorAction Stop
+      - name: Execute first-run creation from the compiled portable EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:PORTABLE_SESSION_ROOT 'Portable-VirtualBox_x64.exe'
+          $p = Start-Process -FilePath $exe -ArgumentList '--profile-status' -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 2) { throw 'Expected profile not yet initialized' }
+          $p = Start-Process -FilePath $exe -ArgumentList '--prepare-profile' -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw 'Native profile initialization failed' }
+          if (-not (Test-Path (Join-Path $env:PORTABLE_SESSION_ROOT 'data\.VirtualBox')) -or -not (Test-Path (Join-Path $env:PORTABLE_SESSION_ROOT 'data\Machines'))) {
+            throw 'Native profile folders missing'
+          }
+          $sentinel = Join-Path $env:PORTABLE_SESSION_ROOT 'data\.VirtualBox\retained-data.txt'
+          'preserve-user-content' | Set-Content -LiteralPath $sentinel -Encoding UTF8
+          $p = Start-Process -FilePath $exe -ArgumentList '--prepare-profile' -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 0 -or (Get-Content -LiteralPath $sentinel -Raw).Trim() -ne 'preserve-user-content') {
+            throw 'Second first-run setup modified existing profile files'
+          }
+      - name: Run real signed VBoxManage and clean exact VBoxSDS using compiled AutoIt
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:PORTABLE_SESSION_ROOT 'Portable-VirtualBox_x64.exe'
+          $log = Join-Path $env:RUNNER_TEMP 'native-ci-session.stdout.txt'
+          $errors = Join-Path $env:RUNNER_TEMP 'native-ci-session.stderr.txt'
+          $p = Start-Process -FilePath $exe -ArgumentList '--ci-service-smoke' -WorkingDirectory $env:PORTABLE_SESSION_ROOT -PassThru -Wait -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError $errors
+          Get-Content -LiteralPath $log
+          if ($p.ExitCode -ne 0) { throw "Compiled AutoIt service session failed: $($p.ExitCode)" }
+          if (-not ((Get-Content -LiteralPath $log -Raw) -match 'CI native session: CLEAN')) { throw 'No verified native cleanup marker' }
+          if (Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS') { throw 'VBoxSDS registration remains' }
+          $vbox = @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' | Where-Object PSChildName -match '^VBox')
+          if ($vbox.Count -ne 0) { throw 'Unexpected VBox service left after native cleanup' }
+          $running = @(Get-Process | Where-Object ProcessName -match '^(VBox|VirtualBox)')
+          if ($running.Count -ne 0) { throw 'VBox processes left after native cleanup' }
+          if (-not (Test-Path (Join-Path $env:PORTABLE_SESSION_ROOT 'data\.VirtualBox\VirtualBox.xml'))) { throw 'VirtualBox did not use the portable profile' }
+          Write-Host 'PASS: actual compiled AutoIt started Oracle CLI and cleaned own VBoxSDS'
+      - name: Retain only short diagnostic transcript, never Oracle payloads
+        if: always()
+        shell: pwsh
+        run: |
+          $target = 'results/native-session'
+          New-Item -ItemType Directory -Path $target -Force | Out-Null
+          foreach ($name in @('native-ci-session.stdout.txt','native-ci-session.stderr.txt')) {
+            $p = Join-Path $env:RUNNER_TEMP $name
+            if (Test-Path -LiteralPath $p) { Copy-Item -LiteralPath $p -Destination $target }
+          }
+      - name: Upload diagnostic transcript only
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-compiled-VBoxSDS-session
+          path: results/native-session/
+          retention-days: 7
+          if-no-files-found: warn

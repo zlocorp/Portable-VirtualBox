@@ -1,0 +1,234 @@
+name: Portable-VirtualBox CI (build only)
+
+on:
+  push:
+    branches:
+      - dev/modernization-2026
+    paths-ignore:
+      - '**/*.md'
+  pull_request:
+    branches:
+      - master
+      - work/upstream-baseline-2026
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Static checks (no VirtualBox execution)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Unit tests for audit
+        run: python3 -m unittest discover -s tests -v
+      - name: Check official Oracle manifest (metadata only; no executable download)
+        continue-on-error: true
+        run: python3 scripts/oracle_release.py 7.2.22
+      - name: Enforce active dependency absence and audit quarantined legacy code
+        run: |
+          python3 scripts/check_active_tree.py
+          python3 scripts/audit_source.py --enforce --output .reports/source-audit.md
+          python3 scripts/audit_source.py --source source/legacy/Portable-VirtualBox.au3.disabled --output .reports/legacy-audit.md
+          test -s .reports/source-audit.md
+          test -s .reports/legacy-audit.md
+          cat .reports/source-audit.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Store audit
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: static-audit
+          path: |
+            .reports/source-audit.md
+            .reports/legacy-audit.md
+          if-no-files-found: error
+          retention-days: 7
+
+  compile:
+    name: Compile x64 (never launch)
+    needs: audit
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Assert retired binaries/translations absent (no execution)
+        shell: pwsh
+        run: |
+          python -X utf8 scripts/check_active_tree.py
+          if ($LASTEXITCODE -ne 0) { throw 'Retired dependencies reappeared' }
+      - name: Download official AutoIt 3.3.18.0 portable toolkit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $uri = 'https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.18.0.zip'
+          Invoke-WebRequest -Uri $uri -OutFile "$env:RUNNER_TEMP\autoit.zip"
+          Expand-Archive -LiteralPath "$env:RUNNER_TEMP\autoit.zip" -DestinationPath "$env:RUNNER_TEMP\autoit" -Force
+          $compilers = @(Get-ChildItem -Path "$env:RUNNER_TEMP\autoit" -Recurse -File -Filter 'Aut2exe_x64.exe')
+          if ($compilers.Count -ne 1) {
+            Get-ChildItem -Path "$env:RUNNER_TEMP\autoit" -Directory | Select-Object -ExpandProperty FullName
+            throw "Expected one x64 Aut2Exe compiler, found $($compilers.Count)"
+          }
+          $bin = $compilers[0].FullName
+          $root = Split-Path (Split-Path $bin -Parent) -Parent
+          $signature = Get-AuthenticodeSignature -LiteralPath $bin
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'AutoIt') {
+            throw "Unsigned or unexpected AutoIt compiler: $($signature.Status) $($signature.SignerCertificate.Subject)"
+          }
+          "AUTOIT_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Build x64
+        shell: pwsh
+        run: ./scripts/build.ps1 -AutoItRoot "$env:AUTOIT_ROOT"
+      - name: Freeze exact-release offline preparer (no end-user Python dependency)
+        shell: pwsh
+        run: ./scripts/build_portable_setup.ps1
+      - name: Verify root build.bat delegates to official external AutoIt
+        shell: cmd
+        run: |
+          call build.bat -AutoItRoot "%AUTOIT_ROOT%"
+          if errorlevel 1 exit /b 1
+          if not exist build\Portable-VirtualBox_x64.exe exit /b 1
+      - name: Run compiled safety selftest (no elevation or VBox drivers)
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path '.\build\Portable-VirtualBox_x64.exe').Path
+          $selftest = Start-Process -FilePath $exe -ArgumentList '--selftest' -Wait -PassThru -NoNewWindow
+          if ($selftest.ExitCode -ne 0) { throw "Compiled safety selftest failed with $($selftest.ExitCode)" }
+          $diagnostic = Start-Process -FilePath $exe -ArgumentList '--diagnose' -Wait -PassThru -NoNewWindow
+          if ($diagnostic.ExitCode -ne 0) { throw "Read-only diagnostics failed with $($diagnostic.ExitCode)" }
+          $help = Start-Process -FilePath $exe -ArgumentList '--lang ru --help' -Wait -PassThru -NoNewWindow -RedirectStandardOutput 'build/help-ru.txt'
+          if ($help.ExitCode -ne 0) { throw "Localized Russian help failed with $($help.ExitCode)" }
+          $diagnosticRu = Start-Process -FilePath $exe -ArgumentList '--lang ru --diagnose' -Wait -PassThru -NoNewWindow -RedirectStandardOutput 'build/diagnostic-ru.txt'
+          if ($diagnosticRu.ExitCode -ne 0) { throw "Localized Russian diagnostic failed with $($diagnosticRu.ExitCode)" }
+          $ruHelp = Get-Content -LiteralPath 'build/help-ru.txt' -Raw -Encoding utf8
+          $ruDiagnostic = Get-Content -LiteralPath 'build/diagnostic-ru.txt' -Raw -Encoding utf8
+          if (-not $ruHelp.Contains('Портативный VirtualBox') -or -not $ruDiagnostic.Contains('диагностика')) {
+            throw 'Russian CLI output is not valid UTF-8 with intact Cyrillic text'
+          }
+          $preflight = Start-Process -FilePath $exe -ArgumentList '--preflight' -Wait -PassThru -NoNewWindow
+          if ($preflight.ExitCode -ne 3) { throw "Unsafe preflight policy: expected blocked exit 3, got $($preflight.ExitCode)" }
+          # Even on CI, the regular checkout is outside RUNNER_TEMP. A compiled
+          # binary cannot enable the VM fixture mode from the normal build.
+          $vm = Start-Process -FilePath $exe -ArgumentList '--ci-vm-session' -Wait -PassThru -NoNewWindow
+          if ($vm.ExitCode -ne 9) { throw "CI VM mode unexpectedly enabled from standard build: $($vm.ExitCode)" }
+          $integrated = Start-Process -FilePath $exe -ArgumentList '--ci-integrated-session' -Wait -PassThru -NoNewWindow
+          if ($integrated.ExitCode -ne 9) { throw "Integrated test mode unexpectedly enabled from standard build: $($integrated.ExitCode)" }
+      - name: Real compiled first-run data setup, repeat and collision refusal
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = (Resolve-Path 'build/Portable-VirtualBox_x64.exe').Path
+          $folder = Split-Path $exe -Parent
+          $initial = Start-Process -FilePath $exe -ArgumentList '--profile-status' -Wait -PassThru -NoNewWindow
+          if ($initial.ExitCode -ne 2) { throw "Expected uninitialized profile, got $($initial.ExitCode)" }
+          $first = Start-Process -FilePath $exe -ArgumentList '--prepare-profile' -Wait -PassThru -NoNewWindow
+          if ($first.ExitCode -ne 0) { throw "Portable profile setup failed: $($first.ExitCode)" }
+          $profile = Join-Path $folder 'data\.VirtualBox'
+          $machines = Join-Path $folder 'data\Machines'
+          $logs = Join-Path $folder 'logs'
+          foreach ($path in @($profile,$machines,$logs)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Container)) { throw "Missing initialized directory: $path" }
+          }
+          $sentinel = Join-Path $profile 'preserved-user-data.txt'
+          'keep-sentinel' | Set-Content -LiteralPath $sentinel -Encoding utf8
+          $again = Start-Process -FilePath $exe -ArgumentList '--prepare-profile' -Wait -PassThru -NoNewWindow
+          if ($again.ExitCode -ne 0 -or (Get-Content -LiteralPath $sentinel -Raw).Trim() -ne 'keep-sentinel') {
+            throw 'Repeating portable setup lost existing user data'
+          }
+          $ready = Start-Process -FilePath $exe -ArgumentList '--profile-status' -Wait -PassThru -NoNewWindow
+          if ($ready.ExitCode -ne 0) { throw "Prepared profile not recognized: $($ready.ExitCode)" }
+          $conflict = Join-Path $env:RUNNER_TEMP 'Portable Profile Collision Тест'
+          New-Item -ItemType Directory -Path $conflict | Out-Null
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $conflict 'Portable-VirtualBox_x64.exe')
+          'foreign-file' | Set-Content -LiteralPath (Join-Path $conflict 'data') -Encoding utf8
+          $blocked = Start-Process -FilePath (Join-Path $conflict 'Portable-VirtualBox_x64.exe') -ArgumentList '--prepare-profile' -Wait -PassThru -NoNewWindow
+          if ($blocked.ExitCode -ne 3 -or (Get-Content -LiteralPath (Join-Path $conflict 'data') -Raw).Trim() -ne 'foreign-file') {
+            throw 'Conflict test failed: expected non-destructive refusal'
+          }
+          if (Test-Path -LiteralPath (Join-Path $conflict 'logs')) { throw 'Collision created partial data' }
+          Write-Host 'PASS: compiled first-run setup, repeated preservation, collision refusal'
+      - name: Audit real VM XML references from compiled ordinary RU/EN launcher
+        shell: pwsh
+        run: ./scripts/check_vm_inventory.ps1 -Launcher build/Portable-VirtualBox_x64.exe
+      - name: Verify moved VM planning and protected-copy-safe offline backup using the compiled main EXE
+        shell: pwsh
+        run: ./scripts/check_vm_rebind_plan.ps1 -Launcher build/Portable-VirtualBox_x64.exe
+      - name: Offline portable data backup with SHA-256, Unicode paths and corruption refusal
+        shell: pwsh
+        run: ./scripts/check_offline_backup.ps1 -Launcher build/Portable-VirtualBox_x64.exe
+      - name: Exercise ordinary compiled language, app checks and credits
+        shell: pwsh
+        run: ./scripts/check_community_ux.ps1 -Launcher build/Portable-VirtualBox_x64.exe
+      - name: Verify build from path with spaces and Cyrillic
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $probe = Join-Path $env:RUNNER_TEMP 'Portable VBox Тест'
+          New-Item -ItemType Directory -Force -Path (Join-Path $probe 'source') | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $probe 'scripts') | Out-Null
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'source\*') -Destination (Join-Path $probe 'source') -Recurse -Force
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'scripts\build.ps1') -Destination (Join-Path $probe 'scripts')
+          & (Join-Path $probe 'scripts\build.ps1') -AutoItRoot "$env:AUTOIT_ROOT"
+          if (-not (Test-Path (Join-Path $probe 'build\Portable-VirtualBox_x64.exe'))) {
+            throw 'Unicode-path build artifact missing'
+          }
+      - name: Package diagnostic preview ZIP without legacy or Oracle binaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -X utf8 scripts/package_preview.py --repo . --exe build/Portable-VirtualBox_x64.exe --out build/Portable-VirtualBox-diagnostic-preview.zip
+          if ($LASTEXITCODE -ne 0) { throw 'Preview packaging failed' }
+          $archive = 'build/Portable-VirtualBox-diagnostic-preview.zip'
+          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          $line = Get-Content -LiteralPath ($archive + '.sha256') -Raw
+          if (-not $line.StartsWith($actual + '  ')) { throw 'Preview checksum mismatch' }
+          Add-Type -AssemblyName System.IO.Compression
+          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $archive).Path)
+          try {
+            $names = @($zip.Entries | ForEach-Object FullName | Sort-Object)
+            $expected = @('LICENSE.md','PREVIEW-NOT-A-HYPERVISOR.txt','Portable-VirtualBox.exe','Portable-VirtualBox-Setup.exe','README.md','README.ru.md','CREDITS.md') | Sort-Object
+            if (($names -join ';') -cne ($expected -join ';')) { throw 'Preview archive contains unexpected files' }
+          } finally { $zip.Dispose() }
+          Write-Host 'PASS: preview ZIP contains compiled launcher, offline-only preparer, bilingual README, license and notices'
+      - name: Verify actual unpacked preview initializes independent Cyrillic root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $unpacked = Join-Path $env:RUNNER_TEMP 'User Preview ZIP Тест'
+          Expand-Archive -LiteralPath 'build/Portable-VirtualBox-diagnostic-preview.zip' -DestinationPath $unpacked
+          $exe = Join-Path $unpacked 'Portable-VirtualBox.exe'
+          $p = Start-Process -FilePath $exe -ArgumentList '--profile-status' -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 2) { throw 'Newly unpacked preview unexpectedly has an initialized profile' }
+          $p = Start-Process -FilePath $exe -ArgumentList '--prepare-profile' -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw 'Unpacked preview cannot create its own portable profile' }
+          foreach ($folder in @('data\.VirtualBox','data\Machines','logs')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $unpacked $folder) -PathType Container)) {
+              throw "Missing packaged preview folder: $folder"
+            }
+          }
+          $sourceHash = (Get-FileHash -LiteralPath 'build/Portable-VirtualBox_x64.exe' -Algorithm SHA256).Hash
+          $unpackedHash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+          if ($sourceHash -ne $unpackedHash) { throw 'Packaged EXE differs from tested build' }
+          Write-Host 'PASS: unpacked RU/EN preview EXE creates profile in separate Unicode root'
+      - name: Retain diagnostic-preview ZIP (not a VM release)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: portable-virtualbox-diagnostic-preview
+          path: |
+            build/Portable-VirtualBox-diagnostic-preview.zip
+            build/Portable-VirtualBox-diagnostic-preview.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload unsigned compiler output and checksum (not a release)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: portable-virtualbox-x64-unverified-runtime
+          path: |
+            build/Portable-VirtualBox_x64.exe
+            build/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7

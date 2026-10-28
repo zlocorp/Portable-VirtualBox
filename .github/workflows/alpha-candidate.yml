@@ -1,0 +1,95 @@
+name: Workstation alpha candidate (build and server refusal only)
+
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - .github/workflows/alpha-candidate.yml
+      - source/Portable-VirtualBox.au3
+      - source/ManagerSession.au3
+      - source/PrivilegeBoundary.au3
+      - source/ManagerWindow.au3
+      - source/LauncherGui.au3
+      - source/privilege/**
+      - scripts/build_session_helper.ps1
+      - scripts/privileged_session_worker.ps1
+      - scripts/vbox_sup_standalone.ps1
+      - scripts/vbox_sup_start_owned.ps1
+      - scripts/vbox_sup_cleanup.ps1
+      - scripts/vbox_sup_partial_cleanup.ps1
+      - scripts/package_alpha.ps1
+      - scripts/build.ps1
+      - scripts/build_portable_setup.ps1
+      - docs/ALPHA-WINDOWS-TEST.md
+      - tests/test_privilege_boundary_contract.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alpha-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  alpha-archive:
+    if: github.repository == 'zlocorp/Portable-VirtualBox'
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Source contract and PowerShell syntax validation
+        shell: pwsh
+        run: |
+          python -X utf8 -m unittest tests.test_privilege_boundary_contract tests.test_main_manager_wiring -v
+          if($LASTEXITCODE -ne 0) { throw 'Alpha contracts failed' }
+          foreach($name in @('scripts/build_session_helper.ps1','scripts/package_alpha.ps1','scripts/privileged_session_worker.ps1','scripts/vbox_sup_standalone.ps1','scripts/vbox_sup_start_owned.ps1','scripts/vbox_sup_cleanup.ps1','scripts/vbox_sup_partial_cleanup.ps1')) {
+            $tokens=$null;$errors=$null
+            [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $name),[ref]$tokens,[ref]$errors) | Out-Null
+            if($errors.Count) { throw ($name + ': ' + ($errors -join '; ')) }
+          }
+      - name: Compile authentic AutoIt main launcher, setup and exact alpha helper
+        shell: pwsh
+        run: |
+          $archive=Join-Path $env:RUNNER_TEMP 'alpha-autoit.zip'
+          Invoke-WebRequest -Uri 'https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.18.0.zip' -OutFile $archive
+          $dir=Join-Path $env:RUNNER_TEMP 'alpha-autoit'
+          Expand-Archive -LiteralPath $archive -DestinationPath $dir
+          $compiler=@(Get-ChildItem $dir -Recurse -File -Filter Aut2exe_x64.exe)
+          if($compiler.Count -ne 1) { throw 'Ambiguous AutoIt compiler' }
+          $sig=Get-AuthenticodeSignature -LiteralPath $compiler[0].FullName
+          if($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'Untrusted AutoIt compiler' }
+          $toolchain=Split-Path (Split-Path $compiler[0].FullName -Parent) -Parent
+          ./scripts/build.ps1 -AutoItRoot $toolchain
+          ./scripts/build_portable_setup.ps1
+          ./scripts/build_session_helper.ps1 -Frontend (Resolve-Path build/Portable-VirtualBox_x64.exe).Path -AlphaCandidate
+      - name: Reject Windows Server before system effects
+        shell: pwsh
+        run: |
+          $root=Join-Path $env:RUNNER_TEMP 'Alpha Windows Workstation Отказ'
+          New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
+          Copy-Item build/Portable-VirtualBox_x64.exe (Join-Path $root 'Portable-VirtualBox.exe')
+          Copy-Item build/Portable-VirtualBox-Helper-Alpha.exe (Join-Path $root 'Portable-VirtualBox-Helper-Alpha.exe')
+          $before=@(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' | Where-Object PSChildName -match '^VBox')
+          if($before.Count) { throw 'Foreign VBox service baseline present' }
+          $p=Start-Process -FilePath (Join-Path $root 'Portable-VirtualBox.exe') -ArgumentList '--alpha-runtime' -PassThru -Wait -NoNewWindow
+          if($p.ExitCode -ne 9) { throw 'Alpha user GUI accepted Server host' }
+          $p=Start-Process -FilePath (Join-Path $root 'Portable-VirtualBox-Helper-Alpha.exe') -ArgumentList ('Prepare '+$PID+' 1') -PassThru -Wait -NoNewWindow
+          if($p.ExitCode -ne 9) { throw 'Alpha privileged helper accepted Server host' }
+          if(@(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' | Where-Object PSChildName -match '^VBox').Count -ne 0 -or
+             (Test-Path (Join-Path $env:WINDIR 'System32/drivers/VBoxSup.sys'))) { throw 'Server refusal changed VBox driver/services' }
+          if(Test-Path (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Alpha')) { throw 'Server refusal wrote protected cache' }
+          Write-Host 'PASS: main GUI/helper rejected Windows Server before any system operation'
+      - name: Build isolated-host alpha ZIP, never a release
+        shell: pwsh
+        run: |
+          ./scripts/package_alpha.ps1 -Output (Join-Path $env:GITHUB_WORKSPACE 'build/Portable-VirtualBox-Win10-11-ALPHA-TEST-ONLY.zip')
+      - name: Upload temporary acceptance artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: portable-virtualbox-win10-11-alpha-ci-untested
+          path: build/Portable-VirtualBox-Win10-11-ALPHA-TEST-ONLY.zip
+          if-no-files-found: error
+          retention-days: 7

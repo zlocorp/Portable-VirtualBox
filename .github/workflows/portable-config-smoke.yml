@@ -1,0 +1,71 @@
+name: Portable VirtualBox configuration fixture (no VM start)
+
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - .github/workflows/portable-config-smoke.yml
+      - scripts/vbox_profile_probe.ps1
+      - tests/test_profile_probe_contract.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-config-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  isolated-configuration:
+    if: github.repository == 'zlocorp/Portable-VirtualBox'
+    runs-on: windows-2022
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check isolated-profile research contract
+        shell: pwsh
+        run: |
+          python -X utf8 -m unittest tests.test_profile_probe_contract -v
+          if ($LASTEXITCODE -ne 0) { throw 'Portable VM configuration contract failed' }
+      - name: Verify signed Oracle wrapper and inspect MSI without execution
+        shell: pwsh
+        run: ./scripts/inspect_oracle.ps1 -WorkDirectory (Join-Path $env:RUNNER_TEMP 'portable-config-packages')
+      - name: Prepare app64 files from signed package, without installation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'portable-config-packages'
+          $exe = Join-Path $work 'VirtualBox-7.2.22-175245-Win.exe'
+          $app = Join-Path $work 'portable Тест\app64'
+          New-Item -ItemType Directory -Path (Split-Path $app -Parent) | Out-Null
+          python -X utf8 scripts/prepare_app64.py $exe $app --sha256 afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f --version 7.2.22
+          if ($LASTEXITCODE -ne 0) { throw 'Application preparation failed' }
+          "PORTABLE_APP64=$app" >> $env:GITHUB_ENV
+      - name: Prove isolated VM configuration and registration without booting it
+        shell: pwsh
+        run: |
+          $origin = Join-Path $env:RUNNER_TEMP 'portable-config-outputs'
+          ./scripts/vbox_profile_probe.ps1 -AppDir $env:PORTABLE_APP64 -OutputDirectory $origin -TimeoutSeconds 30
+      - name: Collect metadata and CLI output only
+        if: always()
+        shell: pwsh
+        run: |
+          $origin = Join-Path $env:RUNNER_TEMP 'portable-config-outputs'
+          if (Test-Path $origin) {
+            $dest = 'results/portable-config'
+            New-Item -Path $dest -ItemType Directory -Force | Out-Null
+            Get-ChildItem -LiteralPath $origin -File |
+              Where-Object { $_.Name -eq 'config-results.json' -or $_.Name -match '^(set_machine_folder|set_oracle_language_ru|get_properties|create_definition|list_definitions)\.(stdout|stderr)\.txt$' } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+          }
+      - name: Publish report, not VM files or Oracle binaries
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: portable-vm-configuration-diagnostic
+          path: results/portable-config/
+          if-no-files-found: warn
+          retention-days: 7
