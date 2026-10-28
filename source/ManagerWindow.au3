@@ -27,6 +27,15 @@ Func _MSW_Text($key)
         Case "recover"
             If $ru Then Return "Восстановить после сбоя"
             Return "Recover abandoned session"
+        Case "rebind"
+            If $ru Then Return "Исправить регистрацию ВМ"
+            Return "Repair moved VM"
+        Case "rebind_backup"
+            If $ru Then Return "Выберите заранее созданную проверенную резервную копию data/."
+            Return "Select the existing verified full data/ backup folder."
+        Case "rebind_confirm"
+            If $ru Then Return "ALPHA: регистрация одной перенесенной ВМ будет изменена командами Oracle unregistervm (без удаления) и registervm после подготовки драйвера с UAC. Это необратимая промежуточная операция при сбое. Убедитесь, что резервная копия хранится отдельно и выбран одноразовый Windows-хост. Продолжить?"
+            Return "ALPHA: Oracle will unregister (NEVER delete) and re-register one moved VM after UAC/driver preparation. A crash can leave the registration incomplete. Keep a separate verified backup and use a disposable Windows host. Continue?"
         Case "reopen"
             If $ru Then Return "Открыть Manager"
             Return "Reopen Manager"
@@ -60,6 +69,12 @@ Func _MSW_Text($key)
         Case "CONFIGURING"
             If $ru Then Return "Настройка переносимого профиля с обычными правами пользователя."
             Return "Configuring the portable profile with ordinary user rights."
+        Case "REBIND_UNREGISTER"
+            If $ru Then Return "Oracle снимает ТОЛЬКО старую запись UUID. Диски и снимки не удаляются."
+            Return "Oracle unregistering only the stale UUID. No virtual disks or snapshots deleted."
+        Case "REBIND_REGISTER"
+            If $ru Then Return "Oracle регистрирует исходный файл ВМ в новом каталоге."
+            Return "Oracle registering the same saved VM configuration at its new location."
         Case "CLEANUP_DECLINED"
             If $ru Then Return "Повышение прав отменено. Ресурсы сохранены. Нажмите «Завершить сессию», чтобы повторить очистку."
             Return "Elevation was declined. Resources retained. Click Finish session to retry cleanup."
@@ -117,6 +132,7 @@ Func _MSW_Show($root, $workspace)
     Local $stop = GUICtrlCreateButton(_MSW_Text("stop"), 266, 232, 228, 38)
     Local $reopen = GUICtrlCreateButton(_MSW_Text("reopen"), 512, 232, 228, 38)
     Local $recover = GUICtrlCreateButton(_MSW_Text("recover"), 20, 294, 228, 36)
+    Local $rebind = GUICtrlCreateButton(_MSW_Text("rebind"), 266, 294, 228, 36)
     Local $close = GUICtrlCreateButton(_MSW_Text("close"), 512, 294, 228, 36)
     Local $s = _MS_New($root, $workspace), $last = "", $tick = TimerInit(), $leftOwned = False
     GUISetState(@SW_SHOW, $h)
@@ -133,6 +149,20 @@ Func _MSW_Show($root, $workspace)
                 ; Never auto-delete services or guests. Every recovery needs
                 ; an explicit click AND a separate Windows consent action.
                 _MS_Recover($s)
+            Case $rebind
+                If Not _MS_RetryAllowed($s["state"], $s["detail"]) Then ContinueLoop
+                Local $plan = _PVR_Plan($root)
+                If $plan["status"] <> "READY" Then
+                    MsgBox(48, _MSW_Text("title"), _PVR_Text($plan), 0, $h)
+                    ContinueLoop
+                EndIf
+                Local $backup = FileSelectFolder(_MSW_Text("rebind_backup"), "", 0, "", $h)
+                If $backup == "" Then ContinueLoop
+                If MsgBox(0x34, _MSW_Text("title"), _PVR_Text($plan) & @CRLF & _
+                        _MSW_Text("rebind_confirm"), 0, $h) <> 6 Then ContinueLoop
+                ; _MS_Start re-checks the entire SHA-256 backup, stale UUID,
+                ; inactive guest state and same source AFTER confirmation.
+                _MS_Start($s, $backup)
             Case $close, $GUI_EVENT_CLOSE
                 Local $runningWorker = $s["worker"]
                 ; Disabling a GUI button never disables the window's native X.
@@ -173,6 +203,7 @@ Func _MSW_Show($root, $workspace)
             GUICtrlSetState($stop, ($canStop ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($reopen, ($canReopen ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($recover, ((($s["state"] == "IDLE" Or $s["state"] == "BLOCKED") And $s["separated"]) ? $GUI_ENABLE : $GUI_DISABLE))
+            GUICtrlSetState($rebind, ($canStart ? $GUI_ENABLE : $GUI_DISABLE))
             Local $workerNow = $s["worker"]
             Local $canClose = _MSW_MayProcessClose($workerNow) And ($s["state"] == "IDLE" Or $s["state"] == "CLEAN" Or _
                 $s["state"] == "BLOCKED" Or $s["state"] == "MANAGER_OPEN" Or _

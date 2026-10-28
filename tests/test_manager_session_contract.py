@@ -88,6 +88,23 @@ class ManagerSessionContract(unittest.TestCase):
         self.assertIn('Local $canClose = _MSW_MayProcessClose($workerNow) And (', window)
         self.assertLess(window.index('If Not _MSW_MayProcessClose($runningWorker) Then ContinueLoop'),
                         window.index('If _MS_CanLeaveDeclined($s["state"]'))
+    def test_exact_owned_rebind_is_only_an_explicit_manager_session(self):
+        session=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
+        window=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
+        for phrase in ('Func _MS_Start(ByRef $s, $backup = "")',
+                       '_PVR_VerifyBackup($s["root"], $backup)',
+                       '_PVR_StillExact($s["root"], $proof)',
+                       '_PVR_Rebound($s["root"], $s["rebind"])',
+                       'Case "unregister"', 'unregistervm ', 'Case "register"',
+                       'registervm ', 'REBIND_UNREGISTER', 'REBIND_REGISTER',
+                       'post-rebind-configure-not-started', 'rebind-postcondition-unverified'):
+            self.assertIn(phrase,session)
+        for phrase in ('Case $rebind', 'FileSelectFolder(', 'rebind_confirm',
+                       '_MS_Start($s, $backup)', 'GUICtrlSetState($rebind'):
+            self.assertIn(phrase,window)
+        self.assertNotIn('unregistervm --delete',session)
+        self.assertNotIn('FileDelete(',session)
+
     def test_delayed_oracle_background_never_claims_clean_early(self):
         source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
         gui=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')

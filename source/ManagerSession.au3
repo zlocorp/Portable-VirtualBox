@@ -3,6 +3,7 @@
 #include "PortableApp.au3"
 #include "PortableCIVM.au3"
 #include "PrivilegeBoundary.au3"
+#include "PortableVmRebind.au3"
 ; Adapted Manager/VM lifecycle flow from ThatAdminGuy a035d06b12 and
 ; skyshay001 upstream PR #90 (CC BY-NC-SA 3.0; original notices in LICENSE.md).
 ; Replace shell/name waits with retained process handles and asynchronous UI.
@@ -91,6 +92,7 @@ Func _MS_New($root, $workspace)
     $s["guests"] = 0
     $s["uncertain"] = 0
     $s["worker_uncertain"] = 0
+    $s["rebind"] = _PVR_New("NONE", "not-requested")
     Return $s
 EndFunc
 
@@ -281,8 +283,19 @@ Func _MS_Recover(ByRef $s)
     Return True
 EndFunc
 
-Func _MS_Start(ByRef $s)
+Func _MS_Start(ByRef $s, $backup = "")
     If Not _MS_RetryAllowed($s["state"], $s["detail"]) Or $s["mutex"] <> 0 Then Return False
+    ; Never create an elevation request for a stale VM without a complete
+    ; byte-identical backup of all portable data. Standard Start is unchanged.
+    $s["rebind"] = _PVR_New("NONE", "not-requested")
+    If $backup <> "" Then
+        Local $proof = _PVR_VerifyBackup($s["root"], $backup)
+        If $proof["status"] <> "VERIFIED" Then
+            _MS_State($s, "BLOCKED", "rebind-" & $proof["reason"])
+            Return False
+        EndIf
+        $s["rebind"] = $proof
+    EndIf
     If Not _MS_Allowed($s["root"], $s["workspace"]) Then
         _MS_State($s, "BLOCKED", "disposable-host-only")
         Return False
@@ -355,6 +368,41 @@ Func _MS_Start(ByRef $s)
         Return False
     EndIf
     _MS_State($s, _MS_ConsentPhase($s["separated"], "Prepare"))
+    Return True
+EndFunc
+
+Func _MS_RebindStep(ByRef $s, $action)
+    Local $proof = $s["rebind"]
+    If Not IsMap($proof) Or $proof["status"] <> "VERIFIED" Or _
+            Not $s["owned"] Or $s["worker"]["handle"] <> 0 Then Return False
+    Local $profile = _PP_Inspect($s["root"])
+    If $profile["status"] <> "READY" Then Return False
+    Local $args = ""
+    Switch $action
+        Case "unregister"
+            ; The helper has prepared ONLY our pinned driver. Oracle below
+            ; runs with the same ordinary token as the portable user profile.
+            If Not _PVR_StillExact($s["root"], $proof) Then Return False
+            $args = "unregistervm " & $proof["uuid"] ; NO --delete
+        Case "register"
+            ; Never infer success of unregister from missing files. Caller
+            ; reaches here only after its exact child exited with code zero.
+            If _PVI_PathState($proof["new_path"]) <> 1 Or _
+                    _PBK_Hash($proof["new_path"]) <> $proof["machine_sha256"] Then Return False
+            $args = "registervm " & _MS_Quote($proof["new_path"])
+        Case Else
+            Return False
+    EndSwitch
+    Local $worker = _MP_Start($s["app_system"] & "\VBoxManage.exe", $args, _
+        $s["app_system"], $profile["profile"])
+    $s["worker"] = $worker
+    $s["worker_uncertain"] = 0
+    If $worker["status"] <> "STARTED" Then Return False
+    If $action == "unregister" Then
+        _MS_State($s, "REBIND_UNREGISTER", "exact-uuid-verified-backup-no-delete")
+    Else
+        _MS_State($s, "REBIND_REGISTER", "local-vbox-file-same-uuid")
+    EndIf
     Return True
 EndFunc
 
@@ -503,12 +551,47 @@ Func _MS_Tick(ByRef $s)
             If Not _MS_OpenManager($s) Then _MS_State($s, "FAILED", "manager-not-started")
             Return
         EndIf
+        If $state == "REBIND_UNREGISTER" Then
+            If Not _MS_RebindStep($s, "register") Then _MS_State($s, "FAILED", "rebind-register-not-started-no-guessed-recovery")
+            Return
+        EndIf
+        If $state == "REBIND_REGISTER" Then
+            If Not _PVR_Rebound($s["root"], $s["rebind"]) Then
+                _MS_State($s, "FAILED", "rebind-postcondition-unverified-retain-backup")
+                Return
+            EndIf
+            ; The user's default machine folder is configured only AFTER
+            ; Oracle has confirmed the relocated VM registration.
+            Local $reboundProfile = _PP_Inspect($s["root"])
+            If $reboundProfile["status"] <> "READY" Then
+                _MS_State($s, "FAILED", "rebind-profile-missing")
+                Return
+            EndIf
+            Local $nextConfigure = _MP_Start($s["app_system"] & "\VBoxManage.exe", _
+                'setproperty machinefolder "' & $reboundProfile["machines"] & '"', _
+                $s["app_system"], $reboundProfile["profile"])
+            $s["worker"] = $nextConfigure
+            $s["worker_uncertain"] = 0
+            If $nextConfigure["status"] <> "STARTED" Then
+                _MS_State($s, "FAILED", "post-rebind-configure-not-started")
+            Else
+                _MS_State($s, "CONFIGURING", "rebind-verified-configure-machine-folder")
+            EndIf
+            Return
+        EndIf
         Local $sup = _WinObsService("VBoxSup"), $sds = _WinObsService("VBoxSDS")
         If Not _PCVM_ExpectedSup($sup) Or Not _PVS_ExpectedSDS($sds, $s["app_system"] & "\VBoxSDS.exe") Then
             _MS_State($s, "FAILED", "unexpected-services-after-prepare")
             Return
         EndIf
         $s["owned"] = True
+        If $s["rebind"]["status"] == "VERIFIED" Then
+            ; The user confirmed this *specific* backup and UUID in the GUI.
+            ; No new elevated verb or arbitrary filesystem command is exposed.
+            If Not _MS_RebindStep($s, "unregister") Then _
+                _MS_State($s, "FAILED", "rebind-source-or-backup-changed")
+            Return
+        EndIf
         If $s["separated"] Then
             ; This is a USER preference, never an elevated helper command.
             Local $profile = _PP_Inspect($s["root"])

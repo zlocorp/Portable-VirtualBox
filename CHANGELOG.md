@@ -4,6 +4,12 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · explicit owned Manager-session rebind (2026-10-28)
+
+- The Manager window now offers **Repair moved VM** only as a separate user action. It requires an already-created SHA-256 verified full `data/` backup matching the *current* root byte-for-byte, a single exactly owned stale UUID and all local VDI/snapshot media. User confirmation and existing driver/UAC preflight happen before any mutation; the ordinary read-only/backup CLI cannot change registrations.
+- Under the owned Manager session, only ordinary-token `VBoxManage unregistervm EXACT_UUID` (**never `--delete`**) and `registervm EXACT_SAVED_VBOX` run in sequence using retained process handles. After Oracle confirms the newly registered UUID/media graph, the existing `setproperty machinefolder` flow opens Manager. A failed or uncertain subprocess blocks advancement and preserves the source VM, backup and protected system receipts for manual inspection. New privileged verbs and arbitrary elevated command execution are not introduced.
+- This is still an isolated ALPHA experiment. Code and source contracts do **not** by themselves establish successful Windows 11 UAC, real VM rebind acceptance or safe production migration.
+
 ### Added · user-facing moved-VM plan and verified offline backup (2026-10-27)
 
 - The **ordinary compiled main EXE** now offers `--plan-vm-rebind` (read-only, bilingual) and `--prepare-vm-rebind NEW_BACKUP_FOLDER`. Its normal GUI VM audit displays an exact stale-entry candidate. The planner accepts only a single relocated VM whose original `MachineEntry` points to an absent old local root and whose UUID matches an existing new-root `.vbox`; it checks all local media and snapshots, forbids foreign/unknown VBox activity, duplicate/unregistered machines, junctions and DTD/XXE.
