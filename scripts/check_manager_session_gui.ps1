@@ -72,6 +72,28 @@ public static class ManagerUiProbe {
       if(id==pid && IsWindowVisible(h) && GetWindow(h,4)==IntPtr.Zero) { found=h; return false; } return true;
     },IntPtr.Zero); return found;
   }
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)]
+  public static extern IntPtr SendMessageW(IntPtr h,uint msg,IntPtr wp,IntPtr lp);
+  public static IntPtr Dialog(int pid,string title) {
+    IntPtr found=IntPtr.Zero;
+    EnumWindows((h,p)=> { uint id; GetWindowThreadProcessId(h,out id);
+      var b=new StringBuilder(256);GetClassName(h,b,256);
+      if(id==pid && b.ToString()=="#32770" && IsWindowVisible(h) &&
+         Text(h).IndexOf(title,StringComparison.OrdinalIgnoreCase)>=0) {
+        found=h;return false;
+      }
+      return true;
+    },IntPtr.Zero);return found;
+  }
+  public static bool ChooseFolder(IntPtr dlg,string path) {
+    IntPtr str=Marshal.StringToHGlobalUni(path);
+    try {
+      // BFFM_SETSELECTIONW: send selected filesystem folder to the actual
+      // SHBrowseForFolder dialog. This emulates a UI choice, not a UAC grant.
+      SendMessageW(dlg,0x0467,(IntPtr)1,str);
+      return PostMessageW(dlg,0x0111,(IntPtr)1,IntPtr.Zero); // IDOK
+    } finally {Marshal.FreeHGlobal(str);}
+  }
   public static IntPtr Child(IntPtr window,string name,bool byClass) {
     IntPtr found=IntPtr.Zero;
     EnumChildWindows(window,(h,p)=> { var b=new StringBuilder(256); GetClassName(h,b,256);
@@ -104,6 +126,17 @@ function Await-State([Diagnostics.Process]$Process,[string]$Expected,[int]$Secon
         Start-Sleep -Milliseconds 150
     }
     throw "Timeout awaiting $Expected; actual $last"
+}
+function Wait-Dialog([Diagnostics.Process]$Process,[string]$Caption,[int]$Seconds=25) {
+    $timer=[Diagnostics.Stopwatch]::StartNew()
+    while($timer.Elapsed.TotalSeconds -lt $Seconds) {
+        $dlg=[ManagerUiProbe]::Dialog($Process.Id,$Caption)
+        if($dlg -ne [IntPtr]::Zero) { return $dlg }
+        $Process.Refresh()
+        if($Process.HasExited) { throw 'Controller exited during dialog without resolving operation' }
+        Start-Sleep -Milliseconds 125
+    }
+    throw ('Expected real interactive dialog: '+$Caption)
 }
 function Click-Button([Diagnostics.Process]$Process,[string]$Caption) {
     $button=[ManagerUiProbe]::Child((Window-For $Process),$Caption,$false)
@@ -181,7 +214,7 @@ function Start-Controller([string]$Label) {
     return Start-Process -FilePath $exe -ArgumentList '--lang en' -WorkingDirectory $root -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
 }
 $front=$null; $other=$null; $badFront=$null
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;guest_iso_attached=$false;guest_64bit_cpu_configured=$false;guest_screen_capture=$false;guest_disk_io_confirmed=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;guest_iso_attached=$false;guest_64bit_cpu_configured=$false;guest_screen_capture=$false;guest_disk_io_confirmed=$false;rebind_gui_started=$false;rebind_gui_confirmed=$false;rebind_snapshot_verified=$false;rebind_backup_verified=$false;rebind_owned_cleanup=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
 try {
     Assert-Clean 'initial baseline'
     if ($SeparatePrivileges) {
@@ -427,7 +460,76 @@ try {
     Click-Button $front 'Close'
     if ($MainLauncher) { Start-Sleep -Milliseconds 250;Click-Button $front 'Close' }
     if (-not $front.WaitForExit(10000) -or $front.ExitCode -ne $(if($MainLauncher){2}else{0})) { throw 'Completed frontend did not exit cleanly' }
-    Write-Host 'PASS: real compiled GUI Start/Finish/Reopen, real Oracle Manager, live guest preserved, second controller refused, two exact-owned cleanups, same UUID retained'
+    if ($MainLauncher -and -not $SeparatePrivileges -and -not $UnattendedConsentProbe) {
+        # Only on the freshly created disposable root after both full system
+        # cleanups. Turn the real Oracle-created registered VM + snapshot into
+        # the exact stale absolute-entry scenario observed after a USB move.
+        # The production executable must construct/check the backup itself.
+        Assert-Clean 'before moved-VM repair'
+        $oldFolder=Join-Path $env:RUNNER_TEMP ('Absent original folder '+[guid]::NewGuid().ToString('N'))
+        $oldConfig=Join-Path $oldFolder 'data\Machines\pvbox_manager_gui_fixture\pvbox_manager_gui_fixture.vbox'
+        if(Test-Path -LiteralPath $oldFolder) { throw 'Old source directory must be absent' }
+        $registry=Join-Path $root 'data\.VirtualBox\VirtualBox.xml'
+        $regDoc=[xml](Get-Content -LiteralPath $registry -Raw -Encoding UTF8)
+        $entries=$regDoc.SelectNodes('//*[local-name()="MachineEntry"]')
+        if($entries.Count -ne 1 -or $entries[0].GetAttribute('uuid').Trim('{}') -ine $uuid) {
+            throw 'Cannot locate precisely one known disposable Oracle VM registration'
+        }
+        $entries[0].SetAttribute('src',$oldConfig)
+        $regDoc.Save($registry)
+        $proof.rebind_gui_started=$true
+        $diskHashBefore=(Get-FileHash -LiteralPath $disk -Algorithm SHA256).Hash.ToLowerInvariant()
+        $snapshotFolder=Join-Path $root 'data\Machines\pvbox_manager_gui_fixture\Snapshots'
+        $beforeSnapshots=@(Get-ChildItem -LiteralPath $snapshotFolder -Filter '*.vdi' -File)
+        if($beforeSnapshots.Count -ne 1) { throw 'Expected exactly one Oracle differencing VDI before rebind' }
+        $snapshotHashBefore=(Get-FileHash -LiteralPath $beforeSnapshots[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        $backup=Join-Path $env:RUNNER_TEMP ('Verified moved-VM backup '+[guid]::NewGuid().ToString('N'))
+        $p=Start-Process -FilePath $exe -ArgumentList ('--prepare-vm-rebind "'+$backup+'"') -WorkingDirectory $root -PassThru -NoNewWindow
+        try {
+            if(-not $p.WaitForExit(120000) -or $p.ExitCode -ne 0) { throw 'Main EXE refused its exact non-destructive moved-VM backup' }
+        } finally {$p.Dispose()}
+        if(-not (Test-Path -LiteralPath (Join-Path $backup 'data\Machines\pvbox_manager_gui_fixture\Snapshots') -PathType Container)) {
+            throw 'Verified backup omitted snapshot data'
+        }
+        $proof.rebind_backup_verified=$true
+        # Exercise the ACTUAL Manager window button. Native folder selection
+        # and Yes-confirmation are driven as two distinct UI interactions.
+        $repair=Start-Controller 'rebind-controller'
+        $front=$repair
+        Open-SessionWindow $repair
+        Click-Button $repair 'Repair moved VM'
+        $dlg=Wait-Dialog $repair 'Select the existing verified full data/ backup folder.'
+        if(-not [ManagerUiProbe]::ChooseFolder($dlg,$backup)) { throw 'Cannot select original verified backup in Shell dialog' }
+        $confirmation=Wait-Dialog $repair 'Portable-VirtualBox'
+        if(-not [ManagerUiProbe]::PostMessageW($confirmation,0x0111,(IntPtr)6,[IntPtr]::Zero)) {
+            throw 'Cannot confirm explicit rebind prompt'
+        }
+        $proof.rebind_gui_confirmed=$true
+        Await-State $repair 'MANAGER_OPEN' 150
+        $repairManager=Observe-Manager
+        $rebound=Oracle ('showvminfo '+$uuid+' --machinereadable') 'rebound-registered-uuid'
+        if($rebound -notmatch ('(?mi)^UUID="'+[regex]::Escape($uuid)+'"')) { throw 'Rebound Oracle Manager lost exact UUID' }
+        $reboundSnapshots=Oracle ('snapshot '+$uuid+' list --machinereadable') 'rebound-snapshots'
+        if($reboundSnapshots -notmatch 'portable-baseline') { throw 'Rebound Oracle Manager lost original powered-off snapshot' }
+        if((Get-FileHash -LiteralPath $disk -Algorithm SHA256).Hash.ToLowerInvariant() -ne $diskHashBefore -or
+            (Get-FileHash -LiteralPath $beforeSnapshots[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $snapshotHashBefore) {
+            throw 'Approved rebind altered the base or differencing VDI'
+        }
+        $proof.rebind_snapshot_verified=$true
+        Click-Button $repair 'Finish session'
+        Await-State $repair 'CLEAN' 150
+        Assert-Clean 'post-rebind exact-owned cleanup'
+        $proof.rebind_owned_cleanup=$true
+        Click-Button $repair 'Close'
+        Start-Sleep -Milliseconds 250
+        Click-Button $repair 'Close'
+        if(-not $repair.WaitForExit(10000) -or $repair.ExitCode -ne 2) { throw 'Rebound main frontend did not close cleanly' }
+        if((Get-Content -LiteralPath (Join-Path $out 'rebind-controller.stdout.txt') -Raw -Encoding UTF8) -notmatch 'REBIND_UNREGISTER' -or
+           (Get-Content -LiteralPath (Join-Path $out 'rebind-controller.stdout.txt') -Raw -Encoding UTF8) -notmatch 'REBIND_REGISTER') {
+            throw 'Actual main GUI controller did not execute both sequential rebind states'
+        }
+    }
+    Write-Host 'PASS: compiled GUI real Alpine/VDI/snapshot, protected teardown and explicit moved-VM rebind via actual dialog + confirmation'
 } catch {
     $proof.error=$_.Exception.Message
     throw

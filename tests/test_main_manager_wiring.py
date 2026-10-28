@@ -100,6 +100,16 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('Remove-Item -LiteralPath $raw', fixture)
         self.assertIn('retention-days: 7', workflow)
 
+    def test_real_compiled_rebind_uses_actual_gui_dialog_and_safe_backup(self):
+        s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
+        for token in ('Repair moved VM','Wait-Dialog', 'ChooseFolder',
+                      'rebind_backup_verified=$true', 'rebind_gui_confirmed=$true',
+                      'rebind_owned_cleanup=$true', 'rebind_snapshot_verified=$true',
+                      'REBIND_UNREGISTER', 'REBIND_REGISTER', 'Assert-Clean'):
+            self.assertIn(token,s)
+        self.assertIn("Snapshot",s)
+        self.assertNotIn('unregistervm --delete',s)
+
     def test_windows_uses_main_exe_to_prove_real_start_stop(self):
         w=(R/'.github/workflows/manager-session.yml').read_text(encoding='utf-8')
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
