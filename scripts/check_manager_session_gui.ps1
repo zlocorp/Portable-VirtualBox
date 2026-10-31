@@ -174,21 +174,36 @@ function Choose-Folder([IntPtr]$Dialog,[string]$Path) {
     Add-Type -AssemblyName UIAutomationClient
     Add-Type -AssemblyName UIAutomationTypes
     $element=[Windows.Automation.AutomationElement]::FromHandle($Dialog)
+    $owner=[ManagerUiProbe]::Owner($Dialog)
+    if($owner -eq [IntPtr]::Zero -or $owner -ne [ManagerUiProbe]::Window($element.Current.ProcessId)) {
+        throw 'Folder picker is not owned by the current controller window'
+    }
     $types=[Windows.Automation.OrCondition]::new(
         [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Edit),
         [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::ComboBox))
     $controls=$element.FindAll([Windows.Automation.TreeScope]::Descendants,$types)
-    # 1148 is the common dialog's file/folder field. The English hosted
-    # runner also exposes its "Folder:" label on the contained edit control.
+    # The hosted Vista+ picker exposes native edt1 (1152); other common
+    # dialogs expose field 1148 or the "Folder:" label on the edit control.
     # Never write into the first Edit, which may be the search/address field.
     $candidates=@($controls | Where-Object {
         $_.Current.IsEnabled -and -not $_.Current.IsOffscreen -and
-        ($_.Current.AutomationId -eq '1148' -or $_.Current.Name.TrimEnd([char]':') -eq 'Folder')
+        ($_.Current.AutomationId -in @('1152','1148') -or $_.Current.Name.TrimEnd([char]':') -eq 'Folder')
     })
     $edits=@($candidates | Where-Object { $_.Current.ControlType -eq [Windows.Automation.ControlType]::Edit })
     if($edits.Count -eq 1) { $field=$edits[0] }
     elseif($edits.Count -eq 0 -and $candidates.Count -eq 1) { $field=$candidates[0] }
-    else { throw "Expected one visible folder path field; found $($edits.Count) edits / $($candidates.Count) candidates" }
+    else {
+        # Reuse the captured edit/combo collection and bound diagnostic output;
+        # UIA IDs/visibility may differ from native IDs on another runner image.
+        foreach($control in @($controls | Select-Object -First 24)) {
+            try {
+                $current=$control.Current
+                $item=[ordered]@{handle=$current.NativeWindowHandle;uia_id=$current.AutomationId;class=$current.ClassName;type=$current.ControlType.ProgrammaticName;name=$current.Name;enabled=$current.IsEnabled;offscreen=$current.IsOffscreen}
+                Write-Host ('Folder picker UIA: '+(ConvertTo-Json -InputObject $item -Compress))
+            } catch { Write-Host ('Folder picker UIA unavailable: '+$_.Exception.Message) }
+        }
+        throw "Expected one visible folder path field; found $($edits.Count) edits / $($candidates.Count) candidates"
+    }
     $value=[Windows.Automation.ValuePattern]$field.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
     if($value.Current.IsReadOnly) { throw 'Folder path field is read-only' }
     $value.SetValue($Path)

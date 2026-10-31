@@ -73,7 +73,12 @@ foreach($controller in $controllers) {
   ConvertTo-Json -InputObject $controllerItems -Depth 4 | Set-Content -LiteralPath (Join-Path $out ('controller-windows-'+$controller.Id+'.json')) -Encoding utf8
   Write-Host "Controller UI evidence: PID $($controller.Id), $($controllerItems.Count) windows/controls (128 item / 5 second limit)"
   $controllerItems | Where-Object { $_.TopLevel -or $_.Class -in @('Edit','Button','ComboBox','ComboBoxEx32','Static') } |
-   Select-Object -First 48 | Format-Table Handle,Parent,ControlId,Title,Class,Visible,Enabled,Owner -AutoSize
+   Select-Object -First 48 | ForEach-Object {
+    $title=[string]$_.Title
+    if($title.Length -gt 512) { $title=$title.Substring(0,512) }
+    $row=[ordered]@{handle=$_.Handle;parent=$_.Parent;owner=$_.Owner;id=$_.ControlId;class=$_.Class;visible=$_.Visible;enabled=$_.Enabled;title=$title}
+    Write-Host ('Controller UI: '+(ConvertTo-Json -InputObject $row -Compress))
+   }
  } catch { Write-Warning ('Controller UI evidence unavailable: '+$_.Exception.Message) }
 }
 $items=@()
