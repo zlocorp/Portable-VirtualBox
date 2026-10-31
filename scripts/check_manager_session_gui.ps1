@@ -297,7 +297,9 @@ function Oracle([string]$Arguments,[string]$Label) {
             if ($p.ExitCode -ne 0) { throw "Fixture $Label failed: $(Get-Content -LiteralPath $err -Raw)" }
         } finally { $p.Dispose() }
     } finally { [Environment]::SetEnvironmentVariable('VBOX_USER_HOME',$old,'Process') }
-    return [string](Get-Content -LiteralPath $log -Raw)
+    # Get-Content -Raw emits no pipeline object for a zero-byte file. Read
+    # stdout as a real string; a missing or unreadable file must still throw.
+    return [IO.File]::ReadAllText($log,[Text.Encoding]::UTF8)
 }
 function Observe-Manager {
     $found=@(Get-Process -Name VirtualBox -ErrorAction Stop)
@@ -757,7 +759,7 @@ try {
             throw 'Inter-command fixture requires the exact powered-off VM'
         }
         $null=Oracle ('unregistervm '+$uuid) 'reproduce-inter-command-unregister'
-        $remaining=Oracle 'list vms' 'inter-command-registered-vms'
+        [string]$remaining=Oracle 'list vms' 'inter-command-registered-vms'
         if($remaining.Trim() -ne '') { throw 'Oracle did not leave the expected empty VM registration' }
         Click-Button $repeat 'Finish session'
         Await-State $repeat 'CLEAN' 150
