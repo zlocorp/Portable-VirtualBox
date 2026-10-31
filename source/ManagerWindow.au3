@@ -34,8 +34,8 @@ Func _MSW_Text($key)
             If $ru Then Return "Выберите заранее созданную проверенную резервную копию data/."
             Return "Select the existing verified full data/ backup folder."
         Case "rebind_confirm"
-            If $ru Then Return "ALPHA: регистрация одной перенесенной ВМ будет изменена командами Oracle unregistervm (без удаления) и registervm после подготовки драйвера с UAC. Это необратимая промежуточная операция при сбое. Убедитесь, что резервная копия хранится отдельно и выбран одноразовый Windows-хост. Продолжить?"
-            Return "ALPHA: Oracle will unregister (NEVER delete) and re-register one moved VM after UAC/driver preparation. A crash can leave the registration incomplete. Keep a separate verified backup and use a disposable Windows host. Continue?"
+            If $ru Then Return "ALPHA: выполнить показанный режим исправления регистрации одной перенесенной ВМ после подготовки драйвера с UAC? Диски и снимки не удаляются. После сбоя регистрация может остаться незавершённой; для продолжения потребуется эта исходная резервная копия. Сохраните её отдельно и используйте одноразовый Windows-хост. Продолжить?"
+            Return "ALPHA: perform the displayed registration repair mode for this one moved VM after UAC/driver preparation? No virtual disks or snapshots will be deleted. A crash can leave registration incomplete; resuming requires this original backup. Keep it separately and use a disposable Windows host. Continue?"
         Case "reopen"
             If $ru Then Return "Открыть Manager"
             Return "Reopen Manager"
@@ -151,18 +151,18 @@ Func _MSW_Show($root, $workspace)
                 _MS_Recover($s)
             Case $rebind
                 If Not _MS_RetryAllowed($s["state"], $s["detail"]) Then ContinueLoop
-                Local $plan = _PVR_Plan($root)
-                If $plan["status"] <> "READY" Then
+                Local $backup = FileSelectFolder(_MSW_Text("rebind_backup"), "", 0, "", $h) ; documented default; Vista+ uses the modern folder picker
+                If $backup == "" Then ContinueLoop
+                Local $plan = _PVR_VerifyBackup($root, $backup)
+                If $plan["status"] <> "VERIFIED" Then
                     MsgBox(48, _MSW_Text("title"), _PVR_Text($plan), 0, $h)
                     ContinueLoop
                 EndIf
-                Local $backup = FileSelectFolder(_MSW_Text("rebind_backup"), "", 0x11, "", $h) ; filesystem folders only + editable path
-                If $backup == "" Then ContinueLoop
                 If MsgBox(0x34, _MSW_Text("title"), _PVR_Text($plan) & @CRLF & _
                         _MSW_Text("rebind_confirm"), 0, $h) <> 6 Then ContinueLoop
-                ; _MS_Start re-checks the entire SHA-256 backup, stale UUID,
-                ; inactive guest state and same source AFTER confirmation.
-                _MS_Start($s, $backup)
+                ; Re-read and compare this exact displayed proof AFTER consent,
+                ; before preparing a helper or creating any Oracle child.
+                _MS_Start($s, $backup, $plan)
             Case $close, $GUI_EVENT_CLOSE
                 Local $runningWorker = $s["worker"]
                 ; Disabling a GUI button never disables the window's native X.

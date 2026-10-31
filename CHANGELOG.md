@@ -4,6 +4,13 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed and extended · explicit moved-VM repair (2026-10-31)
+
+- Fixed the Windows GUI acceptance harness at the actual failing boundary: the modern folder picker is driven through its real editable path and enabled action button, with path readback and dialog transition checks. The former helper sent a legacy Shell message with a pointer from another process and treated message queuing as a completed folder choice. Existing deadlines and confirmation requirements remain enforced; failure diagnostics now include the launcher and its owned dialogs.
+- Repair confirmation is bound to the verified backup, UUID, source/destination paths and intended action, and is revalidated before driver preparation. Cancelling folder selection or answering No performs no registration or system mutation.
+- The same original full backup can identify a verified interrupted unregister/register sequence. If the current registry has no entry and the original VM files still match, explicit repair performs register only. Already-local registration requires no change; ambiguity, changed VM data, reappearing old paths and unsupported saved state are refused. Backup bytes are preserved; only a narrow list of Oracle profile registry/log changes is allowed when comparing a resumed source.
+- Strengthened postconditions and native regressions cover VM/snapshot/media identity and file integrity. The real Manager GUI scenario checks refusal, confirmation, repeat invocation, registration of a real Oracle-unregistered VM, preserved base/differencing VDI hashes, retained backup and exact-owned cleanup. The reconstructed inter-command state does not certify arbitrary power loss. Windows 10/11 interactive UAC and workstation acceptance remain open; execution results are tracked in Draft PR #7.
+
 ### Added · explicit owned Manager-session rebind (2026-10-28)
 
 - The Manager window now offers **Repair moved VM** only as a separate user action. It requires an already-created SHA-256 verified full `data/` backup matching the *current* root byte-for-byte, a single exactly owned stale UUID and all local VDI/snapshot media. User confirmation and existing driver/UAC preflight happen before any mutation; the ordinary read-only/backup CLI cannot change registrations.

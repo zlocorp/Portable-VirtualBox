@@ -104,7 +104,7 @@ class MainManagerWiring(unittest.TestCase):
 
     def test_real_compiled_rebind_uses_actual_gui_dialog_and_safe_backup(self):
         s=(R/'scripts/check_manager_session_gui.ps1').read_text(encoding='utf-8')
-        for token in ('Repair moved VM','Wait-Dialog', 'ChooseFolder',
+        for token in ('Repair moved VM','Wait-Dialog', 'Choose-Folder',
                       'rebind_backup_verified=$true', 'rebind_gui_confirmed=$true',
                       'rebind_owned_cleanup=$true', 'rebind_snapshot_verified=$true',
                       'REBIND_UNREGISTER', 'REBIND_REGISTER', 'Assert-Clean'):

@@ -11,6 +11,9 @@ on:
       - tests/test_main_manager_wiring.py
       - source/ManagedProcess.au3
       - source/ManagerSession.au3
+      - source/PortableVmRebind.au3
+      - source/PortableVmInventory.au3
+      - source/PortableDataBackup.au3
       - source/ManagerWindow.au3
       - source/Portable-VirtualBox-Session-Test.au3
       - scripts/manager_session_worker.ps1
@@ -115,6 +118,9 @@ jobs:
           $dest='results/manager-session'
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
           $proof=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
+          if (Test-Path -LiteralPath (Join-Path $proof 'manager-gui-proof.json')) {
+            Get-Content -LiteralPath (Join-Path $proof 'manager-gui-proof.json') -Raw
+          }
           if (Test-Path -LiteralPath $proof) {
             Get-ChildItem -LiteralPath $proof -File | Where-Object { $_.Extension -in @('.txt','.json','.png') -and $_.Length -lt 2097152 } |
               ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }

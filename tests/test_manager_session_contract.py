@@ -92,7 +92,7 @@ class ManagerSessionContract(unittest.TestCase):
         session=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
         window=(ROOT/'source/ManagerWindow.au3').read_text(encoding='utf-8-sig')
         self.assertIn('$state == "REBIND_UNREGISTER" Or $state == "REBIND_REGISTER" Or _',session)
-        for phrase in ('Func _MS_Start(ByRef $s, $backup = "")',
+        for phrase in ('Func _MS_Start(ByRef $s, $backup = "", $confirmedProof = 0)',
                        '_PVR_VerifyBackup($s["root"], $backup)',
                        '_PVR_StillExact($s["root"], $proof)',
                        '_PVR_Rebound($s["root"], $s["rebind"])',
@@ -101,7 +101,7 @@ class ManagerSessionContract(unittest.TestCase):
                        'post-rebind-configure-not-started', 'rebind-postcondition-unverified'):
             self.assertIn(phrase,session)
         for phrase in ('Case $rebind', 'FileSelectFolder(', 'rebind_confirm',
-                       '_MS_Start($s, $backup)', 'GUICtrlSetState($rebind'):
+                        '_MS_Start($s, $backup, $plan)', 'GUICtrlSetState($rebind'):
             self.assertIn(phrase,window)
         self.assertNotIn('unregistervm --delete',session)
         self.assertNotIn('FileDelete(',session)

@@ -283,15 +283,20 @@ Func _MS_Recover(ByRef $s)
     Return True
 EndFunc
 
-Func _MS_Start(ByRef $s, $backup = "")
+Func _MS_Start(ByRef $s, $backup = "", $confirmedProof = 0)
     If Not _MS_RetryAllowed($s["state"], $s["detail"]) Or $s["mutex"] <> 0 Then Return False
-    ; Never create an elevation request for a stale VM without a complete
-    ; byte-identical backup of all portable data. Standard Start is unchanged.
+    ; Never create an elevation request without the confirmed original full
+    ; backup and unchanged VM/launcher data. Only named Oracle profile churn
+    ; may differ during an interrupted repair. Standard Start is unchanged.
     $s["rebind"] = _PVR_New("NONE", "not-requested")
     If $backup <> "" Then
         Local $proof = _PVR_VerifyBackup($s["root"], $backup)
         If $proof["status"] <> "VERIFIED" Then
             _MS_State($s, "BLOCKED", "rebind-" & $proof["reason"])
+            Return False
+        EndIf
+        If Not _PVR_SameProof($confirmedProof, $proof) Then
+            _MS_State($s, "BLOCKED", "rebind-confirmed-proof-changed")
             Return False
         EndIf
         $s["rebind"] = $proof
@@ -374,8 +379,8 @@ EndFunc
 Func _MS_RebindStep(ByRef $s, $action)
     Local $proof = $s["rebind"]
     Local $active = $s["worker"]
-    If Not IsMap($proof) Or $proof["status"] <> "VERIFIED" Or _
-            Not $s["owned"] Or $active["handle"] <> 0 Then Return False
+    If Not _PVR_ProofValid($proof) Then Return False
+    If Not $s["owned"] Or $active["handle"] <> 0 Then Return False
     Local $profile = _PP_Inspect($s["root"])
     If $profile["status"] <> "READY" Then Return False
     Local $args = ""
@@ -383,13 +388,13 @@ Func _MS_RebindStep(ByRef $s, $action)
         Case "unregister"
             ; The helper has prepared ONLY our pinned driver. Oracle below
             ; runs with the same ordinary token as the portable user profile.
-            If Not _PVR_StillExact($s["root"], $proof) Then Return False
+            If $proof["mode"] <> "UNREGISTER_REGISTER" Or Not _PVR_StillExact($s["root"], $proof) Then Return False
             $args = "unregistervm " & $proof["uuid"] ; NO --delete
         Case "register"
-            ; Never infer success of unregister from missing files. Caller
-            ; reaches here only after its exact child exited with code zero.
-            If _PVI_PathState($proof["new_path"]) <> 1 Or _
-                    _PBK_Hash($proof["new_path"]) <> $proof["machine_sha256"] Then Return False
+            ; A continuation follows the exact successful unregister child;
+            ; a resume has separately confirmed the original backup proof.
+            ; Both require zero registrations and unchanged VM/backup bytes.
+            If Not _PVR_CanRegister($s["root"], $proof) Then Return False
             $args = "registervm " & _MS_Quote($proof["new_path"])
         Case Else
             Return False
@@ -591,8 +596,10 @@ Func _MS_Tick(ByRef $s)
         If $rebindProof["status"] == "VERIFIED" Then
             ; The user confirmed this *specific* backup and UUID in the GUI.
             ; No new elevated verb or arbitrary filesystem command is exposed.
-            If Not _MS_RebindStep($s, "unregister") Then _
-                _MS_State($s, "FAILED", "rebind-source-or-backup-changed")
+            Local $firstRebind = "unregister"
+            If $rebindProof["mode"] == "REGISTER_ONLY" Then $firstRebind = "register"
+            If Not _MS_RebindStep($s, $firstRebind) Then _
+                _MS_State($s, "FAILED", "rebind-first-command-not-started-retain-backup")
             Return
         EndIf
         If $s["separated"] Then
