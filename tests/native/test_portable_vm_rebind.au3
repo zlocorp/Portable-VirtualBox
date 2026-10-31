@@ -182,7 +182,30 @@ Check(_PVR_Plan($root)["status"]=="BLOCKED","external medium never accepted")
 Check(WriteXml($config,$head & $media & $tail),"restore normal medium graph")
 ; This repair scope excludes saved memory, including snapshot memory.
 Check(WriteXml($config,StringReplace($head,'<Machine name=','<Machine stateFile="Snapshots/memory.sav" name=') & $media & $tail),"write local saved-state reference")
-Check(_PVR_Plan($root)["reason"]=="saved-state-or-unsafe-ancillary-path","saved VM is refused before a backup promise")
+; Preserve the original public observation before the independent filesystem
+; observation. A different refusal must remain a failure with visible evidence.
+Local $savedPublic=_PVR_Plan($root)
+Local $savedCore=_PVR_ReadPlan($root)
+Local $savedReason="saved-state-or-unsafe-ancillary-path"
+If $savedPublic["status"]<>"BLOCKED" Or $savedPublic["reason"]<>$savedReason Or _
+        $savedCore["status"]<>"BLOCKED" Or $savedCore["reason"]<>$savedReason Then
+    ConsoleWriteError("SAVED-STATE public: status=" & $savedPublic["status"] & "; reason=" & $savedPublic["reason"] & @CRLF)
+    ConsoleWriteError("SAVED-STATE core follow-up: status=" & $savedCore["status"] & "; reason=" & $savedCore["reason"] & @CRLF)
+    Local $savedXml=_PVI_LoadXml($config), $savedStateCount=-1, $savedStateValue="<unavailable>"
+    Local $savedParsed=IsObj($savedXml)
+    If $savedParsed Then
+        Local $savedStates=$savedXml.selectNodes('//*[@stateFile]')
+        If IsObj($savedStates) Then
+            $savedStateCount=$savedStates.length
+            $savedStateValue="<none>"
+            If $savedStateCount>0 Then $savedStateValue=StringLeft(String($savedStates.item(0).getAttribute("stateFile")),512)
+        EndIf
+    EndIf
+    ConsoleWriteError("SAVED-STATE XML follow-up: parsed=" & $savedParsed & "; stateFile_count=" & $savedStateCount & "; first_stateFile=" & $savedStateValue & @CRLF)
+EndIf
+Check($savedPublic["status"]=="BLOCKED","saved VM public plan is blocked")
+Check($savedPublic["reason"]==$savedReason,"saved VM is refused before a backup promise")
+Check($savedCore["status"]=="BLOCKED" And $savedCore["reason"]==$savedReason,"saved VM filesystem plan is blocked for its saved state")
 Check(WriteXml($config,$head & $media & StringReplace($tail,'<Snapshot uuid=','<Snapshot stateFile="E:\Other\memory.sav" uuid=')),"write external snapshot saved state")
 Check(_PVR_Plan($root)["status"]=="BLOCKED","saved snapshot cannot bypass powered-off scope")
 Check(WriteXml($config,StringReplace($head,'snapshotFolder="Snapshots"','snapshotFolder="E:\Other"') & $media & $tail),"write external snapshot destination")
@@ -241,6 +264,16 @@ Check(WriteXml($registry,$regHead & $entry & $regTail),"restore original source 
 FileDelete($folder & "\Snapshots\snap.vdi")
 Check(_PVR_Plan($root)["status"]=="BLOCKED","missing snapshot disk blocks repair")
 Check(FileRead($config)==$head & $media & $tail,"source machine never rewritten")
+; Read-only telemetry after all assertions: each observation stands alone.
+; It never authorizes work, retries a failed authorization or replaces an
+; earlier result. Refusal diagnostics come from that same original call.
+Local $offlineAttempts=0, $offlineRejections=0, $offlineTelemetry=TimerInit()
+While $offlineAttempts<128 And TimerDiff($offlineTelemetry)<10000
+    Local $offlineObservation=_PBK_Offline()
+    $offlineAttempts+=1
+    If Not $offlineObservation Then $offlineRejections+=1
+WEnd
+ConsoleWrite("Offline observation telemetry: attempts=" & $offlineAttempts & "; rejections=" & $offlineRejections & "; no authorization decisions changed" & @CRLF)
 DirRemove($parent,1)
 ConsoleWrite("Portable moved VM plan assertions: " & $checks & "; failed: " & $failed & @CRLF)
 Exit ($failed>0)

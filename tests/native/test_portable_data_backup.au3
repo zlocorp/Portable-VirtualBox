@@ -7,6 +7,25 @@ Func Check($ok, $name)
         ConsoleWriteError("FAIL offline data backup: " & $name & @CRLF)
     EndIf
 EndFunc
+; Diagnostic formatting consumes already captured observations. It must keep
+; refusal status/error/PID visible without introducing another host query.
+Local $diagnostic=_PortableOfflineDiagnosticText("installation","UNKNOWN",-1,"installation-observation",5,0,"","open")
+Check(StringInStr($diagnostic,"installation status=UNKNOWN count=-1")>0 And StringInStr($diagnostic,"error=5")>0 And StringInStr($diagnostic,"stage=open")>0,"unknown installation diagnostic retains original status and error")
+$diagnostic=_PortableOfflineDiagnosticText("installation","PRESENT",1,"installation-observation",0)
+Check(StringInStr($diagnostic,"installation status=PRESENT count=1")>0,"present installation diagnostic remains a refusal")
+$diagnostic=_PortableOfflineDiagnosticText("services","PRESENT",2,"services-present",0,0,"VBoxSUP,VBoxSDS","complete")
+Check(StringInStr($diagnostic,"services status=PRESENT count=2")>0 And StringInStr($diagnostic,"name=VBoxSUP,VBoxSDS")>0,"service diagnostic retains count and fixed observed names")
+$diagnostic=_PortableOfflineDiagnosticText("processes","UNKNOWN",-1,"process-open",5,1234,"VBoxSVC.exe","open")
+Check(StringInStr($diagnostic,"processes status=UNKNOWN count=-1")>0 And StringInStr($diagnostic,"reason=process-open error=5 pid=1234")>0,"unknown process diagnostic retains failure reason error and PID")
+$diagnostic=_PortableOfflineDiagnosticText("processes","KNOWN",1,"matching-processes",0,4321,"VBoxSVC.exe","complete")
+Check(StringInStr($diagnostic,"processes status=KNOWN count=1")>0 And StringInStr($diagnostic,"pid=4321 name=VBoxSVC.exe")>0,"known process diagnostic identifies the observed blocker")
+$diagnostic=_PortableOfflineDiagnosticText("processes","UNKNOWN",-1,"process-read" & @CRLF & "injected",5)
+Check(StringRegExp($diagnostic,"[\x00-\x1f\x7f]")=0,"diagnostics cannot inject another log line")
+Local $longDiagnostic=""
+For $i=1 To 600
+    $longDiagnostic &= "x"
+Next
+Check(StringLen(_PortableOfflineDiagnosticText("processes","UNKNOWN",-1,$longDiagnostic,5))=512,"diagnostic record stays bounded")
 Local $parent = @TempDir & "\Portable Backup Тест " & @AutoItPID
 Local $root = $parent & "\root", $outside = $parent & "\destination"
 Check(DirCreate($root), "create source root")

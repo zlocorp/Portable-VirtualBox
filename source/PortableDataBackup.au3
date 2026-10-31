@@ -44,9 +44,11 @@ Func _PBK_PathState($path)
 EndFunc
 
 Func _PBK_Offline()
-    Local $installed = _PortableInstalledVBoxDetected()
+    ; Log the exact refusing observation; adapters retain their existing
+    ; return values and this guard keeps the same observation order.
+    Local $installed = _PortableInstalledVBoxDetected(True)
     If Not IsBool($installed) Or $installed Then Return False
-    Return _PortableCountExistingServices() = 0 And _PortableCountVirtualBoxProcesses() = 0
+    Return _PortableCountExistingServices(True) = 0 And _PortableCountVirtualBoxProcesses(True) = 0
 EndFunc
 
 Func _PBK_GrabSessionLock()

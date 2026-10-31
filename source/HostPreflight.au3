@@ -2,21 +2,47 @@
 #include "WindowsObservation.au3"
 ; Read-only host preflight. Missing, inaccessible and changed are distinct states.
 
-Func _PortableInstalledVBoxDetected()
+; Refusal diagnostics format the original observation only. Callers opt in;
+; fixed service/process basenames never expose image paths or account names.
+Func _PortableOfflineDiagnosticText($kind, $status, $count, $reason, $error, $pid = 0, $name = "", $stage = "")
+    Local $line = "Portable offline refusal: " & $kind & " status=" & $status & " count=" & $count & _
+        " reason=" & $reason & " error=" & $error & " pid=" & $pid & " name=" & $name & " stage=" & $stage
+    Return StringLeft(StringRegExpReplace($line, "[\x00-\x1f\x7f]", "?"), 512)
+EndFunc
+
+Func _PortableInstalledVBoxDetected($diagnostic = False)
     Local $r = _WinObsInstallation()
+    If $diagnostic And $r["status"] <> "ABSENT" Then
+        Local $count = -1
+        If $r["status"] == "PRESENT" Then $count = 1
+        ConsoleWrite(_PortableOfflineDiagnosticText("installation", $r["status"], $count, "installation-observation", _
+            $r["error"], 0, "", $r["stage"]) & @CRLF)
+    EndIf
     If $r["status"] == "PRESENT" Then Return True
     If $r["status"] == "ABSENT" Then Return False
     Return SetError(1, $r["error"], "")
 EndFunc
 
-Func _PortableCountExistingServices()
+Func _PortableCountExistingServices($diagnostic = False)
     Local $names[10] = ["VBoxDrv", "VBoxSUP", "VBoxUSB", "VBoxUSBMon", "VBoxSDS", "VBoxNetAdp", "VBoxNetAdp6", "VBoxNetLwf", "VBoxNetFlt", "VBoxNetNAT"]
-    Local $count = 0
+    Local $count = 0, $presentNames = ""
     For $i = 0 To UBound($names) - 1
         Local $r = _WinObsService($names[$i])
-        If $r["status"] == "UNKNOWN" Then Return SetError(1, $r["error"], -1)
-        If $r["status"] == "PRESENT" Then $count += 1
+        If $r["status"] == "UNKNOWN" Then
+            If $diagnostic Then ConsoleWrite(_PortableOfflineDiagnosticText("services", "UNKNOWN", -1, "service-observation", _
+                $r["error"], 0, $names[$i], $r["stage"]) & @CRLF)
+            Return SetError(1, $r["error"], -1)
+        EndIf
+        If $r["status"] == "PRESENT" Then
+            $count += 1
+            If $diagnostic Then
+                If $presentNames <> "" Then $presentNames &= ","
+                $presentNames &= $names[$i]
+            EndIf
+        EndIf
     Next
+    If $diagnostic And $count > 0 Then ConsoleWrite(_PortableOfflineDiagnosticText("services", "PRESENT", $count, _
+        "services-present", 0, 0, $presentNames, "complete") & @CRLF)
     Return $count
 EndFunc
 
@@ -35,6 +61,17 @@ Func _PortableProcessRole($name)
     Return ""
 EndFunc
 
+; Attach evidence to the existing UNKNOWN result without changing its counts
+; or collecting again. An unavailable close error is explicitly -1.
+Func _PortableActivityFailure(ByRef $r, $reason, $error, $pid, $name, $stage = "")
+    $r["reason"] = $reason
+    $r["error"] = $error
+    $r["pid"] = $pid
+    $r["name"] = $name
+    $r["stage"] = $stage
+    Return $r
+EndFunc
+
 Func _PortableActivityCollect()
     Local $r[]
     $r["status"] = "UNKNOWN"
@@ -42,6 +79,11 @@ Func _PortableActivityCollect()
     $r["guest"] = -1
     $r["background"] = -1
     $r["total"] = -1
+    $r["reason"] = ""
+    $r["error"] = 0
+    $r["pid"] = 0
+    $r["name"] = ""
+    $r["stage"] = ""
     Local $counts[]
     $counts["manager"] = 0
     $counts["guest"] = 0
@@ -49,18 +91,26 @@ Func _PortableActivityCollect()
     Local $names[10] = ["VirtualBox.exe", "VirtualBoxVM.exe", "VBoxSVC.exe", "VBoxManage.exe", "VBoxSDS.exe", "VBoxHeadless.exe", "VBoxNetDHCP.exe", "VBoxNetNAT.exe", "VBoxBalloonCtrl.exe", "VBoxAutostart.exe"]
     For $i = 0 To UBound($names) - 1
         Local $list = ProcessList($names[$i])
-        If @error Or Not IsArray($list) Then Return $r
+        Local $listError = @error
+        If $listError Or Not IsArray($list) Then Return _PortableActivityFailure($r, "process-list", $listError, 0, $names[$i], "list")
         For $k = 1 To $list[0][0]
             Local $token = _WinObsProcessOpen($list[$k][1])
-            If $token = 0 Then Return $r
+            Local $openError = @extended
+            If $token = 0 Then Return _PortableActivityFailure($r, "process-open", $openError, $list[$k][1], $names[$i], "open")
             Local $obs = _WinObsProcessRead($token)
             Local $closed = _WinObsProcessClose($token)
-            If Not $closed Or Not ($obs["status"] == "PRESENT") Then Return $r
+            If Not $closed Then Return _PortableActivityFailure($r, "process-close", -1, $list[$k][1], $names[$i], "close")
+            If Not ($obs["status"] == "PRESENT") Then Return _PortableActivityFailure($r, "process-read-" & $obs["status"], _
+                $obs["error"], $list[$k][1], $names[$i], $obs["stage"])
             Local $baseName = StringRegExpReplace($obs["image"], "^.*[\\/]", "")
-            If Not (StringLower($baseName) == StringLower($names[$i])) Then Return $r
+            If Not (StringLower($baseName) == StringLower($names[$i])) Then Return _PortableActivityFailure($r, "process-name-changed", -1, $list[$k][1], $names[$i], "identity")
             Local $role = _PortableProcessRole($baseName)
-            If $role == "" Then Return $r
+            If $role == "" Then Return _PortableActivityFailure($r, "process-role-unknown", -1, $list[$k][1], $names[$i], "role")
             $counts[$role] += 1
+            If $r["pid"] = 0 Then
+                $r["pid"] = $list[$k][1]
+                $r["name"] = $names[$i]
+            EndIf
         Next
     Next
     $r["status"] = "KNOWN"
@@ -68,12 +118,19 @@ Func _PortableActivityCollect()
     $r["guest"] = $counts["guest"]
     $r["background"] = $counts["background"]
     $r["total"] = $r["manager"] + $r["guest"] + $r["background"]
+    $r["reason"] = "no-matching-processes"
+    If $r["total"] > 0 Then $r["reason"] = "matching-processes"
+    $r["stage"] = "complete"
     ; This is a non-atomic read-only snapshot, NOT shutdown/cleanup authority.
     Return $r
 EndFunc
 
-Func _PortableCountVirtualBoxProcesses()
+Func _PortableCountVirtualBoxProcesses($diagnostic = False)
     Local $activity = _PortableActivityCollect()
+    If $diagnostic And ($activity["status"] <> "KNOWN" Or $activity["total"] <> 0) Then
+        ConsoleWrite(_PortableOfflineDiagnosticText("processes", $activity["status"], $activity["total"], $activity["reason"], _
+            $activity["error"], $activity["pid"], $activity["name"], $activity["stage"]) & @CRLF)
+    EndIf
     If $activity["status"] <> "KNOWN" Then Return SetError(1, 0, -1)
     Return $activity["total"]
 EndFunc

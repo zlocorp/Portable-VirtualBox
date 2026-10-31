@@ -118,6 +118,27 @@ public static class ManagerUiProbe {
       return true;
     },IntPtr.Zero);return found;
   }
+  public static IntPtr InformationButton(IntPtr dlg,int pid,IntPtr owner) {
+    uint dialogPid;GetWindowThreadProcessId(dlg,out dialogPid);
+    var dialogClass=new StringBuilder(256);GetClassName(dlg,dialogClass,256);
+    if(dialogPid!=pid || owner==IntPtr.Zero || Owner(dlg)!=owner ||
+       dialogClass.ToString()!="#32770" || !IsWindowVisible(dlg) || !IsWindowEnabled(dlg)) return IntPtr.Zero;
+    IntPtr found=IntPtr.Zero;int count=0;
+    EnumChildWindows(dlg,(h,p)=> {
+      if(GetParent(h)!=dlg || !IsWindowVisible(h)) return true;
+      var b=new StringBuilder(256);GetClassName(h,b,256);
+      if(b.ToString()!="Button") return true;
+      found=h;count++;
+      return count<2;
+    },IntPtr.Zero);
+    if(count!=1) return IntPtr.Zero;
+    uint buttonPid;GetWindowThreadProcessId(found,out buttonPid);
+    int id=GetDlgCtrlID(found);
+    // The actual hosted OK-only MsgBox uses child ID 2. Bind the unique
+    // visible OK button, not the MsgBox API's return-code assumption.
+    return buttonPid==pid && IsWindowEnabled(found) && (id==1 || id==2) &&
+      String.Equals(Text(found).Replace("&", "").Trim(),"OK",StringComparison.Ordinal) ? found : IntPtr.Zero;
+  }
   public static bool DialogTextContains(IntPtr dlg,string text) {
     bool found=false;
     EnumChildWindows(dlg,(h,p)=> { var b=new StringBuilder(256);GetClassName(h,b,256);
@@ -710,13 +731,16 @@ try {
         Choose-Folder $repeat $dlg $backup
         Wait-DialogClosed $repeat $dlg
         $information=Wait-Dialog $repeat 'Portable-VirtualBox'
-        if([ManagerUiProbe]::Owner($information) -ne (Window-For $repeat) -or
-           [ManagerUiProbe]::DialogButton($information,1,'OK') -eq [IntPtr]::Zero -or
+        $informationButton=[ManagerUiProbe]::InformationButton($information,$repeat.Id,(Window-For $repeat))
+        if($informationButton -eq [IntPtr]::Zero -or
            [ManagerUiProbe]::DialogButton($information,6,'Yes') -ne [IntPtr]::Zero -or
+           [ManagerUiProbe]::DialogButton($information,7,'No') -ne [IntPtr]::Zero -or
            -not [ManagerUiProbe]::DialogTextContains($information,'No relocated VM registration found. No changes required.')) {
-            throw 'Repeat repair did not refuse the already-local registration with an informational dialog'
+            throw "Expected the owned no-change informational dialog with exactly one visible enabled OK button (native ID 1 or 2); dialog HWND $information, controller PID $($repeat.Id)"
         }
-        Click-DialogButton $information 1 'OK'
+        if(-not [ManagerUiProbe]::PostMessageW($informationButton,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero)) {
+            throw "Cannot click informational OK button HWND $informationButton in dialog HWND $information"
+        }
         Wait-DialogClosed $repeat $information
         Assert-RebindUnchanged $repeat $repeatDataBefore $backupBefore $backup 'already-local repeat repair'
         $proof.rebind_repeat_refused=$true
