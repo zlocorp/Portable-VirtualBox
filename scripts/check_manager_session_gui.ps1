@@ -59,6 +59,7 @@ public static class ManagerUiProbe {
   [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder b,int n);
   [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr SendMessageTimeoutW(IntPtr h,uint m,UIntPtr w,StringBuilder b,uint flags,uint t,out UIntPtr r);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr SendMessageTimeoutW(IntPtr h,uint m,UIntPtr w,[MarshalAs(UnmanagedType.LPWStr)] string text,uint flags,uint t,out UIntPtr r);
   [DllImport("user32.dll", SetLastError=true)] public static extern bool PostMessageW(IntPtr h,uint m,IntPtr w,IntPtr l);
   [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h,uint cmd);
   public static string Text(IntPtr h) {
@@ -74,7 +75,28 @@ public static class ManagerUiProbe {
   }
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
   [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr h);
+  [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr h);
   public static IntPtr Owner(IntPtr h) { return GetWindow(h,4); }
+  public static IntPtr FolderEdit(IntPtr dlg,int pid) {
+    uint dialogPid;GetWindowThreadProcessId(dlg,out dialogPid);
+    if(dialogPid!=pid || !IsWindowVisible(dlg) || !IsWindowEnabled(dlg)) return IntPtr.Zero;
+    IntPtr found=IntPtr.Zero;int count=0;
+    EnumChildWindows(dlg,(h,p)=> {
+      if(GetParent(h)!=dlg || GetDlgCtrlID(h)!=1152) return true;
+      var b=new StringBuilder(256);GetClassName(h,b,256);
+      uint childPid;GetWindowThreadProcessId(h,out childPid);
+      if(b.ToString()=="Edit" && childPid==pid) { found=h;count++; }
+      return true;
+    },IntPtr.Zero);
+    return count==1 && IsWindowVisible(found) && IsWindowEnabled(found) ? found : IntPtr.Zero;
+  }
+  public static bool SetText(IntPtr h,string text) {
+    // WM_SETTEXT is a system message: user32 marshals this UTF-16 string
+    // into the other process. Both delivery and the Edit's result must pass.
+    UIntPtr result;
+    var delivered=SendMessageTimeoutW(h,0x000C,UIntPtr.Zero,text,3,1000,out result);
+    return delivered!=IntPtr.Zero && result!=UIntPtr.Zero;
+  }
   public static IntPtr Dialog(int pid,string title) {
     IntPtr found=IntPtr.Zero;
     EnumWindows((h,p)=> { uint id; GetWindowThreadProcessId(h,out id);
@@ -167,47 +189,23 @@ function Click-DialogButton([IntPtr]$Dialog,[int]$Id,[string]$Caption) {
         throw "Cannot click dialog button $Caption"
     }
 }
-function Choose-Folder([IntPtr]$Dialog,[string]$Path) {
-    # AutoIt uses the Vista+ common item dialog on supported Windows. Shell
-    # BFFM_SETSELECTION is a legacy browse-dialog message, and its pointer is
-    # not marshalled between this probe and the separate controller process.
-    Add-Type -AssemblyName UIAutomationClient
-    Add-Type -AssemblyName UIAutomationTypes
-    $element=[Windows.Automation.AutomationElement]::FromHandle($Dialog)
+function Choose-Folder([Diagnostics.Process]$Process,[IntPtr]$Dialog,[string]$Path) {
+    # The actual hosted picker has a native direct-child Edit (edt1=1152),
+    # which its Shell UIA descendant provider omits. Bind that exact control.
     $owner=[ManagerUiProbe]::Owner($Dialog)
-    if($owner -eq [IntPtr]::Zero -or $owner -ne [ManagerUiProbe]::Window($element.Current.ProcessId)) {
+    if($owner -eq [IntPtr]::Zero -or $owner -ne (Window-For $Process)) {
         throw 'Folder picker is not owned by the current controller window'
     }
-    $types=[Windows.Automation.OrCondition]::new(
-        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Edit),
-        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::ComboBox))
-    $controls=$element.FindAll([Windows.Automation.TreeScope]::Descendants,$types)
-    # The hosted Vista+ picker exposes native edt1 (1152); other common
-    # dialogs expose field 1148 or the "Folder:" label on the edit control.
-    # Never write into the first Edit, which may be the search/address field.
-    $candidates=@($controls | Where-Object {
-        $_.Current.IsEnabled -and -not $_.Current.IsOffscreen -and
-        ($_.Current.AutomationId -in @('1152','1148') -or $_.Current.Name.TrimEnd([char]':') -eq 'Folder')
-    })
-    $edits=@($candidates | Where-Object { $_.Current.ControlType -eq [Windows.Automation.ControlType]::Edit })
-    if($edits.Count -eq 1) { $field=$edits[0] }
-    elseif($edits.Count -eq 0 -and $candidates.Count -eq 1) { $field=$candidates[0] }
-    else {
-        # Reuse the captured edit/combo collection and bound diagnostic output;
-        # UIA IDs/visibility may differ from native IDs on another runner image.
-        foreach($control in @($controls | Select-Object -First 24)) {
-            try {
-                $current=$control.Current
-                $item=[ordered]@{handle=$current.NativeWindowHandle;uia_id=$current.AutomationId;class=$current.ClassName;type=$current.ControlType.ProgrammaticName;name=$current.Name;enabled=$current.IsEnabled;offscreen=$current.IsOffscreen}
-                Write-Host ('Folder picker UIA: '+(ConvertTo-Json -InputObject $item -Compress))
-            } catch { Write-Host ('Folder picker UIA unavailable: '+$_.Exception.Message) }
-        }
-        throw "Expected one visible folder path field; found $($edits.Count) edits / $($candidates.Count) candidates"
+    $field=[ManagerUiProbe]::FolderEdit($Dialog,$Process.Id)
+    if($field -eq [IntPtr]::Zero) {
+        throw "Expected one visible enabled direct Edit 1152 in picker HWND $Dialog / controller PID $($Process.Id)"
     }
-    $value=[Windows.Automation.ValuePattern]$field.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
-    if($value.Current.IsReadOnly) { throw 'Folder path field is read-only' }
-    $value.SetValue($Path)
-    if($value.Current.Value -cne $Path) { throw 'Native folder picker did not retain the exact backup path' }
+    if(-not [ManagerUiProbe]::SetText($field,$Path)) {
+        throw "WM_SETTEXT delivery/result not confirmed for folder Edit 1152 HWND $field"
+    }
+    if([ManagerUiProbe]::Text($field) -cne $Path) {
+        throw "Folder Edit 1152 HWND $field did not retain the exact backup path"
+    }
     Click-DialogButton $Dialog 1 'Select Folder'
 }
 function Wait-RebindConfirmation([Diagnostics.Process]$Process,[string]$Mode,[string]$Backup,[string]$Uuid) {
@@ -658,7 +656,7 @@ try {
 
         Click-Button $repair 'Repair moved VM'
         $dlg=Wait-Dialog $repair 'Select the existing verified full data/ backup folder.'
-        Choose-Folder $dlg $backup
+        Choose-Folder $repair $dlg $backup
         Wait-DialogClosed $repair $dlg
         $confirmation=Wait-RebindConfirmation $repair 'UNREGISTER_REGISTER' $backup $uuid
         Click-DialogButton $confirmation 7 'No'
@@ -669,7 +667,7 @@ try {
 
         Click-Button $repair 'Repair moved VM'
         $dlg=Wait-Dialog $repair 'Select the existing verified full data/ backup folder.'
-        Choose-Folder $dlg $backup
+        Choose-Folder $repair $dlg $backup
         Wait-DialogClosed $repair $dlg
         $confirmation=Wait-RebindConfirmation $repair 'UNREGISTER_REGISTER' $backup $uuid
         $proof.rebind_backup_selection_verified=$true
@@ -709,7 +707,7 @@ try {
         Open-SessionWindow $repeat
         Click-Button $repeat 'Repair moved VM'
         $dlg=Wait-Dialog $repeat 'Select the existing verified full data/ backup folder.'
-        Choose-Folder $dlg $backup
+        Choose-Folder $repeat $dlg $backup
         Wait-DialogClosed $repeat $dlg
         $information=Wait-Dialog $repeat 'Portable-VirtualBox'
         if([ManagerUiProbe]::Owner($information) -ne (Window-For $repeat) -or
@@ -768,7 +766,7 @@ try {
         Open-SessionWindow $resume
         Click-Button $resume 'Repair moved VM'
         $dlg=Wait-Dialog $resume 'Select the existing verified full data/ backup folder.'
-        Choose-Folder $dlg $backup
+        Choose-Folder $resume $dlg $backup
         Wait-DialogClosed $resume $dlg
         $confirmation=Wait-RebindConfirmation $resume 'REGISTER_ONLY' $backup $uuid
         Click-DialogButton $confirmation 6 'Yes'
