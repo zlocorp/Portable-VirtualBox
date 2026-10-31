@@ -20,7 +20,10 @@ Func Handles()
     Return $a[2]
 EndFunc
 
+Check($g_WinObsKernel32 <> -1 And $g_WinObsAdvapi32 <> -1, "explicit system observation DLL handles are ready")
 Check(_WinObsFailure("service", "open", 1060) == "ABSENT", "only missing service is absent")
+Check(_WinObsFailure("service", "open", 0) == "UNKNOWN", "lost service error is never absence")
+Check(_WinObsFailure("service", "open", 6) == "UNKNOWN", "invalid service handle is never absence")
 Check(_WinObsFailure("service", "manager", 1060) == "UNKNOWN", "SCM failure is not service absence")
 Check(_WinObsFailure("service", "open", 5) == "UNKNOWN", "access denied is unknown")
 Check(_WinObsFailure("service", "query", 1060) == "UNKNOWN", "query failure is not absence")
@@ -59,6 +62,24 @@ Check(Not _WinObsServiceStable($svc, $changed), "pending service is not stable")
 $changed = $svc
 $changed["status"] = "UNKNOWN"
 Check(Not _WinObsServiceStable($svc, $changed), "unknown service never stable")
+
+; Each sample is an independent regression assertion, never a retry-to-pass.
+; Unique missing names and invalid handles require exact documented errors.
+Local $probeHandles = Handles()
+Check($probeHandles > 0, "read-only probe handle baseline is available")
+Local $absentName = "PVBoxCaptureMissing_" & @AutoItPID & "_" & @MSEC
+For $i = 1 To 256
+    Local $absentProbe = _WinObsService($absentName & "_" & $i)
+    Check($absentProbe["status"] == "ABSENT" And $absentProbe["stage"] == "open" And $absentProbe["error"] = 1060, _
+        "missing service error sample " & $i & ": " & $absentProbe["status"] & "/" & $absentProbe["stage"] & "/" & $absentProbe["error"])
+    Local $invalidService = _WinObsServiceRead(0, "NativeInvalidHandle")
+    Check($invalidService["status"] == "UNKNOWN" And $invalidService["stage"] == "config" And $invalidService["error"] = 6, _
+        "invalid service handle sample " & $i & ": " & $invalidService["status"] & "/" & $invalidService["stage"] & "/" & $invalidService["error"])
+    Local $invalidProcess = _WinObsProcessFromHandle(0)
+    Check($invalidProcess["status"] == "UNKNOWN" And $invalidProcess["stage"] == "wait" And $invalidProcess["error"] = 6, _
+        "invalid process handle sample " & $i & ": " & $invalidProcess["status"] & "/" & $invalidProcess["stage"] & "/" & $invalidProcess["error"])
+Next
+Check(Handles() = $probeHandles, "repeated missing and invalid probes preserve handle balance")
 
 Local $startHandles = Handles()
 Local $token = _WinObsProcessOpen(@AutoItPID)

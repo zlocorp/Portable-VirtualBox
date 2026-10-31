@@ -11,6 +11,10 @@ on:
       - tests/test_main_manager_wiring.py
       - source/ManagedProcess.au3
       - source/ManagerSession.au3
+      - source/HostPreflight.au3
+      - source/WindowsObservation.au3
+      - source/WindowsServiceProbe.au3
+      - source/WindowsProcessProbe.au3
       - source/ManagerWindow.au3
       - source/Portable-VirtualBox-Session-Test.au3
       - scripts/manager_session_worker.ps1

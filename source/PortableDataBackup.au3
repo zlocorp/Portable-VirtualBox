@@ -52,12 +52,15 @@ Func _PBK_Offline()
 EndFunc
 
 Func _PBK_GrabSessionLock()
-    Local $a = DllCall("kernel32.dll", "handle", "CreateMutexW", "ptr", 0, "bool", True, "wstr", "Global\PortableVirtualBox.ManagerExperiment")
-    If @error Or Not IsArray($a) Or $a[0] = 0 Then Return 0
-    Local $h = $a[0]
-    Local $e = DllCall("kernel32.dll", "dword", "GetLastError")
-    If @error Or Not IsArray($e) Or $e[0] = 183 Then
-        DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $h)
+    Local $a = DllCall($g_WinObsKernel32, "handle", "CreateMutexW", "ptr", 0, "bool", True, "wstr", "Global\PortableVirtualBox.ManagerExperiment")
+    Local $dllerror = @error
+    Local $lockerror = _WinObsLastError()
+    Local $h = 0
+    If IsArray($a) Then $h = $a[0]
+    ; Only exact new-object success proves admission. Existing-but-unowned
+    ; objects and unavailable/unexpected errors never authorize a backup.
+    If $dllerror Or $h = 0 Or $lockerror <> 0 Then
+        If $h <> 0 Then DllCall($g_WinObsKernel32, "bool", "CloseHandle", "handle", $h)
         Return 0
     EndIf
     Return $h

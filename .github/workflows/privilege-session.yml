@@ -7,6 +7,10 @@ on:
       - .github/workflows/privilege-session.yml
       - source/ManagedProcess.au3
       - source/ManagerSession.au3
+      - source/HostPreflight.au3
+      - source/WindowsObservation.au3
+      - source/WindowsServiceProbe.au3
+      - source/WindowsProcessProbe.au3
       - source/PrivilegeBoundary.au3
       - source/PortableApp.au3
       - source/PortableProfile.au3

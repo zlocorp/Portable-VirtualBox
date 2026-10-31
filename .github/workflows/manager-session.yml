@@ -11,6 +11,10 @@ on:
       - tests/test_main_manager_wiring.py
       - source/ManagedProcess.au3
       - source/ManagerSession.au3
+      - source/HostPreflight.au3
+      - source/WindowsObservation.au3
+      - source/WindowsServiceProbe.au3
+      - source/WindowsProcessProbe.au3
       - source/PortableVmRebind.au3
       - source/PortableVmInventory.au3
       - source/PortableDataBackup.au3

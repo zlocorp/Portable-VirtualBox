@@ -51,16 +51,41 @@ unsigned frontend executables may trigger Windows publisher warnings; do not
 disable UAC, AV, HVCI or SmartScreen to bypass them.
 
 Before attempting any relocation, finish all guests and verify exact-owned
-driver cleanup. On an idle host, the normal main EXE now supports a read-only
-`--plan-vm-rebind` and verified `--prepare-vm-rebind NEW_BACKUP_FOLDER`
-for **one** local moved VM/snapshot chain. This makes a full data copy but
-**does not edit VirtualBox.xml or run Oracle to repair the stale entry**.
-Keep the original and backup intact until a separate supported registration
-step has been accepted on the isolated workstation. A moved VM with a stale VirtualBox.xml registration is NOT
-automatically rewritten or repaired by this alpha. Read-only VM portability
-audit warns about inconsistent paths; the four-mode Oracle rebind sequence has
-been verified **only** on fresh CI hosts
-([results](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40462477639)).
-Do not experiment with manual unregister/delete on valuable data.
+driver cleanup. After moving the entire portable root, use the normal main
+EXE's read-only `--plan-vm-rebind`, then
+`--prepare-vm-rebind "NEW_BACKUP_FOLDER"` on an idle host. Preparation requires
+**one** powered-off local VM/snapshot chain and an absent original VM path.
+It makes a verified full data copy and **does not edit VirtualBox.xml or run
+Oracle to repair the stale entry**. Keep that original backup intact.
+
+For the separate explicit repair acceptance on the disposable workstation:
+
+1. Open the Manager-session window under `--alpha-runtime` and select
+   **Repair moved VM**. First cancel folder selection and then try again and
+   answer **No** at confirmation. Both refusals must preserve registration,
+   VM files, backup and system resources.
+2. Select the original verified backup again. Check the displayed UUID, old
+   and new paths, backup location and `UNREGISTER_REGISTER` action before
+   confirming. The existing protected session prepares owned components;
+   ordinary-token Oracle unregisters without deletion and registers the
+   unchanged local VM. An unknown result must stop advancement.
+3. In Manager, verify the original VM and snapshot, then finish the session
+   and confirm owned cleanup. Repeat **Repair moved VM**: already-local
+   registration must report that no change is required, with no preparation.
+
+If an earlier repair stopped after unregister, first complete any required
+explicit owned-session recovery. A fresh controller may use the **same
+original backup** to confirm `REGISTER_ONLY` when the registry is valid and
+empty and all protected VM/backup data still match. This never authorizes
+deletion or another unregister. Changed or ambiguous data require inspection.
+Do not create an interruption by deleting XML entries or power-cutting a
+valuable host; arbitrary power-loss recovery remains unaccepted.
+
+The four directory/drive-letter relocation variants passed on disposable CI
+hosts ([results](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40462477639)).
+Current explicit GUI repair and reconstructed inter-command recovery results
+are tracked in [Draft PR #7](https://github.com/zlocorp/Portable-VirtualBox/pull/7).
+Saved-state migration, multiple-VM repair and physical cross-host transfer
+still require separate acceptance. No automatic registration repair is enabled.
 
 A real interactive isolated Windows host is required to complete acceptance.

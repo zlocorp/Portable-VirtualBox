@@ -2,6 +2,10 @@
 #include "RuntimeSafety.au3"
 ; Query-only Windows observations. No observation authorizes resource mutation.
 ; Default callers must not print private image paths or service account names.
+; Keep system modules loaded before any observation. Filename-based DllCall
+; loads/unloads around calls, which is unsuitable at a last-error boundary.
+Global Const $g_WinObsKernel32 = DllOpen(@SystemDir & "\kernel32.dll")
+Global Const $g_WinObsAdvapi32 = DllOpen(@SystemDir & "\advapi32.dll")
 
 Func _WinObsResult($kind, $status = "UNKNOWN", $error = 0, $stage = "")
     Local $r[]
@@ -19,7 +23,7 @@ Func _WinObsResult($kind, $status = "UNKNOWN", $error = 0, $stage = "")
 EndFunc
 
 Func _WinObsLastError()
-    Local $a = DllCall("kernel32.dll", "dword", "GetLastError")
+    Local $a = DllCall($g_WinObsKernel32, "dword", "GetLastError")
     If @error Then Return -1
     Return $a[0]
 EndFunc
@@ -62,11 +66,11 @@ EndFunc
 Func _WinObsInstallationKey($key, $view)
     ; HKEY_LOCAL_MACHINE is a sign-extended predefined handle on x64.
     ; KEY_QUERY_VALUE | explicitly selected WOW64 view, not KEY_ALL_ACCESS.
-    Local $a = DllCall("advapi32.dll", "long", "RegOpenKeyExW", "handle", Ptr(-2147483646), _
+    Local $a = DllCall($g_WinObsAdvapi32, "long", "RegOpenKeyExW", "handle", Ptr(-2147483646), _
         "wstr", $key, "dword", 0, "dword", BitOR(1, $view), "handle*", 0)
     If @error Then Return _WinObsError("installation", "open", -1)
     If $a[0] <> 0 Then Return _WinObsError("installation", "open", $a[0])
-    Local $close = DllCall("advapi32.dll", "long", "RegCloseKey", "handle", $a[5])
+    Local $close = DllCall($g_WinObsAdvapi32, "long", "RegCloseKey", "handle", $a[5])
     If @error Then Return _WinObsError("installation", "close", -1)
     If $close[0] <> 0 Then Return _WinObsError("installation", "close", $close[0])
     ; Even an empty stale vendor key is a review blocker, not permission to clean.

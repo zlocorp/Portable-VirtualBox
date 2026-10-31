@@ -30,6 +30,12 @@ class DataBackupContract(unittest.TestCase):
         self.assertNotIn('#RequireAdmin', backend)
         self.assertNotIn('DirRemove(', backend)
         self.assertNotIn('ProcessClose(', backend)
+        lock = backend.split('Func _PBK_GrabSessionLock()', 1)[1].split('\nEndFunc', 1)[0]
+        self.assertIn('DllCall($g_WinObsKernel32, "handle", "CreateMutexW"', lock)
+        self.assertLess(lock.index('Local $lockerror = _WinObsLastError()'), lock.index('Local $h = 0'))
+        self.assertIn('If $dllerror Or $h = 0 Or $lockerror <> 0 Then', lock)
+        self.assertIn('DllCall($g_WinObsKernel32, "bool", "CloseHandle", "handle", $h)', lock)
+        self.assertNotIn('WaitForSingleObject', lock)
 
     def test_locales_and_windows_ci_coverage(self):
         gui = (ROOT/'source/LauncherGui.au3').read_text(encoding='utf-8-sig')

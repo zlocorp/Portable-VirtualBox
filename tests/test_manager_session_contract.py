@@ -39,6 +39,16 @@ class ManagerSessionContract(unittest.TestCase):
         source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')
         self.assertIn('session-lock-create-failed',source)
         self.assertIn('session-lock-result-unknown',source)
+        for name in ('_MS_Start', '_MS_Recover'):
+            block=source.split('Func '+name+'(',1)[1].split('\nEndFunc',1)[0]
+            self.assertIn('DllCall($g_WinObsKernel32, "handle", "CreateMutexW"',block)
+            self.assertLess(block.index('Local $lockerror = _WinObsLastError()'),block.index('Local $h = 0'))
+            self.assertIn('If $lockerror <> 0 Then',block)
+            self.assertIn('DllCall($g_WinObsKernel32, "bool", "CloseHandle", "handle", $h)',block)
+            self.assertNotIn('WaitForSingleObject',block)
+        start=source.split('Func _MS_Start(',1)[1].split('\nEndFunc',1)[0]
+        self.assertIn('Local $installed = _PortableInstalledVBoxDetected(True)',start)
+        self.assertIn('If Not IsBool($installed) Or $installed Or _PortableCountExistingServices(True) <> 0 Or _PortableCountVirtualBoxProcesses(True) <> 0 Then',start)
 
     def test_failure_details_preserve_worker_observation_and_exact_exit_code(self):
         source=(ROOT/'source/ManagerSession.au3').read_text(encoding='utf-8-sig')

@@ -259,14 +259,18 @@ Func _MS_Recover(ByRef $s)
         _MS_State($s, "BLOCKED", "recovery-foreign-or-active-processes")
         Return False
     EndIf
-    Local $a = DllCall("kernel32.dll", "handle", "CreateMutexW", "ptr", 0, "bool", True, "wstr", "Global\PortableVirtualBox.ManagerExperiment")
-    If @error Or $a[0] = 0 Then
+    Local $a = DllCall($g_WinObsKernel32, "handle", "CreateMutexW", "ptr", 0, "bool", True, "wstr", "Global\PortableVirtualBox.ManagerExperiment")
+    Local $dllerror = @error
+    Local $lockerror = _WinObsLastError()
+    Local $h = 0
+    If IsArray($a) Then $h = $a[0]
+    If $dllerror Or $h = 0 Then
+        If $h <> 0 Then DllCall($g_WinObsKernel32, "bool", "CloseHandle", "handle", $h)
         _MS_State($s, "BLOCKED", "recovery-lock-failed")
         Return False
     EndIf
-    Local $h = $a[0], $e = DllCall("kernel32.dll", "dword", "GetLastError")
-    If @error Or $e[0] = 183 Then
-        DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $h)
+    If $lockerror <> 0 Then
+        DllCall($g_WinObsKernel32, "bool", "CloseHandle", "handle", $h)
         _MS_State($s, "BLOCKED", "another-session-or-unknown-lock")
         Return False
     EndIf
@@ -314,7 +318,7 @@ Func _MS_Start(ByRef $s, $backup = "", $confirmedProof = 0)
         _MS_State($s, "BLOCKED", "incomplete-app64")
         Return False
     EndIf
-    Local $installed = _PortableInstalledVBoxDetected()
+    Local $installed = _PortableInstalledVBoxDetected(True)
     If $s["separated"] Then
         Local $abandoned = _MS_FindRecoverable($s["root"])
         If $abandoned["status"] <> "NONE" Then
@@ -322,30 +326,33 @@ Func _MS_Start(ByRef $s, $backup = "", $confirmedProof = 0)
             Return False
         EndIf
     EndIf
-    If Not IsBool($installed) Or $installed Or _PortableCountExistingServices() <> 0 Or _PortableCountVirtualBoxProcesses() <> 0 Then
+    If Not IsBool($installed) Or $installed Or _PortableCountExistingServices(True) <> 0 Or _PortableCountVirtualBoxProcesses(True) <> 0 Then
         _MS_State($s, "BLOCKED", "existing-or-unknown-VirtualBox")
         Return False
     EndIf
     ; Cross-root exclusion before system changes. Existence is a refusal, not
     ; an invitation to acquire a mutex/resources left by another process.
-    Local $a = DllCall("kernel32.dll", "handle", "CreateMutexW", "ptr", 0, "bool", True, "wstr", "Global\PortableVirtualBox.ManagerExperiment")
-    If @error Then
+    Local $a = DllCall($g_WinObsKernel32, "handle", "CreateMutexW", "ptr", 0, "bool", True, "wstr", "Global\PortableVirtualBox.ManagerExperiment")
+    Local $dllerror = @error
+    Local $lockerror = _WinObsLastError()
+    Local $h = 0
+    If IsArray($a) Then $h = $a[0]
+    If $dllerror Or Not IsArray($a) Then
+        If $h <> 0 Then DllCall($g_WinObsKernel32, "bool", "CloseHandle", "handle", $h)
         _MS_State($s, "BLOCKED", "session-lock-create-failed-dll")
         Return False
     EndIf
-    Local $h = $a[0], $e = DllCall("kernel32.dll", "dword", "GetLastError")
-    If @error Then
-        If $h <> 0 Then DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $h)
-        _MS_State($s, "BLOCKED", "session-lock-result-unknown")
-        Return False
-    EndIf
     If $h = 0 Then
-        _MS_State($s, "BLOCKED", "session-lock-create-failed-win32-" & $e[0])
+        _MS_State($s, "BLOCKED", "session-lock-create-failed-win32-" & $lockerror)
         Return False
     EndIf
-    If $e[0] = 183 Then
-        DllCall("kernel32.dll", "bool", "CloseHandle", "handle", $h)
-        _MS_State($s, "BLOCKED", "another-session")
+    If $lockerror <> 0 Then
+        DllCall($g_WinObsKernel32, "bool", "CloseHandle", "handle", $h)
+        If $lockerror = 183 Then
+            _MS_State($s, "BLOCKED", "another-session")
+        Else
+            _MS_State($s, "BLOCKED", "session-lock-result-unknown-" & $lockerror)
+        EndIf
         Return False
     EndIf
     $s["mutex"] = $h

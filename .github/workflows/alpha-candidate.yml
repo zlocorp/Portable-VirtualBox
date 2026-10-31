@@ -7,6 +7,10 @@ on:
       - .github/workflows/alpha-candidate.yml
       - source/Portable-VirtualBox.au3
       - source/ManagerSession.au3
+      - source/HostPreflight.au3
+      - source/WindowsObservation.au3
+      - source/WindowsServiceProbe.au3
+      - source/WindowsProcessProbe.au3
       - source/PrivilegeBoundary.au3
       - source/ManagerWindow.au3
       - source/LauncherGui.au3

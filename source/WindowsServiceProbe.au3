@@ -3,7 +3,7 @@
 ; Service snapshots are not atomic ownership proofs or cleanup capabilities.
 
 Func _WinObsCloseService($h)
-    Local $a = DllCall("advapi32.dll", "bool", "CloseServiceHandle", "handle", $h)
+    Local $a = DllCall($g_WinObsAdvapi32, "bool", "CloseServiceHandle", "handle", $h)
     If @error Then Return False
     Return $a[0] <> 0
 EndFunc
@@ -37,10 +37,12 @@ EndFunc
 Func _WinObsServiceRead($h, $name)
     ; Microsoft documents an 8 KiB maximum for QUERY_SERVICE_CONFIG.
     Local $buffer = DllStructCreate("byte[8192]")
-    Local $a = DllCall("advapi32.dll", "bool", "QueryServiceConfigW", "handle", $h, _
+    Local $a = DllCall($g_WinObsAdvapi32, "bool", "QueryServiceConfigW", "handle", $h, _
         "struct*", $buffer, "dword", 8192, "dword*", 0)
-    If @error Then Return _WinObsError("service", "config", -1)
-    If Not $a[0] Then Return _WinObsError("service", "config", _WinObsLastError())
+    Local $dllerror = @error
+    Local $winerror = _WinObsLastError()
+    If $dllerror Then Return _WinObsError("service", "config", -1)
+    If Not $a[0] Then Return _WinObsError("service", "config", $winerror)
     Local $cfg = DllStructCreate("dword Type;dword Start;dword Error;ptr Image;ptr Group;dword Tag;ptr Dependencies;ptr Account;ptr Display", DllStructGetPtr($buffer))
     If @error Then Return _WinObsError("service", "config-buffer", -1)
     Local $r = _WinObsResult("service", "PRESENT")
@@ -58,10 +60,12 @@ Func _WinObsServiceRead($h, $name)
     Next
     If $r["image"] == "" Then Return _WinObsError("service", "empty-image", -1)
     Local $status = DllStructCreate("dword Type;dword State;dword Controls;dword Win32Exit;dword ServiceExit;dword Checkpoint;dword WaitHint;dword PID;dword Flags")
-    $a = DllCall("advapi32.dll", "bool", "QueryServiceStatusEx", "handle", $h, "int", 0, _
+    $a = DllCall($g_WinObsAdvapi32, "bool", "QueryServiceStatusEx", "handle", $h, "int", 0, _
         "struct*", $status, "dword", DllStructGetSize($status), "dword*", 0)
-    If @error Then Return _WinObsError("service", "status", -1)
-    If Not $a[0] Then Return _WinObsError("service", "status", _WinObsLastError())
+    $dllerror = @error
+    $winerror = _WinObsLastError()
+    If $dllerror Then Return _WinObsError("service", "status", -1)
+    If Not $a[0] Then Return _WinObsError("service", "status", $winerror)
     If DllStructGetData($status, "Type") <> $r["type"] Then Return _WinObsError("service", "changed-type", -1)
     $r["state"] = DllStructGetData($status, "State")
     If $r["state"] < 1 Or $r["state"] > 7 Then Return _WinObsError("service", "invalid-state", -1)
@@ -87,16 +91,19 @@ EndFunc
 Func _WinObsService($name)
     If Not IsString($name) Or StringLen($name) < 1 Or StringLen($name) > 256 Then Return _WinObsError("service", "name", 123)
     If StringRegExp($name, "[\\/\x00-\x1F]") Then Return _WinObsError("service", "name", 123)
-    Local $a = DllCall("advapi32.dll", "handle", "OpenSCManagerW", "ptr", 0, "ptr", 0, "dword", 0x0001)
-    If @error Then Return _WinObsError("service", "manager", -1)
-    If $a[0] = 0 Then Return _WinObsError("service", "manager", _WinObsLastError())
+    Local $a = DllCall($g_WinObsAdvapi32, "handle", "OpenSCManagerW", "ptr", 0, "ptr", 0, "dword", 0x0001)
+    Local $dllerror = @error
+    Local $winerror = _WinObsLastError()
+    If $dllerror Then Return _WinObsError("service", "manager", -1)
+    If $a[0] = 0 Then Return _WinObsError("service", "manager", $winerror)
     Local $manager = $a[0]
     ; SERVICE_QUERY_CONFIG (1) | SERVICE_QUERY_STATUS (4).
-    $a = DllCall("advapi32.dll", "handle", "OpenServiceW", "handle", $manager, "wstr", $name, "dword", 0x0005)
-    Local $dllerror = @error
+    $a = DllCall($g_WinObsAdvapi32, "handle", "OpenServiceW", "handle", $manager, "wstr", $name, "dword", 0x0005)
+    $dllerror = @error
+    $winerror = _WinObsLastError()
     If $dllerror Or $a[0] = 0 Then
         Local $error = -1
-        If Not $dllerror Then $error = _WinObsLastError()
+        If Not $dllerror Then $error = $winerror
         _WinObsCloseService($manager)
         Return _WinObsError("service", "open", $error)
     EndIf

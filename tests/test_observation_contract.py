@@ -42,8 +42,10 @@ class ObservationContractTests(unittest.TestCase):
         for path in paths:
             source = path.read_text(encoding='utf-8-sig')
             active = '\n'.join(line for line in source.splitlines() if not line.lstrip().startswith(';'))
-            calls = re.findall(r'DllCall\("[^"\n]+",\s*"[^"\n]+",\s*"([^"\n]+)"', active)
+            dll_arg = r'(?:"[^"\n]+"|\$g_WinObsKernel32|\$g_WinObsAdvapi32)'
+            calls = re.findall(r'DllCall\(' + dll_arg + r',\s*"[^"\n]+",\s*"([^"\n]+)"', active)
             self.assertTrue(calls, str(path))
+            self.assertEqual(len(calls), len(re.findall(r'\bDllCall\s*\(', active)), str(path))
             self.assertLessEqual(set(calls), allowed)
             self.assertIsNone(MUTATIONS.search(active), str(path))
 
