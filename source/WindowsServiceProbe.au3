@@ -34,13 +34,24 @@ Func _WinObsBufferString(ByRef $buffer, $p, $multi = False)
     Return SetError(1, 0, "")
 EndFunc
 
+; Capture the API result, AutoIt transport error and raw Win32 error in
+; one initializer statement. A later user-function call can yield to GUI/
+; Adlib processing and overwrite the thread's last-error slot.
+Func _WinObsServiceCapturedError($capture, $transport)
+    If $transport <> 0 Or Not IsArray($capture) Then Return -1
+    If UBound($capture, 0) <> 1 Then Return -1
+    If UBound($capture) <> 1 Then Return -1
+    If Not IsInt($capture[0]) Then Return -1
+    Return $capture[0]
+EndFunc
+
 Func _WinObsServiceRead($h, $name)
     ; Microsoft documents an 8 KiB maximum for QUERY_SERVICE_CONFIG.
     Local $buffer = DllStructCreate("byte[8192]")
     Local $a = DllCall($g_WinObsAdvapi32, "bool", "QueryServiceConfigW", "handle", $h, _
-        "struct*", $buffer, "dword", 8192, "dword*", 0)
-    Local $dllerror = @error
-    Local $winerror = _WinObsLastError()
+        "struct*", $buffer, "dword", 8192, "dword*", 0), $dllerror = @error, _
+        $captured = DllCall($g_WinObsKernel32, "dword", "GetLastError"), $captureError = @error
+    Local $winerror = _WinObsServiceCapturedError($captured, $captureError)
     If $dllerror Then Return _WinObsError("service", "config", -1)
     If Not $a[0] Then Return _WinObsError("service", "config", $winerror)
     Local $cfg = DllStructCreate("dword Type;dword Start;dword Error;ptr Image;ptr Group;dword Tag;ptr Dependencies;ptr Account;ptr Display", DllStructGetPtr($buffer))
@@ -60,12 +71,12 @@ Func _WinObsServiceRead($h, $name)
     Next
     If $r["image"] == "" Then Return _WinObsError("service", "empty-image", -1)
     Local $status = DllStructCreate("dword Type;dword State;dword Controls;dword Win32Exit;dword ServiceExit;dword Checkpoint;dword WaitHint;dword PID;dword Flags")
-    $a = DllCall($g_WinObsAdvapi32, "bool", "QueryServiceStatusEx", "handle", $h, "int", 0, _
-        "struct*", $status, "dword", DllStructGetSize($status), "dword*", 0)
-    $dllerror = @error
-    $winerror = _WinObsLastError()
-    If $dllerror Then Return _WinObsError("service", "status", -1)
-    If Not $a[0] Then Return _WinObsError("service", "status", $winerror)
+    Local $statusCall = DllCall($g_WinObsAdvapi32, "bool", "QueryServiceStatusEx", "handle", $h, "int", 0, _
+        "struct*", $status, "dword", DllStructGetSize($status), "dword*", 0), $statusError = @error, _
+        $statusCaptured = DllCall($g_WinObsKernel32, "dword", "GetLastError"), $statusCaptureError = @error
+    $winerror = _WinObsServiceCapturedError($statusCaptured, $statusCaptureError)
+    If $statusError Then Return _WinObsError("service", "status", -1)
+    If Not $statusCall[0] Then Return _WinObsError("service", "status", $winerror)
     If DllStructGetData($status, "Type") <> $r["type"] Then Return _WinObsError("service", "changed-type", -1)
     $r["state"] = DllStructGetData($status, "State")
     If $r["state"] < 1 Or $r["state"] > 7 Then Return _WinObsError("service", "invalid-state", -1)
@@ -113,23 +124,23 @@ Func _WinObsServiceQuery($name, $stable)
     If Not IsBool($stable) Then Return _WinObsError("service", "mode", 123)
     If Not IsString($name) Or StringLen($name) < 1 Or StringLen($name) > 256 Then Return _WinObsError("service", "name", 123)
     If StringRegExp($name, "[\\/\x00-\x1F]") Then Return _WinObsError("service", "name", 123)
-    Local $a = DllCall($g_WinObsAdvapi32, "handle", "OpenSCManagerW", "ptr", 0, "ptr", 0, "dword", 0x0001)
-    Local $dllerror = @error
-    Local $winerror = _WinObsLastError()
+    Local $a = DllCall($g_WinObsAdvapi32, "handle", "OpenSCManagerW", "ptr", 0, "ptr", 0, "dword", 0x0001), _
+        $dllerror = @error, $captured = DllCall($g_WinObsKernel32, "dword", "GetLastError"), $captureError = @error
+    Local $winerror = _WinObsServiceCapturedError($captured, $captureError)
     If $dllerror Then Return _WinObsError("service", "manager", -1)
     If $a[0] = 0 Then Return _WinObsError("service", "manager", $winerror)
     Local $manager = $a[0]
     ; SERVICE_QUERY_CONFIG (1) | SERVICE_QUERY_STATUS (4).
-    $a = DllCall($g_WinObsAdvapi32, "handle", "OpenServiceW", "handle", $manager, "wstr", $name, "dword", 0x0005)
-    $dllerror = @error
-    $winerror = _WinObsLastError()
-    If $dllerror Or $a[0] = 0 Then
+    Local $opened = DllCall($g_WinObsAdvapi32, "handle", "OpenServiceW", "handle", $manager, "wstr", $name, "dword", 0x0005), _
+        $openError = @error, $openCaptured = DllCall($g_WinObsKernel32, "dword", "GetLastError"), $openCaptureError = @error
+    $winerror = _WinObsServiceCapturedError($openCaptured, $openCaptureError)
+    If $openError Or $opened[0] = 0 Then
         Local $error = -1
-        If Not $dllerror Then $error = $winerror
+        If Not $openError Then $error = $winerror
         _WinObsCloseService($manager)
         Return _WinObsError("service", "open", $error)
     EndIf
-    Local $service = $a[0]
+    Local $service = $opened[0]
     Local $first = _WinObsServiceRead($service, $name)
     Local $second = $first
     If $stable Then $second = _WinObsServiceRead($service, $name)
