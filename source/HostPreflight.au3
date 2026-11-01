@@ -55,7 +55,7 @@ Func _PortableProcessRole($name)
             Return "manager"
         Case "virtualboxvm.exe", "vboxheadless.exe"
             Return "guest"
-        Case "vboxsvc.exe", "vboxmanage.exe", "vboxsds.exe", "vboxnetdhcp.exe", "vboxnetnat.exe", "vboxballoonctrl.exe", "vboxautostart.exe"
+        Case "vboxsvc.exe", "vboxmanageportable.exe", "vboxmanage.exe", "vboxsds.exe", "vboxnetdhcp.exe", "vboxnetnat.exe", "vboxballoonctrl.exe", "vboxautostart.exe"
             Return "background"
     EndSwitch
     Return ""
@@ -88,7 +88,7 @@ Func _PortableActivityCollect()
     $counts["manager"] = 0
     $counts["guest"] = 0
     $counts["background"] = 0
-    Local $names[10] = ["VirtualBox.exe", "VirtualBoxVM.exe", "VBoxSVC.exe", "VBoxManage.exe", "VBoxSDS.exe", "VBoxHeadless.exe", "VBoxNetDHCP.exe", "VBoxNetNAT.exe", "VBoxBalloonCtrl.exe", "VBoxAutostart.exe"]
+    Local $names[11] = ["VBoxManagePortable.exe", "VirtualBox.exe", "VirtualBoxVM.exe", "VBoxSVC.exe", "VBoxManage.exe", "VBoxSDS.exe", "VBoxHeadless.exe", "VBoxNetDHCP.exe", "VBoxNetNAT.exe", "VBoxBalloonCtrl.exe", "VBoxAutostart.exe"]
     For $i = 0 To UBound($names) - 1
         Local $list = ProcessList($names[$i])
         Local $listError = @error

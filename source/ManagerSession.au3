@@ -1,5 +1,6 @@
 #include-once
 #include "ManagedProcess.au3"
+#include "CliSessionGate.au3"
 #include "PortableApp.au3"
 #include "PortableCIVM.au3"
 #include "PrivilegeBoundary.au3"
@@ -81,6 +82,7 @@ Func _MS_New($root, $workspace)
     $s["worker"] = _MP_New()
     $s["manager"] = _MP_New()
     $s["mutex"] = 0
+    $s["cli_gate"] = _CG_New()
     $s["seen"] = False
     $s["owned"] = False
     $s["stopping"] = False
@@ -97,6 +99,19 @@ Func _MS_New($root, $workspace)
 EndFunc
 
 Func _MS_State(ByRef $s, $state, $detail = "")
+    Local $gate = $s["cli_gate"]
+    If $gate["handle"] <> 0 Then
+        Local $ready = $s["owned"] And _CG_StateAllows($state)
+        Local $ok = _CG_SetReady($gate, $ready)
+        If $ready And $ok Then $ok = _CG_Release($gate)
+        If Not $ok Then
+            _CG_SetReady($gate, False)
+            $state = "FAILED"
+            $detail = "portable-cli-gate-unverified-resources-retained"
+        EndIf
+        If $ok And ($state == "CLEAN" Or $state == "IDLE") Then _CG_Close($gate)
+        $s["cli_gate"] = $gate
+    EndIf
     If $s["state"] <> $state Or $s["detail"] <> $detail Then
         ConsoleWrite("Manager session: " & $state & " " & $detail & @CRLF)
         $s["clock"] = TimerInit()
@@ -367,6 +382,12 @@ Func _MS_Start(ByRef $s, $backup = "", $confirmedProof = 0)
     If $s["separated"] Then
         $s["session"] = _PB_Store() & "\pvbox-manager-" & @AutoItPID & "-" & $s["cycle"]
         $s["app_system"] = $s["session"] & "\app64"
+        Local $gate = _CG_Create(@AutoItPID, $s["cycle"])
+        $s["cli_gate"] = $gate
+        If $gate["handle"] = 0 Then
+            _MS_State($s, "FAILED", "portable-cli-gate-collision-or-error")
+            Return False
+        EndIf
     EndIf
     $s["seen"] = False
     $s["owned"] = False
@@ -670,6 +691,34 @@ Func _MS_Tick(ByRef $s)
         Return
     EndIf
     If $next == "READY_TO_CLEAN" Then
+        Local $gate = $s["cli_gate"]
+        If $gate["handle"] <> 0 Then
+            ; Close admission BEFORE taking the lease. If a client won the
+            ; race, retain resources until its exact process exit releases it.
+            If Not _CG_SetReady($gate, False) Then
+                _MS_State($s, "FAILED", "portable-cli-admission-unverified")
+                Return
+            EndIf
+            Local $lease = _CG_Acquire($gate)
+            $s["cli_gate"] = $gate
+            If $lease == "BUSY" Then
+                $s["quiet"] = 0
+                _MS_State($s, "WAIT_BACKGROUND", "portable-cli-active")
+                Return
+            EndIf
+            If $lease <> "HELD" Then
+                _MS_State($s, "FAILED", "portable-cli-abandoned-or-unknown-retain-resources")
+                Return
+            EndIf
+            ; A new command may have run between the first observation and
+            ; lease acquisition. Reobserve while holding the admission lock.
+            Local $afterLease = _PortableActivityCollect()
+            If $afterLease["status"] <> "KNOWN" Or $afterLease["total"] <> 0 Then
+                $s["quiet"] = 0
+                _MS_State($s, "WAIT_BACKGROUND", "portable-cli-reobserve")
+                Return
+            EndIf
+        EndIf
         If $s["quiet"] = 0 Then $s["quiet"] = TimerInit()
         _MS_State($s, "READY_TO_CLEAN")
         If TimerDiff($s["quiet"]) < 1500 Then Return

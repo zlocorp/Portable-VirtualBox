@@ -35,3 +35,10 @@ $arguments+=@((Join-Path $repo 'source\privilege\TokenFacts.cs'),(Join-Path $rep
 & $compiler @arguments
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $target -PathType Leaf)) { throw 'Fixed helper compilation failed' }
 Write-Host ('Helper built with embedded effect code/inventory for frontend SHA256 '+$hash)
+
+# Ordinary console adapter: same frontend/inventory pin, no embedded effects.
+$cli=Join-Path $out 'VBoxManagePortable.exe'
+& $compiler /nologo /target:exe /platform:x64 /optimize+ /reference:System.Web.Extensions.dll /reference:System.ServiceProcess.dll ("/out:"+$cli) (Join-Path $repo 'source/privilege/TokenFacts.cs') (Join-Path $repo 'source/cli/PortableCli.cs') (Join-Path $repo 'source/cli/PortableCli.Files.cs') $pin
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $cli -PathType Leaf)) { throw 'Portable CLI compilation failed' }
+Copy-Item -LiteralPath (Join-Path $repo 'source/cli/VBoxManage.cmd') -Destination (Join-Path $out 'VBoxManage.cmd') -Force
+Write-Host 'Build-paired ordinary-token portable CLI compiled (no elevation or system actions)'

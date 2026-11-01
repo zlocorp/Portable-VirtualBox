@@ -30,6 +30,8 @@ New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $store=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Experiment'
 $exe=Join-Path $root $(if($MainLauncher){'Portable-VirtualBox.exe'}else{'Portable-VirtualBox-Session-Test.exe'})
 $helper=Join-Path $root 'Portable-VirtualBox-Helper-Test.exe'
+$portableCli=Join-Path $root 'VBoxManagePortable.exe'
+$gateHost=$null
 Add-Type -Path @((Join-Path $repo 'source/privilege/TokenFacts.cs'),(Join-Path $PSScriptRoot 'MediumProcess.cs'))
 $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 $accessProbe=Join-Path $env:RUNNER_TEMP 'BoundaryWriteProbe.exe'
@@ -47,20 +49,43 @@ function Start-Medium([string]$Image,[string]$Arguments,[string]$Label) {
 }
 function Wait-Exit([Diagnostics.Process]$P,[int]$Expected,[string]$Label,[int]$Seconds=120) {
     if (-not $P.WaitForExit($Seconds*1000)) { throw "Timeout: $Label; no guessed termination or cleanup" }
-    if ($P.ExitCode -ne $Expected) { throw "$Label exit=$($P.ExitCode), expected=$Expected" }
+    if ($P.ExitCode -ne $Expected) {
+        $stderr=Join-Path $out ($Label+'.stderr.txt')
+        $detail=if(Test-Path -LiteralPath $stderr){[IO.File]::ReadAllText($stderr)}else{''}
+        throw "$Label exit=$($P.ExitCode), expected=$Expected; $detail"
+    }
 }
 function Helper-Action([string]$Action,[int]$Cycle,[int]$Expected,[string]$Label) {
     $p=Start-Process -FilePath $helper -ArgumentList ($Action+' '+$front.Id+' '+$Cycle) -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
     try { Wait-Exit $p $Expected $Label 170 } finally { $p.Dispose() }
 }
 function Oracle([string]$Arguments,[string]$Label) {
+    # Intentionally poison the inherited profile. The actual adapter must use
+    # only its root-local profile in the child and leave this sentinel intact.
     $previous=$env:VBOX_USER_HOME
     try {
-        $env:VBOX_USER_HOME=Join-Path $root 'data\.VirtualBox'
-        $p=Start-Medium (Join-Path $runtime 'VBoxManage.exe') $Arguments $Label
+        $env:VBOX_USER_HOME=Join-Path $out 'must-not-be-created-foreign-profile'
+        $p=Start-Medium $portableCli $Arguments $Label
         try { Wait-Exit $p 0 $Label 40 } finally { $p.Dispose() }
+        if(Test-Path -LiteralPath $env:VBOX_USER_HOME) { throw 'Portable CLI used the inherited foreign profile' }
     } finally { $env:VBOX_USER_HOME=$previous }
-    return [string](Get-Content -LiteralPath (Join-Path $out ($Label+'.stdout.txt')) -Raw)
+    return [IO.File]::ReadAllText((Join-Path $out ($Label+'.stdout.txt')),[Text.Encoding]::UTF8)
+}
+function Refuse-Cli([string]$Arguments,[string]$Label) {
+    $p=Start-Medium $portableCli $Arguments $Label
+    try { Wait-Exit $p 3 $Label 40 } finally {$p.Dispose()}
+}
+function Start-CliGate([int]$Cycle) {
+    # Existing fixture deliberately invokes the helper directly. Only this
+    # labeled test host stands in for ManagerSession's real native gate.
+    $p=Start-Medium (Join-Path $root 'CliGateHost.exe') ($front.Id.ToString()+' '+$Cycle) ('gate-'+$Cycle)
+    $timer=[Diagnostics.Stopwatch]::StartNew()
+    do {
+        $p.Refresh()
+        if($p.HasExited -or $timer.Elapsed.TotalSeconds -gt 15) {throw 'Fixture CLI gate not ready'}
+        Start-Sleep -Milliseconds 100
+    } until($p.MainWindowHandle -ne [IntPtr]::Zero)
+    return $p
 }
 function Clean-System {
     if (@(Get-Process | Where-Object ProcessName -match '^(VBox|VirtualBox)').Count -ne 0 -or
@@ -92,7 +117,7 @@ function Await-GuestLog([Diagnostics.Process]$Process) {
     }
     throw 'Fresh guest log never reached RUNNING'
 }
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';frontend=$(if($MainLauncher){'main-launcher'}else{'separate-experiment'});gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;guest_disk_write_checked=$false;guest_disk_survived_teardown=$false;guest_snapshot_preserved=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';frontend=$(if($MainLauncher){'main-launcher'}else{'separate-experiment'});gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;guest_disk_write_checked=$false;guest_disk_survived_teardown=$false;guest_snapshot_preserved=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true;portable_cli_verified=$false;portable_cli_no_session_refused=$false;portable_cli_cleanup_refused=$false;portable_cli_fixture_gate='test-only-native-gate-host'}
 $front=$null;$manager=$null;$guest=$null
 try {
     Clean-System
@@ -100,6 +125,8 @@ try {
     $front=Start-Medium $exe $(if($MainLauncher){'--lang en'}else{'--lang en --separate-privileges'}) 'frontend'
     # No GUI Start click: this fixture must not pretend to validate UAC delivery.
     if ($front.WaitForExit(500)) { throw 'Frontend did not remain live' }
+    Refuse-Cli 'list vms' 'cli-no-session'
+    $proof.portable_cli_no_session_refused=$true
     $payload=Join-Path $root 'app64\VBoxRT.dll';$manifest=Join-Path $root 'app64\.prepared.json'
     $original=[IO.File]::ReadAllBytes($payload);$originalManifest=[IO.File]::ReadAllBytes($manifest)
     try {
@@ -120,6 +147,9 @@ try {
         Helper-Action Prepare $cycle 0 ('prepare-'+$cycle)
         $session=Join-Path $store ('pvbox-manager-'+$front.Id+'-'+$cycle)
         $runtime=Join-Path $session 'app64'
+        Refuse-Cli 'list vms' ('cli-no-gate-'+$cycle)
+        $gateHost=Start-CliGate $cycle
+        Refuse-Cli 'unregistervm impossible --delete' ('cli-delete-refused-'+$cycle)
         $sds=Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS'
         if (([string]$sds.ImagePath).Trim().Trim('"') -ine (Join-Path $session 'app64\VBoxSDS.exe')) { throw 'SDS path is not protected' }
         $p=Start-Medium $accessProbe ('"'+$session+'"') ('deny-write-'+$cycle)
@@ -233,23 +263,36 @@ try {
                 $proof.guest_snapshot_preserved=$true
             }
         }
+        # Exercise the shipped .cmd entrypoint too (no CALL/re-expansion), not
+        # just its native adapter. The listed UUID must be our portable VM.
+        $batch=Join-Path $root 'VBoxManage.cmd'
+        $p=Start-Medium $env:ComSpec ('/d /s /c ""'+$batch+'" list vms"') ('cli-batch-'+$cycle)
+        try {Wait-Exit $p 0 ('cli-batch-'+$cycle) 40} finally {$p.Dispose()}
+        $batchList=[IO.File]::ReadAllText((Join-Path $out ('cli-batch-'+$cycle+'.stdout.txt')),[Text.Encoding]::UTF8)
+        if($batchList -notmatch [regex]::Escape($uuid)) {throw 'Batch wrapper selected a different VM registry'}
         # Do not race Oracle's deferred window geometry save with teardown.
         Start-Sleep -Milliseconds 1000
         if (-not $manager.CloseMainWindow()) { throw 'Manager did not accept ordinary close' }
         Wait-Exit $manager 0 'Manager close' 40
         $manager.Dispose();$manager=$null
+        if(-not $gateHost.CloseMainWindow()) {throw 'Fixture CLI gate did not close admission'}
+        Wait-Exit $gateHost 0 ('gate-'+$cycle) 20
+        $gateHost.Dispose();$gateHost=$null
         Await-Idle
         Helper-Action Finish $cycle 0 ('finish-'+$cycle)
         Clean-System
+        Refuse-Cli 'list vms' ('cli-after-cleanup-'+$cycle)
+        $proof.portable_cli_cleanup_refused=$true
         $receipt=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw | ConvertFrom-Json
         if (-not $receipt.cleanup_verified -or -not $receipt.driver_package_removed -or $receipt.cleanup_basis -ne 'PrivilegedSession') { throw 'Cleanup not verified' }
         if ((Test-Path (Join-Path $session 'app64')) -or (Test-Path (Join-Path $session 'code')) -or -not (Test-Path (Join-Path $session 'payload-removed.json'))) { throw 'Protected payload not removed' }
     }
-    $proof.uuid=$uuid;$proof.two_cycles_clean=$true
+    $proof.uuid=$uuid;$proof.two_cycles_clean=$true;$proof.portable_cli_verified=$true
     if (-not $front.CloseMainWindow()) { throw 'Idle frontend could not close' }
     Wait-Exit $front $(if($MainLauncher){2}else{0}) 'frontend close' 10
     Write-Host ('PASS: main/medium helper + protected Oracle guest + two clean sessions; Linux VDI write/readback=' + $proof.guest_disk_survived_teardown + '; UAC NOT VERIFIED')
 } catch { $proof.error=$_.Exception.Message;throw } finally {
     $proof | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'helper-boundary-proof.json') -Encoding utf8
+    if ($null -ne $gateHost) { $gateHost.Dispose() }
     if ($null -ne $front) { $front.Dispose() };if ($null -ne $manager) { $manager.Dispose() };if ($null -ne $guest) { $guest.Dispose() }
 }

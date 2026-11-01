@@ -1,5 +1,6 @@
 #include-once
 #include "ManagerSession.au3"
+#include "HostDiagnostics.au3"
 #include "LauncherSettings.au3"
 #include <GUIConstantsEx.au3>
 #include <EditConstants.au3>
@@ -123,7 +124,7 @@ Func _MSW_MayProcessClose($worker)
 EndFunc
 
 Func _MSW_Show($root, $workspace)
-    Local $h = GUICreate(_MSW_Text("title"), 760, 360)
+    Local $h = GUICreate(_MSW_Text("title"), 760, 570)
     Local $warning = GUICtrlCreateLabel(_MSW_Text("warning"), 20, 16, 720, 48)
     GUICtrlSetFont($warning, 10, 600, 0, "Segoe UI")
     Local $status = GUICtrlCreateEdit("", 20, 76, 720, 136, BitOR($ES_READONLY, $WS_VSCROLL))
@@ -135,6 +136,10 @@ Func _MSW_Show($root, $workspace)
     Local $rebind = GUICtrlCreateButton(_MSW_Text("rebind"), 266, 294, 228, 36)
     Local $close = GUICtrlCreateButton(_MSW_Text("close"), 512, 294, 228, 36)
     Local $s = _MS_New($root, $workspace), $last = "", $tick = TimerInit(), $leftOwned = False
+    Local $serviceRows = _PortableServiceCollect()
+    Local $serviceView = GUICtrlCreateEdit(_PortableServiceText($serviceRows), 20, 350, 720, 200, BitOR($ES_READONLY, $WS_VSCROLL))
+    GUICtrlSetFont($serviceView, 9, 400, 0, "Consolas")
+    Local $serviceTick = TimerInit(), $serviceLast = _PortableServiceText($serviceRows)
     GUISetState(@SW_SHOW, $h)
     While 1
         Local $event = GUIGetMsg()
@@ -192,6 +197,14 @@ Func _MSW_Show($root, $workspace)
         If TimerDiff($tick) > 250 Then
             _MS_Tick($s)
             $tick = TimerInit()
+        EndIf
+        ; Observational display only. Never used as cleanup authority.
+        If TimerDiff($serviceTick) > 2000 Then
+            $serviceRows = _PortableServiceCollect()
+            Local $serviceText = _PortableServiceText($serviceRows)
+            If $serviceText <> $serviceLast Then GUICtrlSetData($serviceView, $serviceText)
+            $serviceLast = $serviceText
+            $serviceTick = TimerInit()
         EndIf
         Local $display = $s["state"] & @CRLF & _MSW_Text($s["state"]) & @CRLF & $s["detail"]
         If $last <> $display Then

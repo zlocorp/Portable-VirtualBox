@@ -15,6 +15,9 @@ on:
       - source/PortableApp.au3
       - source/PortableProfile.au3
       - source/privilege/**
+      - source/cli/**
+      - source/CliSessionGate.au3
+      - source/HostDiagnostics.au3
       - scripts/build_session_helper.ps1
       - scripts/privileged_session_worker.ps1
       - tests/windows/**
@@ -104,6 +107,14 @@ jobs:
             Copy-Item -LiteralPath $exe -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Session-Test.exe')
           }
           Copy-Item -LiteralPath 'build/Portable-VirtualBox-Helper-Test.exe' -Destination (Join-Path $env:MANAGER_ROOT 'Portable-VirtualBox-Helper-Test.exe')
+          foreach($name in @('VBoxManagePortable.exe','VBoxManage.cmd')) {
+            Copy-Item -LiteralPath (Join-Path 'build' $name) -Destination (Join-Path $env:MANAGER_ROOT $name)
+          }
+          $gate=Join-Path $env:MANAGER_ROOT 'CliGateHost.exe'
+          $gateSource=(Resolve-Path 'tests/windows/CliGateHost.au3').Path
+          $p=Start-Process -FilePath $bins[0].FullName -ArgumentList ('/in "'+$gateSource+'" /out "'+$gate+'" /x64 /console /nopack') -PassThru -Wait -NoNewWindow
+          if ($p.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $gate)) { throw 'Test-only CLI gate host compilation failed' }
+
       - name: Require native Windows PowerShell 5.1 for protected worker
         shell: pwsh
         run: |

@@ -5,6 +5,7 @@ on:
     paths:
       - 'source/**'
       - 'tests/native/**'
+      - tests/windows/check_portable_cli.ps1
       - scripts/test-native.ps1
       - .github/workflows/native-tests.yml
   pull_request:
@@ -35,3 +36,6 @@ jobs:
       - name: Execute native policies, not VirtualBox
         shell: pwsh
         run: ./scripts/test-native.ps1 -AutoItRoot $env:AUTOIT_ROOT
+      - name: Execute portable CLI argument and receipt contracts
+        shell: pwsh
+        run: ./tests/windows/check_portable_cli.ps1
