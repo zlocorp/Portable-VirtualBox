@@ -8,6 +8,8 @@ Original source credits: **Michael Meyer (michaelm_007) and contributors**, and 
 | Source | Use |
 | --- | --- |
 | [Deac2](https://github.com/Deac2/Portable-VirtualBox), [PR #92](https://github.com/vboxme/Portable-VirtualBox/pull/92) | Settings/language UX and missing-folder/relocation scenarios, independently adapted in the modern launcher. |
+| [Deac2 NewMenuTest, c11f76a8](https://github.com/Deac2/Portable-VirtualBox_NewMenuTest/blob/c11f76a8d4d134f43b82c197c58bd500c9439a85/source/Portable-VirtualBox.au3#L829-L960) | Per-service status presentation, independently adapted in `HostDiagnostics.au3` with query-only snapshots, explicit unknown/absence separation and no inferred ownership. No legacy service-control or COM-activation code copied. |
+| [Upstream issue #103](https://github.com/vboxme/Portable-VirtualBox/issues/103) and portable VBoxManage wrapper UX | Independent session-bound CLI implementation in `source/cli/`, with build pairing and cleanup coordination. No PocketVBox source, binaries or artwork imported. |
 | [ThatAdminGuy, a035d06b12](https://github.com/ThatAdminGuy/portable-virtualbox/commit/a035d06b12), [skyshay001, PR #90](https://github.com/vboxme/Portable-VirtualBox/pull/90) | Manager/guest startup and shutdown flow adapted in `ManagerSession.au3` and `ManagerWindow.au3`; unsafe shell/name waits replaced with retained process handles and guest-aware cleanup. Tested in a separate disposable-host GUI, not yet a production UAC launcher. |
 | [bitamind, 4ffc9e097f](https://github.com/bitamind/Portable-VirtualBox/commit/4ffc9e097f) | Oracle-specific VBoxSDS registration commands, used as a research reference for our CI lifecycle. |
 

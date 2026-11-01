@@ -18,6 +18,10 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 **A usable diagnostic shell.** Native Russian/English GUI and UTF-8 CLI, remembered language with an explicit “Save language” action, a return to Windows language selection, readable failure reasons, copyable diagnostics and a concise About window. A temporary `--lang` selection never overwrites the saved preference.
 
+**Service snapshots for troubleshooting and tests.** `--diagnose-services` prints the same RU/EN ten-service inventory used in the GUI; `--diagnose-services-json` emits locale-independent schema 1 (`services`, `exit_code`). Each JSON row contains only `name`, `observation`, `state`, `win32_error` and `ownership`. Starting/stopping/pausing/resuming states remain visible in this read-only snapshot; strict runtime checks still require two identical stable observations. Error 1060 at service-open means absent; access denial or an unavailable result stays unknown. Non-absent ownership is `UNVERIFIED`, never inferred from a service name. No private image/account paths, COM activation, profile creation or system actions. Exit 0 means known observations, **not readiness or permission to clean**; 4 means unknown and 64 means invalid arguments.
+
+**Portable Oracle CLI in ALPHA.** The paired `VBoxManage.cmd` / `VBoxManagePortable.exe` uses this root's `data\.VirtualBox` and the verified protected Oracle runtime, never an installed fallback. Start the ALPHA Manager session first and run commands from a non-elevated terminal. A live-controller/session check and native command lease coordinate with cleanup; before Prepare, during cleanup and after Finish the adapter refuses commands. It preserves arguments, working directory and Oracle exit codes. This is not a VM safety sandbox: Oracle commands can change user data, although `unregistervm --delete` is explicitly refused. The ordinary diagnostic ZIP does not include the adapter. See [ALPHA instructions](docs/ALPHA-WINDOWS-TEST.md).
+
 **No bundled obsolete executables.** Old AutoIt compilers, 7za, DevCon, SnetCfg, fourteen legacy translation INIs and the old splash were removed. The build uses official external AutoIt **3.3.18.0**. The tested Oracle package is pinned to **7.2.22 r175245**, with exact hashes, publisher checks and file-only MSI/CAB preparation rather than silently running an installer.
 
 **Supported target host family:** Oracle VirtualBox 7.2 supports Windows 10/11 x64 workstations. The launcher preflight now accepts **Windows 10 build 19041+** and Windows 11, while rejecting Server editions, ARM64 and unknown hosts. This is a compatibility policy, not a Windows 10/11 runtime acceptance claim. See Oracle's [official supported-host list](https://docs.oracle.com/en/virtualization/virtualbox/7.2/user/installation.html).
@@ -63,6 +67,8 @@ Portable-VirtualBox.exe --prepare-app64 "D:\Downloads\VirtualBox-7.2.22-175245-W
 Portable-VirtualBox.exe --app-status
 Portable-VirtualBox.exe --check-readiness
 Portable-VirtualBox.exe --diagnose
+Portable-VirtualBox.exe --diagnose-services
+Portable-VirtualBox.exe --diagnose-services-json
 Portable-VirtualBox.exe --audit-vms
 Portable-VirtualBox.exe --plan-vm-rebind
 Portable-VirtualBox.exe --prepare-vm-rebind "D:\Backups\Moved-VM-original"

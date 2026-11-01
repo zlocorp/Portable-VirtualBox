@@ -14,6 +14,12 @@ Rechecked **2026-10-25** against the original repository's full list of **28 PRs
 | COM-08 | SpruceGuy7 #2: updater must not erase the launcher | **Not implemented (post-core)** | No destructive updater present; package builder refuses overwrite | Transactional updater/rollback with actual launcher survival test; do not deploy prematurely |
 | COM-09 | #69/#68: English clarity and encoding | **Modern catalog maintained independently** | Embedded RU/EN, UTF-8 output, exhaustive key tests, persistent language | Additional locales and visual layout/DPI acceptance |
 | COM-10 | #100: new 7.x icon/splash | **Not adopted** | No new assets copied; old splash stays removed | Optional design/licensing decision after functional runtime |
+| COM-11 | Deac2 NewMenuTest c11f76a8: visible service states | **Independently integrated** | Existing `HostDiagnostics.au3`, shared inventory, query-only snapshot API, localized CLI and schema-1 JSON; pending-state selector/native privacy tests and compiled Unicode-path CLI acceptance. Strict runtime observations remain separate. See exact outcomes in [PR #7](https://github.com/zlocorp/Portable-VirtualBox/pull/7). | Visual workstation/DPI acceptance; diagnostic state is never ownership proof |
+| COM-12 | #103 / portable VBoxManage wrapper UX | **Integrated in ALPHA / CI** | Existing `bfa92c27` adapter retained: same-user medium token, build-paired frontend/runtime, live protected session and command lease. Native gate and C# binding/argument tests; real helper fixture invokes the adapter. Ordinary diagnostic ZIP excludes it. | Real workstation/UAC acceptance; not a general sandbox for Oracle commands |
+
+## Integration update (2026-11-01)
+
+The separate diagnostic patch was reconciled against `bfa92c27`, not applied wholesale. Service snapshots/JSON and their tests were integrated into existing modules while preserving the current session-bound CLI and cleanup gate. No duplicate `ServiceDiagnostics.au3` was introduced. These are implementation updates; the historical fork-review date above is unchanged.
 
 ## Adoption approach
 
@@ -27,7 +33,7 @@ Actual reuse is acknowledged once in CREDITS.md (plus preserved source headers).
 
 ## Remaining functional sequence
 
-Manager/session startup and shutdown work through a separately compiled experiment and its core controls are now called from the **ordinary main GUI source** on a *disposable host only*. That is meaningful integration, **not proof of ordinary-user functionality**. The outstanding task is to remove CI-only dependencies from a narrowly scoped and reviewed production helper, reuse the now-implemented ordinary first-run app64 preparation, then pass real Windows 11 interactive UAC, guest/disk and cleanup acceptance. Do not postpone suitable code behind further attribution documents or generic infrastructure. Windows 11 standard-user/UAC acceptance remains a real test requirement, not a reason to avoid implementing the flow.
+Manager/session startup and shutdown use the ordinary main EXE in disposable CI and through explicit `--alpha-runtime` on isolated Windows 10/11 x64 with a build-paired helper. First-run preparation, moved-VM repair/register-only recovery and session-bound CLI are integrated. The remaining acceptance is the combined real-workstation UAC, guest/VDI/snapshot, cleanup and physical cross-host flow; hosted Windows Server success does not complete it. Do not postpone suitable code behind further attribution documents or generic infrastructure. Windows 11 standard-user/UAC acceptance remains a real test requirement, not a reason to avoid implementing the flow.
 
 ## Recheck decision for the discussed PRs and forks (2026-10-22)
 

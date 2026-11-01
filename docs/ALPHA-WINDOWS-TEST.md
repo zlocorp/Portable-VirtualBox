@@ -89,3 +89,32 @@ Saved-state migration, multiple-VM repair and physical cross-host transfer
 still require separate acceptance. No automatic registration repair is enabled.
 
 A real interactive isolated Windows host is required to complete acceptance.
+
+## Service diagnostics and portable CLI
+
+Capture `./Portable-VirtualBox.exe --diagnose-services-json` before Prepare,
+during the session and after Finish. The text equivalent is
+`--lang ru --diagnose-services` (or `en`). No Oracle runtime or elevation is
+required for these reports. JSON schema 1 has the fixed service list and no
+private image/account paths. Exit 0 means readable observations, not readiness;
+4 is unknown and 64 is invalid arguments. `UNVERIFIED` ownership must never be
+used to decide that a service can be removed. Pending states are visible only
+in the presentation snapshot; strict runtime checks remain unchanged.
+
+After ALPHA Prepare has completed and Manager is open, from an ordinary terminal:
+
+```powershell
+.\VBoxManage.cmd --portable-help
+.\VBoxManage.cmd list vms
+.\VBoxManage.cmd list runningvms
+```
+
+The wrapper uses the build-paired `VBoxManagePortable.exe`, the live protected
+session's verified Oracle copy and this root's `data\.VirtualBox`. It must refuse
+Oracle commands before preparation and after cleanup, or while cleanup owns the
+command gate. Keep the launcher alive and finish the session there. Do not use
+administrator elevation or a different build's adapter to bypass a refusal.
+Oracle commands can mutate VM data; this is not a safety sandbox. Destructive
+`unregistervm --delete` is explicitly refused, but other user-selected Oracle
+commands still require care and backups. Adapter arguments/cwd/exit-code and
+lease tests run in Windows CI; workstation acceptance remains a separate gate.
