@@ -21,10 +21,9 @@ Func _PortableServiceState($r)
 EndFunc
 
 Func _PortableServiceCollect()
-    Local $names[10] = ["VBoxDrv", "VBoxSup", "VBoxUSB", "VBoxUSBMon", "VBoxSDS", "VBoxNetAdp", "VBoxNetAdp6", "VBoxNetLwf", "VBoxNetFlt", "VBoxNetNAT"]
-    Local $rows[10]
+    Local $names = _PortableServiceNames(), $rows[UBound($names)]
     For $i = 0 To UBound($names) - 1
-        Local $r = _WinObsService($names[$i])
+        Local $r = _WinObsServiceSnapshot($names[$i])
         $r["name"] = $names[$i]
         $rows[$i] = $r
     Next
@@ -51,7 +50,7 @@ Func _PortableServiceText(ByRef $rows, $language = "")
     For $r In $rows
         Local $state = _PortableServiceState($r), $name = "?", $error = -1
         If IsMap($r) Then
-            If MapExists($r, "name") And StringRegExp($r["name"], "^VBox[A-Za-z0-9]{1,16}$") Then $name = $r["name"]
+            If MapExists($r, "name") Then $name = _PortableServiceDisplayName($r["name"])
             If MapExists($r, "error") And IsInt($r["error"]) Then $error = $r["error"]
         EndIf
         If $ru Then
@@ -81,6 +80,62 @@ Func _PortableServiceText(ByRef $rows, $language = "")
         $text &= @CRLF
     Next
     Return $text
+EndFunc
+
+Func _PortableServiceDisplayName($value)
+    If Not IsString($value) Then Return "?"
+    Local $names = _PortableServiceNames()
+    For $name In $names
+        If $value == $name Then Return $name
+    Next
+    Return "?"
+EndFunc
+
+; Serialize this already-collected ordered snapshot, never probe a second
+; time or export raw paths/accounts. The schema does not depend on UI locale.
+Func _PortableServiceJson(ByRef $rows)
+    If Not IsArray($rows) Then Return ""
+    If UBound($rows, 0) <> 1 Then Return ""
+    Local $names = _PortableServiceNames()
+    If UBound($rows) <> UBound($names) Then Return ""
+    Local $json = '{"schema":1,"services":[', $unknown = False
+    For $i = 0 To UBound($names) - 1
+        Local $r = $rows[$i]
+        If Not IsMap($r) Then Return ""
+        If Not MapExists($r, "name") Then Return ""
+        If Not ($r["name"] == $names[$i]) Then Return ""
+        Local $state = _PortableServiceState($r), $observation = "PRESENT", $error = -1, $ownership = "UNVERIFIED"
+        If $state == "ABSENT" Then
+            $observation = "ABSENT"
+            $ownership = "NOT_APPLICABLE"
+        ElseIf $state == "UNKNOWN" Then
+            $observation = "UNKNOWN"
+            $unknown = True
+        EndIf
+        If MapExists($r, "error") Then
+            If IsInt($r["error"]) Then $error = $r["error"]
+        EndIf
+        If $i > 0 Then $json &= ","
+        $json &= '{"name":"' & $names[$i] & '","observation":"' & $observation & _
+            '","state":"' & $state & '","win32_error":' & $error & _
+            ',"ownership":"' & $ownership & '"}'
+    Next
+    Return $json & '],"exit_code":' & ($unknown ? 4 : 0) & '}'
+EndFunc
+
+; Exit 0 means known observations, not host readiness or cleanup permission.
+Func _PortableServiceWrite($json = False)
+    Local $rows = _PortableServiceCollect(), $text
+    If $json Then
+        $text = _PortableServiceJson($rows)
+        If $text == "" Then Return 4
+        $text &= @CRLF
+    Else
+        $text = _PortableServiceText($rows)
+    EndIf
+    _LI_Write($text)
+    If _PortableServiceCount($rows) < 0 Then Return 4
+    Return 0
 EndFunc
 
 Func _PortableDiagnosticCollect()

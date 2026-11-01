@@ -88,7 +88,29 @@ Func _WinObsServiceStable(ByRef $first, ByRef $second)
     Return $first["state"] = 1 Or $first["state"] = 4 Or $first["state"] = 7
 EndFunc
 
+; Safety callers retain two identical stable observations. Diagnostics use
+; the separately named snapshot API; neither is an ownership capability.
 Func _WinObsService($name)
+    Return _WinObsServiceQuery($name, True)
+EndFunc
+
+Func _WinObsServiceSnapshot($name)
+    Return _WinObsServiceQuery($name, False)
+EndFunc
+
+; Shared result selection is exercised natively for pending/changed/error
+; inputs. Snapshot mode preserves the first successful read, not stability.
+Func _WinObsServiceResolve(ByRef $first, ByRef $second, $stable)
+    If Not IsBool($stable) Then Return _WinObsError("service", "mode", 123)
+    If Not ($first["status"] == "PRESENT") Then Return $first
+    If Not $stable Then Return $first
+    If Not ($second["status"] == "PRESENT") Then Return $second
+    If Not _WinObsServiceStable($first, $second) Then Return _WinObsError("service", "changed-or-pending", -1)
+    Return $second
+EndFunc
+
+Func _WinObsServiceQuery($name, $stable)
+    If Not IsBool($stable) Then Return _WinObsError("service", "mode", 123)
     If Not IsString($name) Or StringLen($name) < 1 Or StringLen($name) > 256 Then Return _WinObsError("service", "name", 123)
     If StringRegExp($name, "[\\/\x00-\x1F]") Then Return _WinObsError("service", "name", 123)
     Local $a = DllCall($g_WinObsAdvapi32, "handle", "OpenSCManagerW", "ptr", 0, "ptr", 0, "dword", 0x0001)
@@ -109,12 +131,10 @@ Func _WinObsService($name)
     EndIf
     Local $service = $a[0]
     Local $first = _WinObsServiceRead($service, $name)
-    Local $second = _WinObsServiceRead($service, $name)
+    Local $second = $first
+    If $stable Then $second = _WinObsServiceRead($service, $name)
     Local $closedService = _WinObsCloseService($service)
     Local $closedManager = _WinObsCloseService($manager)
     If Not $closedService Or Not $closedManager Then Return _WinObsError("service", "close", -1)
-    If Not ($first["status"] == "PRESENT") Then Return $first
-    If Not ($second["status"] == "PRESENT") Then Return $second
-    If Not _WinObsServiceStable($first, $second) Then Return _WinObsError("service", "changed-or-pending", -1)
-    Return $second
+    Return _WinObsServiceResolve($first, $second, $stable)
 EndFunc

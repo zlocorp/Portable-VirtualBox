@@ -23,8 +23,14 @@ Func _PortableInstalledVBoxDetected($diagnostic = False)
     Return SetError(1, $r["error"], "")
 EndFunc
 
+; One fixed inventory for strict preflight and query-only presentation.
+Func _PortableServiceNames()
+    Local $names[10] = ["VBoxDrv", "VBoxSup", "VBoxUSB", "VBoxUSBMon", "VBoxSDS", "VBoxNetAdp", "VBoxNetAdp6", "VBoxNetLwf", "VBoxNetFlt", "VBoxNetNAT"]
+    Return $names
+EndFunc
+
 Func _PortableCountExistingServices($diagnostic = False)
-    Local $names[10] = ["VBoxDrv", "VBoxSUP", "VBoxUSB", "VBoxUSBMon", "VBoxSDS", "VBoxNetAdp", "VBoxNetAdp6", "VBoxNetLwf", "VBoxNetFlt", "VBoxNetNAT"]
+    Local $names = _PortableServiceNames()
     Local $count = 0, $presentNames = ""
     For $i = 0 To UBound($names) - 1
         Local $r = _WinObsService($names[$i])

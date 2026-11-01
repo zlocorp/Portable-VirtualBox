@@ -56,9 +56,15 @@ If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
             _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
-                "  --version  --diagnose  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --download-app64  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --plan-vm-rebind  --prepare-vm-rebind NEW_BACKUP_FOLDER  --about  --help" & @CRLF & _
+                "  --version  --diagnose  --diagnose-services  --diagnose-services-json  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --download-app64  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --plan-vm-rebind  --prepare-vm-rebind NEW_BACKUP_FOLDER  --about  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
+        Case "--diagnose-services-json"
+            If $CmdLine[0] <> $iFirst Then Exit 64
+            Exit _PortableServiceWrite(True)
+        Case "--diagnose-services"
+            If $CmdLine[0] <> $iFirst Then Exit 64
+            Exit _PortableServiceWrite()
         Case "--alpha-runtime"
             ; Explicit interactive candidate on an isolated Windows 10/11 x64
             ; workstation. NEVER entered by ordinary double-click.
