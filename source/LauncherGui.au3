@@ -12,6 +12,7 @@
 #include "ManagerWindow.au3"
 #include <GUIConstantsEx.au3>
 #include <EditConstants.au3>
+#include <ButtonConstants.au3>
 #include <WindowsStylesConstants.au3>
 
 ; The standard GUI includes real session controls. Privileged effects remain
@@ -47,10 +48,18 @@ Func _LG_DisplayPath($root, $maxChars = 58)
     Return StringLeft($root, $left) & "..." & StringRight($root, $maxChars - 3 - $left)
 EndFunc
 
+; Keep the message key and exact target until the operation changes, not its
+; already-rendered language. Switching RU/EN must not lose a cancellation/error.
+Func _LG_BackupText($key, $target)
+    Local $text = _LI($key)
+    If $target <> "" Then $text &= @CRLF & $target
+    Return $text
+EndFunc
+
 Func _LG_SettingsText($s)
     If $s["status"] == "BLOCKED" Then Return _LI("settings.blocked")
     If $s["language"] == "auto" Then Return _LI("settings.auto_status")
-    Return _LI("settings.saved") & $s["language"]
+    Return _LI("settings.saved") & _LI($s["language"] == "ru" ? "gui.russian" : "gui.english")
 EndFunc
 
 Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
@@ -81,6 +90,7 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     GUICtrlSetData($idVerify, _LI("backup.verify"))
     GUICtrlSetData($idRestore, _LI("backup.restore"))
     GUICtrlSetData($idCancel, _LI("backup.cancel"))
+    If BitAND(GUICtrlGetState($idManager), $GUI_DISABLE) Then GUICtrlSetTip($idManager, _LI("gui.manager_blocked"))
     GUICtrlSetData($idSettings, _LG_SettingsText(_LS_Load(@ScriptDir)))
     If _LI_Language() == "ru" Then
         GUICtrlSetState($idRu, $GUI_CHECKED)
@@ -139,10 +149,10 @@ Func _LG_Show()
     Local $idReady = GUICtrlCreateButton("", 22, 537, 310, 37)
     Local $idVmAudit = GUICtrlCreateButton("", 346, 537, 310, 37)
     Local $idResult = GUICtrlCreateEdit("", 22, 583, 634, 56, BitOR($ES_READONLY, $WS_VSCROLL, $ES_AUTOVSCROLL))
-    Local $idBackup = GUICtrlCreateButton("", 22, 648, 150, 37)
-    Local $idVerify = GUICtrlCreateButton("", 184, 648, 150, 37)
-    Local $idRestore = GUICtrlCreateButton("", 346, 648, 150, 37)
-    Local $idCancel = GUICtrlCreateButton("", 508, 648, 148, 37)
+    Local $idBackup = GUICtrlCreateButton("", 22, 648, 150, 37, $BS_MULTILINE)
+    Local $idVerify = GUICtrlCreateButton("", 184, 648, 150, 37, $BS_MULTILINE)
+    Local $idRestore = GUICtrlCreateButton("", 346, 648, 150, 37, $BS_MULTILINE)
+    Local $idCancel = GUICtrlCreateButton("", 508, 648, 148, 37, $BS_MULTILINE)
     Local $idBackupStatus = GUICtrlCreateEdit("", 22, 694, 634, 56, BitOR($ES_READONLY, $WS_VSCROLL, $ES_AUTOVSCROLL))
     Local $idRefresh = GUICtrlCreateButton("", 22, 761, 150, 35)
     Local $idCopy = GUICtrlCreateButton("", 184, 761, 150, 35)
@@ -151,6 +161,7 @@ Func _LG_Show()
     Local $checked = False, $showInventory = False
     Local $backupWorker = _MP_New(), $backupTarget = "", $backupAction = "", $restoreSource = ""
     Local $setupWorker = _MP_New(), $setupInstaller = "", $setupLast = ""
+    Local $backupMessageKey = "backup.hint", $backupMessagePath = "", $backupLast = ""
     GUICtrlSetData($idBackupStatus, _LI("backup.hint"))
     GUICtrlSetState($idCancel, $GUI_DISABLE)
     ; Hosted disposable-root only until helper/UAC production acceptance.
@@ -220,7 +231,7 @@ Func _LG_Show()
                             If $choice = 6 Then
                                 $setupWorker = _PAS_StartDownload(@ScriptDir, True)
                             ElseIf $choice = 7 Then
-                                $installer = FileOpenDialog(_LI("setup.choose"), @ScriptDir, "Oracle VirtualBox installer (*.exe)", 1, "", $hGui)
+                                $installer = FileOpenDialog(_LI("setup.choose"), @ScriptDir, _LI("setup.filter"), 1, "", $hGui)
                                 If $installer == "" Then ContinueLoop
                                 $setupWorker = _PAS_Start(@ScriptDir, $installer, True)
                             Else
@@ -287,15 +298,16 @@ Func _LG_Show()
                         Local $args = $backupAction & ' "' & $backupTarget & '"'
                         If $backupAction == "--restore-backup" Then $args = $backupAction & ' "' & $restoreSource & '" "' & $backupTarget & '"'
                         $backupWorker = _MP_Start(@ScriptFullPath, $args, @ScriptDir)
+                        $backupMessagePath = $backupTarget
                         If $backupWorker["status"] == "STARTED" Then
                             GUICtrlSetState($idManager, $GUI_DISABLE) ; backup is active
                             GUICtrlSetState($idBackup, $GUI_DISABLE)
                             GUICtrlSetState($idVerify, $GUI_DISABLE)
                             GUICtrlSetState($idRestore, $GUI_DISABLE)
                             If $backupAction == "--backup-data" Or $backupAction == "--restore-backup" Then GUICtrlSetState($idCancel, $GUI_ENABLE)
-                            GUICtrlSetData($idBackupStatus, _LI("backup.running") & @CRLF & $backupTarget)
+                            $backupMessageKey = "backup.running"
                         Else
-                            GUICtrlSetData($idBackupStatus, _LI("backup.failed") & @CRLF & $backupTarget)
+                            $backupMessageKey = "backup.failed"
                         EndIf
                     EndIf
                 EndIf
@@ -305,7 +317,7 @@ Func _LG_Show()
                     If $cancel <> -1 Then
                         FileWrite($cancel, "cancel")
                         FileClose($cancel)
-                        GUICtrlSetData($idBackupStatus, _LI("backup.cancelled") & @CRLF & $backupTarget)
+                        $backupMessageKey = "backup.cancelled"
                         GUICtrlSetState($idCancel, $GUI_DISABLE)
                     EndIf
                 EndIf
@@ -339,13 +351,13 @@ Func _LG_Show()
         If $backupWorker["handle"] <> 0 Then
             Local $status = _MP_Poll($backupWorker)
             If $status == "EXITED" Then
-                Local $message = _LI("backup.failed")
+                Local $message = "backup.failed"
                 If $backupWorker["exit_code"] = 0 Then
-                    $message = _LI("backup.verified")
-                    If $backupAction == "--restore-backup" Then $message = _LI("backup.restored")
+                    $message = "backup.verified"
+                    If $backupAction == "--restore-backup" Then $message = "backup.restored"
                 EndIf
-                If $backupWorker["exit_code"] = 2 Then $message = _LI("backup.blocked")
-                GUICtrlSetData($idBackupStatus, $message & @CRLF & $backupTarget)
+                If $backupWorker["exit_code"] = 2 Then $message = "backup.blocked"
+                $backupMessageKey = $message
                 _MP_Release($backupWorker)
                 GUICtrlSetState($idBackup, $GUI_ENABLE)
                 GUICtrlSetState($idVerify, $GUI_ENABLE)
@@ -353,9 +365,14 @@ Func _LG_Show()
                 GUICtrlSetState($idCancel, $GUI_DISABLE)
                 If _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) Then GUICtrlSetState($idManager, $GUI_ENABLE) ; backup finished
             ElseIf $status == "UNKNOWN" Then
-                GUICtrlSetData($idBackupStatus, _LI("backup.unknown") & @CRLF & $backupTarget)
+                $backupMessageKey = "backup.unknown"
                 ; Fail closed. Do not kill, discard or release an unknown worker.
             EndIf
+        EndIf
+        Local $backupText = _LG_BackupText($backupMessageKey, $backupMessagePath)
+        If $backupText <> $backupLast Then
+            $backupLast = $backupText
+            GUICtrlSetData($idBackupStatus, $backupText)
         EndIf
     WEnd
     GUIDelete($hGui)

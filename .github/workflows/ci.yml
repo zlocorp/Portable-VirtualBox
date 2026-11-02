@@ -120,6 +120,17 @@ jobs:
       - name: Compiled localized service snapshots and stable diagnostic JSON
         shell: pwsh
         run: ./scripts/check_service_diagnostics.ps1 -Launcher build/Portable-VirtualBox_x64.exe
+      - name: Compiled Russian GUI captions and live language switching
+        shell: pwsh
+        run: ./scripts/check_russian_gui.ps1 -Launcher build/Portable-VirtualBox_x64.exe
+      - name: Retain localization screenshots and measured control bounds
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: russian-gui-evidence
+          path: build/russian-gui/
+          retention-days: 7
+          if-no-files-found: warn
       - name: Real compiled first-run data setup, repeat and collision refusal
         shell: pwsh
         run: |

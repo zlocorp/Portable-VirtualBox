@@ -536,7 +536,7 @@ Func _PVR_Text($r)
             If $ru Then Return $out & "Перед исправлением нужна проверенная копия: --prepare-vm-rebind ПУТЬ_К_НОВОЙ_ПАПКЕ. Регистрация не изменена."
             Return $out & "First create a verified backup: --prepare-vm-rebind NEW_BACKUP_FOLDER. Registration was NOT changed."
         Case Else
-            If $ru Then Return "Проверка переноса заблокирована: " & $r["reason"] & ". Никаких изменений регистрации."
+            If $ru Then Return "Проверка переноса заблокирована: " & _LI_Reason($r["reason"]) & ". Никаких изменений регистрации."
             Return "Relocation check blocked: " & $r["reason"] & ". No registration changes."
     EndSwitch
 EndFunc

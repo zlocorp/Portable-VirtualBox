@@ -24,7 +24,8 @@ REQUIRED_PE=(
     'VBoxC.dll','VBoxRT.dll','VBoxVMM.dll','Qt6CoreVBox.dll','Qt6GuiVBox.dll',
     'Qt6WidgetsVBox.dll','platforms/qwindowsVBox.dll','drivers/vboxsup/VBoxSup.sys',
 )
-REQUIRED_DATA=('drivers/vboxsup/VBoxSup.inf','drivers/vboxsup/VBoxSup.cat')
+REQUIRED_DATA=('drivers/vboxsup/VBoxSup.inf','drivers/vboxsup/VBoxSup.cat',
+               'nls/VirtualBox_ru.qm','nls/qt_ru.qm')
 
 
 def sha256(path):
@@ -49,7 +50,7 @@ def validate_runtime(root):
     for name in REQUIRED_PE:
         if pe_machine(root/name)!=0x8664: raise ValueError('Required file is not AMD64: '+name)
     for name in REQUIRED_DATA:
-        if regular_file(root/name).st_size==0: raise ValueError('Empty required driver metadata')
+        if regular_file(root/name).st_size==0: raise ValueError('Empty required runtime data: '+name)
     return {'required_pe_count':len(REQUIRED_PE),'required_data_count':len(REQUIRED_DATA),
             'required_pe_machine':'AMD64','runtime_executed':False,'driver_installed':False}
 

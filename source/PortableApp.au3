@@ -6,7 +6,7 @@
 ; Reads attributes/sizes only. File presence is NOT signature or VM acceptance.
 
 Func _PA_Required()
-    Return StringSplit("VirtualBox.exe|VirtualBoxVM.exe|VBoxManage.exe|VBoxSVC.exe|VBoxSDS.exe|VBoxC.dll|VBoxRT.dll|VBoxVMM.dll|Qt6CoreVBox.dll|Qt6GuiVBox.dll|Qt6WidgetsVBox.dll|platforms\qwindowsVBox.dll|drivers\vboxsup\VBoxSup.sys|drivers\vboxsup\VBoxSup.inf|drivers\vboxsup\VBoxSup.cat", "|", 2)
+    Return StringSplit("VirtualBox.exe|VirtualBoxVM.exe|VBoxManage.exe|VBoxSVC.exe|VBoxSDS.exe|VBoxC.dll|VBoxRT.dll|VBoxVMM.dll|Qt6CoreVBox.dll|Qt6GuiVBox.dll|Qt6WidgetsVBox.dll|platforms\qwindowsVBox.dll|drivers\vboxsup\VBoxSup.sys|drivers\vboxsup\VBoxSup.inf|drivers\vboxsup\VBoxSup.cat|nls\VirtualBox_ru.qm|nls\qt_ru.qm", "|", 2)
 EndFunc
 
 ; Check every component below root before following it. Distinguish access

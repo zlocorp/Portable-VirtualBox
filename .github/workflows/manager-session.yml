@@ -11,6 +11,10 @@ on:
       - tests/test_main_manager_wiring.py
       - source/ManagedProcess.au3
       - source/ManagerSession.au3
+      - source/OracleLanguage.au3
+      - source/LauncherSettings.au3
+      - source/PortableApp.au3
+      - scripts/prepare_app64.py
       - source/HostPreflight.au3
       - source/WindowsObservation.au3
       - source/WindowsServiceProbe.au3
@@ -105,11 +109,11 @@ jobs:
           }
           "MANAGER_GUEST_ISO=$iso" >> $env:GITHUB_ENV
           "MANAGER_GUEST_SHA=$expected" >> $env:GITHUB_ENV
-      - name: Exercise real buttons, Alpine guest display, VDI, snapshot and two-cycle cleanup
+      - name: Exercise real buttons, Russian/English Oracle UI, Alpine, VDI, snapshot and cleanup
         shell: pwsh
         run: |
           try {
-            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher -GuestIso $env:MANAGER_GUEST_ISO -GuestIsoSha256 $env:MANAGER_GUEST_SHA
+            ./scripts/check_manager_session_gui.ps1 -PortableRoot $env:MANAGER_ROOT -MainLauncher -GuestIso $env:MANAGER_GUEST_ISO -GuestIsoSha256 $env:MANAGER_GUEST_SHA -RussianOracle
           } catch {
             # Capture before the step's process tree is released by the runner.
             ./scripts/snapshot_manager_windows.ps1 -PortableRoot $env:MANAGER_ROOT

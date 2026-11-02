@@ -5,6 +5,7 @@
 #include "PortableCIVM.au3"
 #include "PrivilegeBoundary.au3"
 #include "PortableVmRebind.au3"
+#include "OracleLanguage.au3"
 ; Adapted Manager/VM lifecycle flow from ThatAdminGuy a035d06b12 and
 ; skyshay001 upstream PR #90 (CC BY-NC-SA 3.0; original notices in LICENSE.md).
 ; Replace shell/name waits with retained process handles and asynchronous UI.
@@ -95,6 +96,7 @@ Func _MS_New($root, $workspace)
     $s["uncertain"] = 0
     $s["worker_uncertain"] = 0
     $s["rebind"] = _PVR_New("NONE", "not-requested")
+    $s["oracle_language"] = ""
     Return $s
 EndFunc
 
@@ -333,6 +335,7 @@ Func _MS_Start(ByRef $s, $backup = "", $confirmedProof = 0)
         _MS_State($s, "BLOCKED", "incomplete-app64")
         Return False
     EndIf
+    $s["oracle_language"] = _OL_Saved(_LS_Load($s["root"]))
     Local $installed = _PortableInstalledVBoxDetected(True)
     If $s["separated"] Then
         Local $abandoned = _MS_FindRecoverable($s["root"])
@@ -440,6 +443,25 @@ Func _MS_RebindStep(ByRef $s, $action)
     Return True
 EndFunc
 
+; Called only after owned preparation and any rebind postconditions/configuration.
+; Reopen does not call this: changing a preference must never race live guests.
+Func _MS_OpenLocalizedManager(ByRef $s)
+    Local $active = $s["worker"]
+    If Not $s["owned"] Or $active["handle"] <> 0 Then Return False
+    If $s["oracle_language"] == "" Then Return _MS_OpenManager($s)
+    Local $args = _OL_Command($s["oracle_language"])
+    If $args == "" Then Return False
+    Local $profile = _PP_Inspect($s["root"])
+    If $profile["status"] <> "READY" Then Return False
+    Local $worker = _MP_Start($s["app_system"] & "\VBoxManage.exe", $args, _
+        $s["app_system"], $profile["profile"])
+    $s["worker"] = $worker
+    $s["worker_uncertain"] = 0
+    If $worker["status"] <> "STARTED" Then Return False
+    _MS_State($s, "CONFIGURING_LANGUAGE")
+    Return True
+EndFunc
+
 Func _MS_OpenManager(ByRef $s)
     Local $old = $s["manager"]
     If $old["handle"] <> 0 Then
@@ -517,7 +539,7 @@ Func _MS_Tick(ByRef $s)
             _MS_State($s, "FAILED", "clean-host-never-stabilized-resources-retained")
         Return
     EndIf
-    If $state == "PREPARING" Or $state == "CLEANING" Or $state == "CONFIGURING" Or _
+    If $state == "PREPARING" Or $state == "CLEANING" Or $state == "CONFIGURING" Or $state == "CONFIGURING_LANGUAGE" Or _
             $state == "REBIND_UNREGISTER" Or $state == "REBIND_REGISTER" Or _
             _MS_ConsentPending($state) Or $state == "RECOVERING" Then
         Local $worker = $s["worker"], $status = _MP_Poll($worker)
@@ -582,8 +604,16 @@ Func _MS_Tick(ByRef $s)
             _MS_State($s, "VERIFYING_CLEAN")
             Return
         EndIf
+        If $state == "CONFIGURING_LANGUAGE" Then
+            If Not _OL_Verified($s["root"], $s["oracle_language"]) Then
+                _MS_State($s, "FAILED", "oracle-language-unverified")
+            ElseIf Not _MS_OpenManager($s) Then
+                _MS_State($s, "FAILED", "manager-not-started")
+            EndIf
+            Return
+        EndIf
         If $state == "CONFIGURING" Then
-            If Not _MS_OpenManager($s) Then _MS_State($s, "FAILED", "manager-not-started")
+            If Not _MS_OpenLocalizedManager($s) Then _MS_State($s, "FAILED", "oracle-language-not-started")
             Return
         EndIf
         If $state == "REBIND_UNREGISTER" Then
@@ -644,7 +674,7 @@ Func _MS_Tick(ByRef $s)
             EndIf
             Return
         EndIf
-        If Not _MS_OpenManager($s) Then _MS_State($s, "FAILED", "manager-not-started")
+        If Not _MS_OpenLocalizedManager($s) Then _MS_State($s, "FAILED", "oracle-language-not-started")
         Return
     EndIf
     If $state <> "OPENING" And $state <> "MANAGER_OPEN" And $state <> "CLOSING" And _

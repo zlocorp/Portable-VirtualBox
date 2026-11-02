@@ -10,7 +10,7 @@ Func _MSW_Text($key)
     Local $ru = _LI_Language() == "ru"
     Switch $key
         Case "title"
-            If $ru Then Return "Portable-VirtualBox | Проверка сессии Manager"
+            If $ru Then Return "Portable-VirtualBox | Тестовая сессия VirtualBox"
             Return "Portable-VirtualBox | Manager session test"
         Case "warning"
             If $g_MS_AlphaMode Then
@@ -38,7 +38,7 @@ Func _MSW_Text($key)
             If $ru Then Return "ALPHA: выполнить показанный режим исправления регистрации одной перенесенной ВМ после подготовки драйвера с UAC? Диски и снимки не удаляются. После сбоя регистрация может остаться незавершённой; для продолжения потребуется эта исходная резервная копия. Сохраните её отдельно и используйте одноразовый Windows-хост. Продолжить?"
             Return "ALPHA: perform the displayed registration repair mode for this one moved VM after UAC/driver preparation? No virtual disks or snapshots will be deleted. A crash can leave registration incomplete; resuming requires this original backup. Keep it separately and use a disposable Windows host. Continue?"
         Case "reopen"
-            If $ru Then Return "Открыть Manager"
+            If $ru Then Return "Открыть менеджер"
             Return "Reopen Manager"
         Case "close"
             If $ru Then Return "Закрыть"
@@ -70,6 +70,9 @@ Func _MSW_Text($key)
         Case "CONFIGURING"
             If $ru Then Return "Настройка переносимого профиля с обычными правами пользователя."
             Return "Configuring the portable profile with ordinary user rights."
+        Case "CONFIGURING_LANGUAGE"
+            If $ru Then Return "Применяется сохраненный язык менеджера Oracle. Системные права не требуются."
+            Return "Applying the saved Oracle Manager language with ordinary user rights."
         Case "REBIND_UNREGISTER"
             If $ru Then Return "Oracle снимает ТОЛЬКО старую запись UUID. Диски и снимки не удаляются."
             Return "Oracle unregistering only the stale UUID. No virtual disks or snapshots deleted."
@@ -80,16 +83,16 @@ Func _MSW_Text($key)
             If $ru Then Return "Повышение прав отменено. Ресурсы сохранены. Нажмите «Завершить сессию», чтобы повторить очистку."
             Return "Elevation was declined. Resources retained. Click Finish session to retry cleanup."
         Case "OPENING"
-            If $ru Then Return "Открывается окно Oracle VirtualBox Manager."
+            If $ru Then Return "Открывается менеджер Oracle VirtualBox."
             Return "Opening the Oracle VirtualBox Manager window."
         Case "MANAGER_OPEN"
-            If $ru Then Return "Manager открыт. ВМ можно запускать в его окне."
+            If $ru Then Return "Менеджер открыт. ВМ можно запускать в его окне."
             Return "Manager is open. Virtual machines can be started there."
         Case "CLOSING"
-            If $ru Then Return "Отправлен запрос закрытия Manager. ВМ принудительно не останавливаются."
+            If $ru Then Return "Отправлен запрос закрытия менеджера. ВМ принудительно не останавливаются."
             Return "Manager close requested. Virtual machines are not force-stopped."
         Case "WAIT_GUESTS"
-            If $ru Then Return "ВМ ещё работают. Драйверы сохранены. Завершите ВМ или откройте Manager снова."
+            If $ru Then Return "ВМ ещё работают. Драйверы сохранены. Завершите ВМ или откройте менеджер снова."
             Return "VM processes are still active. Drivers remain loaded. Stop the VMs or reopen Manager."
         Case "WAIT_BACKGROUND"
             If $ru Then Return "Ожидание фоновых процессов VirtualBox. Принудительного завершения нет."
@@ -206,7 +209,7 @@ Func _MSW_Show($root, $workspace)
             $serviceLast = $serviceText
             $serviceTick = TimerInit()
         EndIf
-        Local $display = $s["state"] & @CRLF & _MSW_Text($s["state"]) & @CRLF & $s["detail"]
+        Local $display = $s["state"] & @CRLF & _MSW_Text($s["state"]) & @CRLF & _LI_Reason($s["detail"])
         If $last <> $display Then
             GUICtrlSetData($status, $display)
             Local $canStart = _MS_RetryAllowed($s["state"], $s["detail"])

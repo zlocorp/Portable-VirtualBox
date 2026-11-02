@@ -2,7 +2,7 @@
 # Test fixture commands operate only on the freshly created, empty, named VM.
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$PortableRoot,[switch]$SeparatePrivileges,[switch]$UnattendedConsentProbe,[switch]$MainLauncher,
-    [string]$GuestIso='', [string]$GuestIsoSha256='')
+    [string]$GuestIso='', [string]$GuestIsoSha256='', [switch]$RussianOracle)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -14,6 +14,7 @@ if ($UnattendedConsentProbe -and -not $SeparatePrivileges) { throw 'Consent prob
 if ($MainLauncher -and $SeparatePrivileges -and -not $UnattendedConsentProbe) {
     throw 'Main launcher UAC acceptance cannot be automated on hosted Windows'
 }
+if ($RussianOracle -and (-not $MainLauncher -or $SeparatePrivileges -or -not $GuestIso)) { throw 'Language acceptance requires isolated main-GUI Alpine scenario' }
 if ($GuestIso) {
     if (-not $MainLauncher -or $SeparatePrivileges -or $UnattendedConsentProbe) {
         throw 'Guest ISO requires the actual main GUI on the disposable CI runner'
@@ -312,6 +313,57 @@ function Observe-Manager {
     }
     return $found[0].Id
 }
+
+# Locale tests keep the controller's temporary --lang en for existing button
+# contracts, while explicitly saving a separate Oracle language. No XML writes.
+function Save-FixtureLanguage([ValidateSet('ru','en')][string]$Language) {
+    $p=Start-Process -FilePath $exe -ArgumentList ('--save-language '+$Language) -WorkingDirectory $root -PassThru -NoNewWindow
+    try {
+        $null=$p.Handle
+        if(-not $p.WaitForExit(20000) -or $p.ExitCode -ne 0){throw 'Could not save fixture language through the real launcher'}
+    } finally {$p.Dispose()}
+}
+function Assert-OracleLanguage([ValidateSet('ru','C')][string]$Expected,[string]$Label) {
+    $configured=Oracle 'getextradata global GUI/LanguageID' ($Label+'-preference')
+    if($configured -notmatch ('(?m)^Value:\s*'+[regex]::Escape($Expected)+'\s*$')){throw 'Oracle did not read back the exact language'}
+    foreach($relative in @('nls\VirtualBox_ru.qm','nls\qt_ru.qm')){
+        $path=Join-Path $runtime $relative
+        if(-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0){throw "Russian resource missing: $relative"}
+    }
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+    $managerId=Observe-Manager
+    $handle=[ManagerUiProbe]::Window($managerId)
+    $element=[Windows.Automation.AutomationElement]::FromHandle($handle)
+    if($element.Current.ProcessId -ne $managerId){throw 'Oracle accessibility window identity mismatch'}
+    # Fresh fixture VM names are English; do not count a Cyrillic file path as
+    # evidence that Oracle's UI is translated. Require actual menu/button labels.
+    $deadline=[DateTime]::UtcNow.AddSeconds(15)
+    $matched=@();$captions=@()
+    do {
+        $nodes=$element.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
+        if($nodes.Count -gt 1024){throw 'Oracle accessibility tree exceeds fixture bound'}
+        $captions=@(foreach($node in $nodes){
+            $current=$node.Current
+            if($current.ProcessId -ne $managerId -or $current.IsOffscreen){continue}
+            if($current.ControlType -ne [Windows.Automation.ControlType]::MenuItem -and
+               $current.ControlType -ne [Windows.Automation.ControlType]::Button){continue}
+            $name=$current.Name.Replace('&','').Trim()
+            if($name.Length -gt 512){throw 'Oracle caption exceeds fixture bound'}
+            if($name){$name}
+        })
+        $pattern=if($Expected -ceq 'ru'){'^(Файл|Машина|Справка|Инструменты|Создать|Добавить|Настроить|Настройки)(\s|\.\.\.|…|$)'}else{'^(File|Machine|Help|Tools|New|Add|Settings)(\s|\.\.\.|…|$)'}
+        $matched=@($captions | Where-Object {$_ -match $pattern} | Sort-Object -Unique)
+        if($matched.Count -ge 2){break}
+        Start-Sleep -Milliseconds 150
+    }while([DateTime]::UtcNow -lt $deadline)
+    [ordered]@{configured=$Expected;manager_pid=$managerId;captions=$captions;matched=$matched} |
+        ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $out ($Label+'-captions.json')) -Encoding utf8
+    & (Join-Path $PSScriptRoot 'snapshot_manager_windows.ps1') -PortableRoot $root -ControllerProcessId $front.Id | Out-Host
+    Copy-Item -LiteralPath (Join-Path $out 'oracle-windows.json') -Destination (Join-Path $out ($Label+'-windows.json'))
+    if($matched.Count -lt 2){throw 'Language key alone is insufficient: expected Oracle menu/button captions were not observed'}
+}
+
 function Assert-Clean([string]$Label) {
     $services=@(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' | Where-Object PSChildName -match '^VBox')
     $processes=@(Get-Process | Where-Object ProcessName -match '^(VBox|VirtualBox)')
@@ -374,6 +426,7 @@ $front=$null; $other=$null; $badFront=$null
 $proof=[ordered]@{source_commit=$env:GITHUB_SHA;real_manager_opened=$false;guest_survived_manager_close=$false;manager_reopened_with_guest=$false;second_controller_refused=$false;two_sessions_clean=$false;uuid_preserved=$false;guest_os_booted=$false;guest_iso_attached=$false;guest_64bit_cpu_configured=$false;guest_screen_capture=$false;guest_disk_io_confirmed=$false;rebind_gui_started=$false;rebind_folder_cancelled=$false;rebind_confirmation_declined=$false;rebind_declines_unchanged=$false;rebind_backup_selection_verified=$false;rebind_gui_confirmed=$false;rebind_snapshot_verified=$false;rebind_backup_verified=$false;rebind_backup_unchanged=$false;rebind_owned_cleanup=$false;rebind_repeat_refused=$false;rebind_inter_command_state_reproduced=$false;rebind_register_only_confirmed=$false;rebind_register_only_verified=$false;rebind_register_only_owned_cleanup=$false;rebind_register_only_skipped_unregister=$false;virtual_disk_created=$false;disk_preserved_after_cleanup=$false;snapshot_created=$false;snapshot_preserved_after_cleanup=$false;interactive_uac_consent_verified=$false;unattended_ui_responsive=$false;main_entrypoint_tested=[bool]$MainLauncher}
 try {
     Assert-Clean 'initial baseline'
+    if($RussianOracle){Save-FixtureLanguage 'ru'}
     if ($SeparatePrivileges) {
         # A forged user manifest must not bless modified elevated DLL inputs.
         $payload=Join-Path $root 'app64\VBoxRT.dll'
@@ -425,6 +478,10 @@ try {
     }
     $manager1=Observe-Manager
     $proof.real_manager_opened=$true
+    if($RussianOracle){
+        Assert-OracleLanguage 'ru' 'oracle-ru-first'
+        $proof['oracle_russian_captions_verified']=$true
+    }
     if ($SeparatePrivileges) {
         $firstSession=Join-Path $protectedStore ('pvbox-manager-'+$front.Id+'-1')
         $p=[MediumProcess]::Start($accessProbe,('"'+$firstSession+'"'),$root,(Join-Path $out 'acl.stdout.txt'),(Join-Path $out 'acl.stderr.txt'))
@@ -521,6 +578,10 @@ try {
     $manager2=Observe-Manager
     if ($manager2 -eq $manager1) { throw 'Manager process was not really replaced' }
     $proof.manager_reopened_with_guest=$true
+    if($RussianOracle){
+        Assert-OracleLanguage 'ru' 'oracle-ru-reopened'
+        $proof['oracle_russian_reopen_verified']=$true
+    }
     Click-Button $front 'Finish session'
     Await-State $front 'WAIT_GUESTS' 40
     $null=Oracle ('controlvm '+$uuid+' poweroff') 'fixture-poweroff'
@@ -531,6 +592,7 @@ try {
     if (-not (Test-Path -LiteralPath $disk -PathType Leaf)) { throw 'Portable VDI deleted during driver cleanup' }
     $proof.disk_preserved_after_cleanup=$true
     $vmBefore=(Get-FileHash -LiteralPath $vm).Hash
+    if($RussianOracle){Save-FixtureLanguage 'en'}
     # Repeat a session, preserve the registered UUID, no need to invent a
     # boot receipt for a Manager-only second cycle.
     Click-Button $front 'Start VirtualBox'
@@ -540,6 +602,10 @@ try {
         $cli=Join-Path $runtime 'VBoxManage.exe'
     }
     $null=Observe-Manager
+    if($RussianOracle){
+        Assert-OracleLanguage 'C' 'oracle-en-second'
+        $proof['oracle_english_captions_verified']=$true
+    }
     $again=Oracle ('showvminfo '+$uuid+' --machinereadable') 'same-uuid-second-session'
     if ($again -notmatch ('(?mi)^UUID="'+[regex]::Escape($uuid)+'"') -or $again -notmatch '(?m)^VMState="poweroff"') { throw 'Second Manager session lost fixture UUID/state' }
     $proof.uuid_preserved=$true

@@ -60,7 +60,7 @@ $a = _PA_Inspect($root)
 Check($a["status"] == "INCOMPLETE", "one EXE is not a complete VirtualBox")
 Check(StringInStr($a["missing"], "VBoxManage.exe") > 0, "missing CLI identified")
 Local $required = _PA_Required()
-Check(UBound($required) = 15, "same 15 required inputs as verified MSI staging")
+Check(UBound($required) = 17, "17 required inputs including Russian Oracle/Qt resources")
 For $i = 0 To UBound($required) - 1
     Local $file = $root & "\app64\" & $required[$i]
     DirCreate(StringRegExpReplace($file, "\\[^\\]+$", ""))
