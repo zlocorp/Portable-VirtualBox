@@ -118,3 +118,42 @@ Oracle commands can mutate VM data; this is not a safety sandbox. Destructive
 `unregistervm --delete` is explicitly refused, but other user-selected Oracle
 commands still require care and backups. Adapter arguments/cwd/exit-code and
 lease tests run in Windows CI; workstation acceptance remains a separate gate.
+
+
+## Russian localization: CI results and workstation acceptance
+
+At `3301638`, the [compiled launcher](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/41537264954)
+and [extended Oracle/Alpine scenario](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/41537257180)
+passed on disposable Windows Server CI. Native tests passed 309 new localization
+assertions. The RU/EN/RU launcher screenshots and all three Oracle language
+captures were inspected. Oracle's visible USB-enumeration warning is retained;
+USB passthrough is not part of this acceptance. These checks do not replace
+interactive UAC, every DPI or ordinary workstation driver acceptance.
+
+For the remaining workstation procedure, use only the existing isolated host
+and disposable VM procedure above. Do not use personal VMs.
+
+1. In the ordinary launcher select Russian. Check all captions, disabled-button
+   tooltip, installer picker filter and long backup buttons. Switch RU -> EN ->
+   RU: backup status must retain its meaning and target, not a stale language.
+   The read-only GUI test must not create data/app64/logs or start Oracle.
+2. Save `ru` explicitly. Start a full ALPHA session using the normal consent
+   path. Both `nls/VirtualBox_ru.qm` and `nls/qt_ru.qm` must be present from the
+   pinned Oracle preparation. Require actual Russian menu/button captions in
+   Oracle Manager, not just a successful language-key readback.
+3. Close/reopen Manager while the disposable guest runs. Language remains
+   Russian; guest and snapshot behavior remains unchanged. The reopen path
+   must not issue another language-setting command.
+4. Finish and verify exact-owned cleanup. Save `en`, start another complete
+   session and require Oracle's English interface (`GUI/LanguageID=C`).
+   The previous VM UUID, disks and snapshots must remain intact.
+5. With launcher preference `auto`, or with a temporary `--lang ru/en`, verify
+   Oracle's independently saved language is not overwritten. Unknown or
+   malformed preference evidence must not become a success or cleanup permit.
+
+The CI variant keeps its launcher controls in temporary English to retain the
+existing GUI harness, while using saved RU/EN for Oracle; it is not interactive
+Windows 11 UAC acceptance. Artifacts must include actual Oracle accessibility
+captions and screenshots plus the existing guest/repair/cleanup proof. The
+standalone GUI artifact includes measured captions and screenshots; metric
+checks alone do not establish correct rendering at every DPI or screen size.

@@ -4,6 +4,14 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added and verified in isolated CI · Russian localization (2026-11-03)
+
+- Added Russian explanations for known session/rebind reasons while preserving the exact technical identifier, including dynamic error suffixes. Unknown reasons remain visible; authorization, logs and JSON tokens are unchanged.
+- Retranslate backup hints, cancellation/failure/results and the disabled Manager tooltip when switching languages. Use localized installer filters, readable language names and wrapped compact backup-button captions.
+- Require the official Russian VirtualBox/Qt resource files alongside the existing runtime inventory (17 required files). This checks presence/nonempty bytes; the existing pinned-package/runtime validation remains the integrity boundary.
+- Apply only explicitly saved ru/en to Oracle GUI/LanguageID through the existing ordinary-token tracked worker after owned preparation/rebind, then verify the exact persisted setting before opening Manager. Auto, temporary --lang and live-guest reopen do not write the preference. No XML rewrite, new privileged action or cleanup authority.
+- At `3301638`, [native Windows tests](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/41537264910) passed 30 harnesses, including 309 Russian-completion and 352 catalog assertions; the existing 42 executable CLI checks also passed. [Compiled launcher acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/41537264954) passed RU/EN/RU captions, font bounds and no-write checks, with three screenshots inspected. [Real Oracle/Alpine acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/41537257180) passed Russian first start/reopen with a live guest, English second start, guest VDI readback, preserved snapshots, repair/refusal/register-only recovery and cleanup. Oracle captions and screenshots were inspected; the USB-enumeration warning remains visible and USB passthrough is still deferred. Local Python suite: 228 tests, six Windows skips. Interactive Windows 10/11 ALPHA/UAC and all-DPI acceptance remain open; no release is implied.
+
 ### Added and completed · service diagnostics and session-bound CLI (2026-11-01)
 
 - Integrated the remaining useful parts of the earlier offline diagnostic patch into the existing `HostDiagnostics.au3`, without duplicating that module or reverting the session-bound CLI introduced in `bfa92c27`.
