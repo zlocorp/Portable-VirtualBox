@@ -30,12 +30,13 @@ EndFunc
 
 ; 0 absent, 1 regular file, 2 regular directory, -1 anything unsafe.
 Func _PBK_PathState($path)
-    Local $a = DllCall("kernel32.dll", "dword", "GetFileAttributesW", "wstr", $path)
-    If @error Then Return -1
+    DllCall("kernel32.dll", "none", "SetLastError", "dword", 0)
+    Local $a = DllCall("kernel32.dll", "dword", "GetFileAttributesW", "wstr", $path), $callError = @error, _
+        $last = DllCall("kernel32.dll", "dword", "GetLastError"), $lastError = @error
+    If $callError Or Not IsArray($a) Then Return -1
     If $a[0] = 4294967295 Or $a[0] = -1 Then
-        Local $err = DllCall("kernel32.dll", "dword", "GetLastError")
-        If @error Then Return -1
-        If $err[0] = 2 Or $err[0] = 3 Then Return 0
+        If $lastError Or Not IsArray($last) Then Return -1
+        If $last[0] = 2 Or $last[0] = 3 Then Return 0
         Return -1
     EndIf
     If BitAND($a[0], 0x400) <> 0 Then Return -1

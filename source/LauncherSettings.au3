@@ -25,12 +25,13 @@ EndFunc
 
 ; Missing = 0, regular non-reparse file = 1, unsafe/unknown = -1.
 Func _LS_FileState($path)
-    Local $a = DllCall("kernel32.dll", "dword", "GetFileAttributesW", "wstr", $path)
-    If @error Then Return -1
+    DllCall("kernel32.dll", "none", "SetLastError", "dword", 0)
+    Local $a = DllCall("kernel32.dll", "dword", "GetFileAttributesW", "wstr", $path), $callError = @error, _
+        $last = DllCall("kernel32.dll", "dword", "GetLastError"), $lastError = @error
+    If $callError Or Not IsArray($a) Then Return -1
     If $a[0] = -1 Or $a[0] = 4294967295 Then
-        Local $e = DllCall("kernel32.dll", "dword", "GetLastError")
-        If @error Then Return -1
-        If $e[0] = 2 Or $e[0] = 3 Then Return 0
+        If $lastError Or Not IsArray($last) Then Return -1
+        If $last[0] = 2 Or $last[0] = 3 Then Return 0
         Return -1
     EndIf
     If BitAND($a[0], 0x410) <> 0 Then Return -1 ; directory/reparse

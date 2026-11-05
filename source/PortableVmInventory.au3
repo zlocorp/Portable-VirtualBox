@@ -11,12 +11,13 @@ Global Const $g_PVI_MaxEntries = 12000
 Global Const $g_PVI_MaxMedia = 1024
 
 Func _PVI_PathState($path)
-    Local $a = DllCall("kernel32.dll", "dword", "GetFileAttributesW", "wstr", $path)
-    If @error Or Not IsArray($a) Then Return -1
+    DllCall("kernel32.dll", "none", "SetLastError", "dword", 0)
+    Local $a = DllCall("kernel32.dll", "dword", "GetFileAttributesW", "wstr", $path), $callError = @error, _
+        $last = DllCall("kernel32.dll", "dword", "GetLastError"), $lastError = @error
+    If $callError Or Not IsArray($a) Then Return -1
     If $a[0] = 4294967295 Or $a[0] = -1 Then
-        Local $e = DllCall("kernel32.dll", "dword", "GetLastError")
-        If @error Or Not IsArray($e) Then Return -1
-        If $e[0] = 2 Or $e[0] = 3 Then Return 0
+        If $lastError Or Not IsArray($last) Then Return -1
+        If $last[0] = 2 Or $last[0] = 3 Then Return 0
         Return -1
     EndIf
     If BitAND($a[0], 0x400) Then Return -1 ; junction/reparse point

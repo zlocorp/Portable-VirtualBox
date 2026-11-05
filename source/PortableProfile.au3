@@ -16,14 +16,15 @@ EndFunc
 
 ; 1 = existing regular directory, 0 = absent, -1 = file/link/unknown.
 Func _PP_DirectoryState($path)
-    Local $a = DllCall("kernel32.dll", "dword", "GetFileAttributesW", "wstr", $path)
-    If @error Then Return -1
+    DllCall("kernel32.dll", "none", "SetLastError", "dword", 0)
+    Local $a = DllCall("kernel32.dll", "dword", "GetFileAttributesW", "wstr", $path), $callError = @error, _
+        $last = DllCall("kernel32.dll", "dword", "GetLastError"), $lastError = @error
+    If $callError Or Not IsArray($a) Then Return -1
     If $a[0] = 4294967295 Or $a[0] = -1 Then
         ; A missing object is not necessarily an access failure: fail closed
         ; if the last Windows error is not FILE_NOT_FOUND / PATH_NOT_FOUND.
-        Local $e = DllCall("kernel32.dll", "dword", "GetLastError")
-        If @error Then Return -1
-        If $e[0] = 2 Or $e[0] = 3 Then Return 0
+        If $lastError Or Not IsArray($last) Then Return -1
+        If $last[0] = 2 Or $last[0] = 3 Then Return 0
         Return -1
     EndIf
     If BitAND($a[0], 0x400) <> 0 Then Return -1
