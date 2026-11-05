@@ -84,6 +84,48 @@ Check(WriteXml($file, $prefix & $normal & $suffix), "restored config written")
 FileWrite($machineDir & "\not-vm.vbox-prev", "invalid")
 $r = _PVI_Inspect($root)
 Check($r["status"] == "CLEAN", "historic vbox-prev is not treated as live config")
+; Multi-VM inventory is observational. This test never registers or mutates
+; machines using Oracle. Bulk rebind remains unimplemented.
+Local $secondUuid = "{99999999-2222-3333-4444-555555555555}"
+Local $secondDir = $root & "\data\Machines\Вторая ВМ", $secondConfig = $secondDir & "\Вторая ВМ.vbox"
+Check(DirCreate($secondDir & "\Snapshots"), "create second machine")
+Check(FileWrite($secondDir & "\disk.vdi", "SECOND-BASE") <> 0, "second base VDI")
+Check(FileWrite($secondDir & "\Snapshots\snap.vdi", "SECOND-DIFF") <> 0, "second snapshot")
+Local $secondBody = StringReplace(StringReplace($prefix & $normal & $suffix, $uuid, $secondUuid), "Имя ВМ", "Вторая ВМ")
+Check(WriteXml($secondConfig, $secondBody), "second machine config")
+Local $secondEntry = '<MachineEntry uuid="' & $secondUuid & '" src="..\Machines\Вторая ВМ\Вторая ВМ.vbox"/>'
+Check(WriteXml($registry, $regHead & $regEntry & $secondEntry & $regTail), "two local registrations")
+$r = _PVI_Inspect($root)
+Check($r["status"] == "CLEAN" And $r["vm_count"] == 2 And $r["registered_count"] == 2, "two registered local VMs remain clean")
+Check($r["snapshot_count"] == 2 And $r["media_count"] == 4, "both VM snapshot graphs counted")
+Local $swapped = $regHead & StringReplace($regEntry, $uuid, $secondUuid) & StringReplace($secondEntry, $secondUuid, $uuid) & $regTail
+Check(WriteXml($registry, $swapped), "swap registration UUIDs")
+$r = _PVI_Inspect($root)
+Check($r["status"] == "BLOCKED", "registration UUID must match config UUID")
+Check(WriteXml($registry, $regHead & $regEntry & $secondEntry & $regTail), "restore correct registrations")
+Check(WriteXml($secondConfig, StringReplace($secondBody, $secondUuid, $uuid)), "duplicate machine UUID fixture")
+$r = _PVI_Inspect($root)
+Check($r["status"] == "BLOCKED", "duplicate VM config UUID is blocked")
+Check(WriteXml($secondConfig, $secondBody), "restore second VM UUID")
+Local $invalidEntries[7] = [ _
+    '<VirtualBox xmlns="http://www.virtualbox.org/"><Global><Other>' & $regEntry & '</Other></Global></VirtualBox>', _
+    '<VirtualBox xmlns="http://www.virtualbox.org/"><MachineRegistry>' & $regEntry & '</MachineRegistry></VirtualBox>', _
+    '<VirtualBox xmlns="http://www.virtualbox.org/"><Global><MachineRegistry><Other>' & $regEntry & '</Other></MachineRegistry></Global></VirtualBox>', _
+    '<VirtualBox xmlns="urn:foreign"><Global><MachineRegistry>' & $regEntry & '</MachineRegistry></Global></VirtualBox>', _
+    $regHead & '<MachineEntry uuid="bad" src="..\Machines\Имя ВМ\Имя ВМ.vbox"/>' & $regTail, _
+    $regHead & $regEntry & '<MachineEntry uuid="' & $uuid & '" src="..\Machines\Вторая ВМ\Вторая ВМ.vbox"/>' & $regTail, _
+    '<VirtualBox xmlns="http://www.virtualbox.org/"><Global><MachineRegistry xmlns="urn:foreign">' & $regEntry & '</MachineRegistry></Global></VirtualBox>']
+For $value In $invalidEntries
+    Check(WriteXml($registry, $value), "malformed registry fixture")
+    $r = _PVI_Inspect($root)
+    Check($r["status"] == "BLOCKED", "nested or malformed registry is blocked")
+Next
+Check(WriteXml($registry, $regHead & $regEntry & $regEntry & $regTail), "duplicate UUID test fixture")
+$r = _PVI_Inspect($root)
+Check($r["status"] == "BLOCKED", "duplicate registration UUID is blocked")
+Check(WriteXml($registry, $regHead & $regEntry & $secondEntry & $regTail), "restore multi-VM registry")
+Check(FileRead($file) == ($prefix & $normal & $suffix), "first VM bytes unchanged by audit")
+Check(FileRead($secondConfig) == $secondBody, "second VM bytes unchanged by audit")
 DirRemove($root, 1)
 ConsoleWrite("Portable VM inventory assertions: " & $checks & "; failed: " & $failed & @CRLF)
 Exit ($failed > 0)

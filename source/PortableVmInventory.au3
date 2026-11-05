@@ -36,6 +36,8 @@ Func _PVI_New()
     $r["registered_count"] = 0
     $r["external_registry_count"] = 0
     $r["config_paths"] = "|"
+    $r["config_identities"] = "|"
+    $r["machine_uuids"] = "|"
     $r["registry_paths"] = "|"
     $r["detail"] = ""
     $r["report"] = ""
@@ -114,6 +116,10 @@ Func _PVI_ReadMachine($configPath, ByRef $r)
     Local $media = $xml.selectNodes('//*[@location]')
     If Not IsObj($snapshots) Or Not IsObj($media) Then Return False
     If $snapshots.length > $g_PVI_MaxMedia Or $media.length > $g_PVI_MaxMedia Then Return False
+    Local $id = StringLower($uuid)
+    If StringInStr($r["machine_uuids"], "|" & $id & "|", 1) > 0 Then Return False
+    $r["machine_uuids"] &= $id & "|"
+    $r["config_identities"] &= StringLower($configPath) & "=" & $id & "|"
     $r["config_paths"] &= StringLower($configPath) & "|"
     $r["vm_count"] += 1
     $r["snapshot_count"] += $snapshots.length
@@ -169,6 +175,42 @@ Func _PVI_RegistryTarget($root, $source)
     Return $path
 EndFunc
 
+; Direct, correctly namespaced Global/MachineRegistry entries only. A
+; descendant-only XPath could incorrectly accept nested, foreign records.
+Func _PVI_RegistryEntries($xml)
+    If Not IsObj($xml) Then Return 0
+    Local $ns = String($xml.documentElement.namespaceURI)
+    If $ns <> "" And $ns <> "http://www.virtualbox.org/" Then Return 0
+    Local $children = $xml.documentElement.selectNodes('*')
+    Local $globals = $xml.documentElement.selectNodes('*[local-name()="Global"]')
+    Local $allGlobals = $xml.selectNodes('//*[local-name()="Global"]')
+    If Not IsObj($children) Or Not IsObj($globals) Or Not IsObj($allGlobals) Then Return 0
+    If $children.length <> 1 Or $globals.length <> 1 Or $allGlobals.length <> 1 Then Return 0
+    Local $global = $globals.item(0)
+    If String($global.namespaceURI) <> $ns Then Return 0
+    Local $registries = $global.selectNodes('*[local-name()="MachineRegistry"]')
+    Local $allRegistries = $xml.selectNodes('//*[local-name()="MachineRegistry"]')
+    If Not IsObj($registries) Or Not IsObj($allRegistries) Then Return 0
+    If $registries.length <> 1 Or $allRegistries.length <> 1 Then Return 0
+    Local $registry = $registries.item(0)
+    If String($registry.namespaceURI) <> $ns Then Return 0
+    Local $kids = $registry.selectNodes('*')
+    Local $entries = $registry.selectNodes('*[local-name()="MachineEntry"]')
+    Local $allEntries = $xml.selectNodes('//*[local-name()="MachineEntry"]')
+    If Not IsObj($kids) Or Not IsObj($entries) Or Not IsObj($allEntries) Then Return 0
+    If $entries.length <> $kids.length Or $entries.length <> $allEntries.length Or _
+            $entries.length > $g_PVI_MaxConfigs Then Return 0
+    For $i = 0 To $entries.length - 1
+        Local $entry = $entries.item($i)
+        If String($entry.namespaceURI) <> $ns Then Return 0
+        Local $uuid = $entry.getAttribute("uuid"), $source = $entry.getAttribute("src")
+        If Not IsString($uuid) Or Not StringRegExp($uuid, "(?i)^\{[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\}$") Then Return 0
+        If Not IsString($source) Or StringLen($source) < 1 Or StringLen($source) > 512 Or _
+                StringRegExp($source, "[\x00-\x1f]") Then Return 0
+    Next
+    Return $entries
+EndFunc
+
 Func _PVI_ReadRegistry($root, ByRef $r)
     Local $folder = $root & "\data\.VirtualBox"
     If _PVI_PathState($folder) == 0 Then Return "MISSING"
@@ -177,12 +219,15 @@ Func _PVI_ReadRegistry($root, ByRef $r)
     If _PVI_PathState($registry) == 0 Then Return "MISSING"
     Local $xml = _PVI_LoadXml($registry)
     If Not IsObj($xml) Then Return "BLOCKED"
-    Local $entries = $xml.selectNodes('//*[local-name()="MachineEntry"]')
-    If Not IsObj($entries) Or $entries.length > $g_PVI_MaxConfigs Then Return "BLOCKED"
-    Local $review = False
+    Local $entries = _PVI_RegistryEntries($xml)
+    If Not IsObj($entries) Then Return "BLOCKED"
+    Local $review = False, $seenUuids = "|"
     For $i = 0 To $entries.length - 1
-        Local $entry = $entries.item($i), $src = $entry.getAttribute("src")
+        Local $entry = $entries.item($i), $src = $entry.getAttribute("src"), $uuid = StringLower($entry.getAttribute("uuid"))
         If Not IsString($src) Or StringLen($src) > 512 Then Return "BLOCKED"
+        Local $keyUuid = "|" & $uuid & "|"
+        If StringInStr($seenUuids, $keyUuid, 1) Then Return "BLOCKED" ; duplicate registration UUID
+        $seenUuids &= $uuid & "|"
         $r["registered_count"] += 1
         Local $target = _PVI_RegistryTarget($root, $src)
         If $target == "" Then
@@ -193,6 +238,7 @@ Func _PVI_ReadRegistry($root, ByRef $r)
             Local $key = "|" & StringLower($target) & "|"
             If StringInStr($r["registry_paths"], $key) > 0 Then Return "BLOCKED"
             If StringInStr($r["config_paths"], $key) == 0 Then Return "BLOCKED"
+            If StringInStr($r["config_identities"], "|" & StringLower($target) & "=" & $uuid & "|", 1) == 0 Then Return "BLOCKED"
             $r["registry_paths"] &= StringLower($target) & "|"
         EndIf
     Next

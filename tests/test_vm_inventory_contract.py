@@ -28,6 +28,25 @@ class VmInventoryContract(unittest.TestCase):
                        'ProcessClose(', '#RequireAdmin','VBoxManage.exe'):
             self.assertNotIn(unsafe,parser)
 
+    def test_registry_inventory_requires_real_global_structure_and_uuid_uniqueness(self):
+        parser=(ROOT/'source/PortableVmInventory.au3').read_text(encoding='utf-8-sig')
+        native=(ROOT/'tests/native/test_portable_vm_inventory.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('Func _PVI_RegistryEntries(', parser)
+        self.assertIn('Local $entries = _PVI_RegistryEntries($xml)', parser)
+        for marker in ('[local-name()="MachineRegistry"]',
+                       '[local-name()="MachineEntry"]', 'namespaceURI',
+                       'http://www.virtualbox.org/', 'allEntries.length',
+                       'duplicate registration UUID'):
+            self.assertIn(marker,parser)
+        for phrase in ('two registered local VMs remain clean',
+                       'nested or malformed registry is blocked',
+                       'duplicate registration UUID is blocked',
+                       'registration UUID must match config UUID',
+                       'duplicate VM config UUID is blocked'):
+            self.assertIn(phrase, native)
+        self.assertIn('config_identities', parser)
+        self.assertIn('machine_uuids', parser)
+
     def test_real_native_and_compiled_smoke_exercises_public_feature(self):
         self.assertTrue((ROOT/'tests/native/test_portable_vm_inventory.au3').is_file())
         fixture=(ROOT/'scripts/check_vm_inventory.ps1').read_text(encoding='utf-8')
