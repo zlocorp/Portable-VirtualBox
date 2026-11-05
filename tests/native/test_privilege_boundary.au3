@@ -12,7 +12,7 @@ Check(_PB_Outcome(False,1223,0)=="CANCELLED","UAC cancellation separate from fai
 Check(_PB_Outcome(False,5,0)=="FAILED","access denied cannot authorize cleanup")
 Check(_PB_Outcome(True,0,0)=="FAILED","missing process handle denied")
 Check(_PB_Outcome(True,0,Ptr(123))=="STARTED","retained handle required")
-Check(_PB_Outcome(False,0,Ptr(123))=="FAILED","failed API cannot authorize operation")
+Check(_PB_Outcome(False,0,Ptr(123))=="UNKNOWN","failed API with a returned child cannot authorize operation")
 Check(_PB_Outcome(False,1223,Ptr(123))=="UNKNOWN","failed runas with a process handle is not UAC cancellation")
 Check(_PB_Outcome(False,5,Ptr(123))=="UNKNOWN","failed API with nonzero process handle is uncertain")
 Check(_PB_Outcome(True,1223,Ptr(123))=="STARTED","successful child with stale last-error remains tracked")
