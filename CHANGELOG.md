@@ -4,6 +4,15 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Hardened · owned UAC helpers, file errors, VM inventory, ALPHA package (2026-11-05)
+
+- UAC child ownership (7ba91a7, eb01d82): an ambiguous ShellExecuteExW result that returned a process handle is no longer classified as a clean cancellation or success. The worker retains that exact handle until it can prove exit; Win32 last-error is captured before GUI callbacks. No interactive Windows 10/11 UAC acceptance is implied.
+- Five read-only Windows file probes (6d8a96e) capture GetFileAttributesW and last-error in a single AutoIt initializer, with access-denied/unknown never downgraded to absent. On disposable Windows CI, 5,000 callback-stressed queries had zero failures; 31 native harnesses passed.
+- Multi-VM read-only audit (a75b0b6) now requires the direct Global/MachineRegistry structure, valid and unique UUIDs and an exact UUID/path pairing between each local .vbox and its registered entry. It refuses duplicate configuration UUIDs, swapped UUIDs and nested/foreign XML. Native tests exercised two local VMs and snapshot media with 72 assertions. Bulk registration repair is still disabled.
+- Temporary ALPHA ZIP integrity (a42c6c0, b146275) is checked independently before Actions upload: bounded exact allowlist, SHA-256 manifest and all archived binaries and documents bound to the current checkout/build, not only to a self-consistent manifest. This does not sign binaries, accept workstation UAC or publish a release.
+- Full Python suite from the exact remote source snapshot at 6d8a96e: 243 tests, 6 Windows-dependent skips, no failures; native and build checks were green. Full Manager, helper and recovery runs are tracked by the Draft PR and are not inferred from unit tests.
+
+
 ### Added and verified in isolated CI · Russian localization (2026-11-03)
 
 - Added Russian explanations for known session/rebind reasons while preserving the exact technical identifier, including dynamic error suffixes. Unknown reasons remain visible; authorization, logs and JSON tokens are unchanged.

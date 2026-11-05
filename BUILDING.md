@@ -70,6 +70,15 @@ The archive is a temporary GitHub Actions artifact, not a release or
 Windows 11 certification. See [manual isolated host acceptance](docs/ALPHA-WINDOWS-TEST.md).
 The normal diagnostic ZIP retains its original seven-file allowlist.
 
+The ALPHA CI now independently verifies the archive after packaging and before
+upload, using scripts/verify_alpha_archive.py. The command takes the generated
+ALPHA ZIP, the compiled main EXE, paired Alpha helper, and --source-root .
+pointing at the same checkout. It checks an exact eleven-entry allowlist,
+bounded regular files, the original SHA256SUMS manifest and SHA-256 matches
+against every original build and documentation input. The resulting JSON is
+uploaded beside the temporary ZIP for inspection. This is **not** a publisher
+signature or an approval to use the bundle on an ordinary workstation.
+
 ## Separate Manager-session experiment
 
 `./scripts/build.ps1 -AutoItRoot <official-toolchain-root> -SessionExperiment`
