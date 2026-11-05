@@ -22,6 +22,8 @@ on:
       - scripts/vbox_sup_cleanup.ps1
       - scripts/vbox_sup_partial_cleanup.ps1
       - scripts/package_alpha.ps1
+      - scripts/verify_alpha_archive.py
+      - tests/test_alpha_archive.py
       - scripts/build.ps1
       - scripts/build_portable_setup.ps1
       - docs/ALPHA-WINDOWS-TEST.md
@@ -90,10 +92,19 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/package_alpha.ps1 -Output (Join-Path $env:GITHUB_WORKSPACE 'build/Portable-VirtualBox-Win10-11-ALPHA-TEST-ONLY.zip')
+      - name: Independently verify package contents and paired executable hashes
+        shell: pwsh
+        run: |
+          python -X utf8 scripts/verify_alpha_archive.py build/Portable-VirtualBox-Win10-11-ALPHA-TEST-ONLY.zip --frontend build/Portable-VirtualBox_x64.exe --helper build/Portable-VirtualBox-Helper-Alpha.exe | Tee-Object -FilePath build/alpha-verification.json
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath 'build/alpha-verification.json')) {
+            throw 'Independent package verification failed; do not upload ALPHA candidate'
+          }
       - name: Upload temporary acceptance artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: portable-virtualbox-win10-11-alpha-ci-untested
-          path: build/Portable-VirtualBox-Win10-11-ALPHA-TEST-ONLY.zip
+          path: |
+            build/Portable-VirtualBox-Win10-11-ALPHA-TEST-ONLY.zip
+            build/alpha-verification.json
           if-no-files-found: error
           retention-days: 7
