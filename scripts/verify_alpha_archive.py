@@ -22,6 +22,18 @@ REQUIRED_FILES = frozenset({
     'VBoxManage.cmd', 'README.md', 'README.ru.md', 'LICENSE.md',
     'CREDITS.md', 'ALPHA-TEST-ONLY.md',
 })
+REQUIRED_SOURCE_PATHS = {
+    'Portable-VirtualBox.exe': 'build/Portable-VirtualBox_x64.exe',
+    'Portable-VirtualBox-Setup.exe': 'build/Portable-VirtualBox-Setup.exe',
+    'Portable-VirtualBox-Helper-Alpha.exe': 'build/Portable-VirtualBox-Helper-Alpha.exe',
+    'VBoxManagePortable.exe': 'build/VBoxManagePortable.exe',
+    'VBoxManage.cmd': 'build/VBoxManage.cmd',
+    'README.md': 'README.md',
+    'README.ru.md': 'README.ru.md',
+    'LICENSE.md': 'LICENSE.md',
+    'CREDITS.md': 'CREDITS.md',
+    'ALPHA-TEST-ONLY.md': 'docs/ALPHA-WINDOWS-TEST.md',
+}
 MANIFEST = 'SHA256SUMS.txt'
 MAX_ARCHIVE_BYTES = 300 * 1024 * 1024
 MAX_MEMBER_BYTES = 128 * 1024 * 1024
@@ -42,7 +54,7 @@ def hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def verify(archive: Path, frontend: Path, helper: Path) -> dict:
+def verify(archive: Path, frontend: Path, helper: Path, source_root: Path) -> dict:
     archive = Path(archive)
     info = archive.lstat()
     if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= MAX_ARCHIVE_BYTES:
@@ -51,6 +63,21 @@ def verify(archive: Path, frontend: Path, helper: Path) -> dict:
         'Portable-VirtualBox.exe': hash_file(frontend),
         'Portable-VirtualBox-Helper-Alpha.exe': hash_file(helper),
     }
+    source_root = Path(source_root).resolve(strict=True)
+    if not source_root.is_dir() or set(REQUIRED_SOURCE_PATHS) != REQUIRED_FILES:
+        raise ValueError('Missing trusted checkout or incomplete expected inputs')
+    source_checksums: dict[str, str] = {}
+    for name, relative in REQUIRED_SOURCE_PATHS.items():
+        path = source_root / relative
+        parent = path.parent
+        while parent != source_root:
+            if parent.is_symlink() or not parent.is_dir():
+                raise ValueError('Linked or missing source component: ' + str(parent))
+            parent = parent.parent
+        source_checksums[name] = hash_file(path)
+    for name, expected in expected_pair.items():
+        if source_checksums[name] != expected:
+            raise ValueError('Paired executable does not match its source checkout')
     checksums: dict[str, str] = {}
     manifest: bytes | None = None
     required_names = REQUIRED_FILES | {MANIFEST}
@@ -121,11 +148,12 @@ def verify(archive: Path, frontend: Path, helper: Path) -> dict:
     for name, digest in found.items():
         if checksums.get(name) != digest:
             raise ValueError('Archive member SHA-256 mismatch: ' + name)
-    for name, expected in expected_pair.items():
+    for name, expected in source_checksums.items():
         if checksums[name] != expected:
-            raise ValueError('Paired executable differs from tested build: ' + name)
+            raise ValueError('Archive member differs from trusted build/checkout: ' + name)
     return {
         'entries': len(required_names),
+        'verified_members': len(source_checksums),
         'archive_sha256': hash_file(archive),
         'frontend_sha256': expected_pair['Portable-VirtualBox.exe'],
         'helper_sha256': expected_pair['Portable-VirtualBox-Helper-Alpha.exe'],
@@ -139,9 +167,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('archive', type=Path)
     parser.add_argument('--frontend', type=Path, required=True)
     parser.add_argument('--helper', type=Path, required=True)
+    parser.add_argument('--source-root', type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        result = verify(args.archive, args.frontend, args.helper)
+        result = verify(args.archive, args.frontend, args.helper, args.source_root)
     except (OSError, ValueError) as exc:
         print('ALPHA package verification failed: ' + str(exc), file=sys.stderr)
         return 1

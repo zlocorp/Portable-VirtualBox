@@ -95,7 +95,7 @@ jobs:
       - name: Independently verify package contents and paired executable hashes
         shell: pwsh
         run: |
-          python -X utf8 scripts/verify_alpha_archive.py build/Portable-VirtualBox-Win10-11-ALPHA-TEST-ONLY.zip --frontend build/Portable-VirtualBox_x64.exe --helper build/Portable-VirtualBox-Helper-Alpha.exe | Tee-Object -FilePath build/alpha-verification.json
+          python -X utf8 scripts/verify_alpha_archive.py build/Portable-VirtualBox-Win10-11-ALPHA-TEST-ONLY.zip --frontend build/Portable-VirtualBox_x64.exe --helper build/Portable-VirtualBox-Helper-Alpha.exe --source-root . | Tee-Object -FilePath build/alpha-verification.json
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath 'build/alpha-verification.json')) {
             throw 'Independent package verification failed; do not upload ALPHA candidate'
           }

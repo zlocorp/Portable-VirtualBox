@@ -27,11 +27,15 @@ class AlphaArchiveVerifier(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.archive = self.root / 'alpha.zip'
-        self.frontend = self.root / 'frontend.exe'
-        self.helper = self.root / 'helper.exe'
+        self.source = self.root / 'checkout'
+        self.source.mkdir()
         self.entries = {name: b'fixture-' + name.encode('ascii') for name in alpha.REQUIRED_FILES}
-        self.frontend.write_bytes(self.entries['Portable-VirtualBox.exe'])
-        self.helper.write_bytes(self.entries['Portable-VirtualBox-Helper-Alpha.exe'])
+        for name, relative in alpha.REQUIRED_SOURCE_PATHS.items():
+            path = self.source / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(self.entries[name])
+        self.frontend = self.source / 'build/Portable-VirtualBox_x64.exe'
+        self.helper = self.source / 'build/Portable-VirtualBox-Helper-Alpha.exe'
 
     def make_archive(self, *, additions=(), remove=(), override=None, manifest=None):
         content = dict(self.entries)
@@ -53,7 +57,7 @@ class AlphaArchiveVerifier(unittest.TestCase):
                         z.writestr(item, b'extra')
 
     def verify(self):
-        return alpha.verify(self.archive, self.frontend, self.helper)
+        return alpha.verify(self.archive, self.frontend, self.helper, self.source)
 
     def test_complete_known_package_accepts_only_matching_inputs(self):
         self.make_archive()
@@ -101,6 +105,14 @@ class AlphaArchiveVerifier(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.verify()
 
+    def test_rehashed_setup_cli_or_documentation_must_match_checkout(self):
+        for name in ('Portable-VirtualBox-Setup.exe', 'VBoxManagePortable.exe',
+                     'VBoxManage.cmd', 'README.ru.md', 'ALPHA-TEST-ONLY.md'):
+            with self.subTest(name=name):
+                self.make_archive(override={name: b'repacked-tampered'})
+                with self.assertRaises(ValueError):
+                    self.verify()
+
     def test_mutated_paired_executables_refused_even_if_manifest_rehashed(self):
         self.make_archive(override={'Portable-VirtualBox.exe': b'replaced'})
         with self.assertRaises(ValueError):
@@ -136,6 +148,7 @@ class AlphaArchiveWiring(unittest.TestCase):
         self.assertLess(verify_at, upload_at)
         self.assertIn('--frontend build/Portable-VirtualBox_x64.exe', workflow)
         self.assertIn('--helper build/Portable-VirtualBox-Helper-Alpha.exe', workflow)
+        self.assertIn('--source-root .', workflow)
         self.assertIn('build/alpha-verification.json', workflow)
         self.assertIn('tests/test_alpha_archive.py', workflow)
 
