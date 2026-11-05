@@ -8,6 +8,9 @@ Global $g_MS_AlphaMode = False
 ; In CI it is wired to the exact compiled main EXE too; production effects remain disabled.
 
 Func _PB_Outcome($ok, $error, $handle)
+    ; A nonzero returned process handle is never a clean UAC cancellation.
+    ; Retain an ambiguous child until its exact exit can be observed.
+    If Not $ok And $handle <> 0 Then Return "UNKNOWN"
     If Not $ok And $error = 1223 Then Return "CANCELLED"
     If Not $ok Or $handle = 0 Then Return "FAILED"
     Return "STARTED"
@@ -90,7 +93,10 @@ Func _PB_RunRequest($root, $action, $controller, $cycle, $formerPid = 0)
     Local $p = _PB_RequestBlocking($root, $action, $controller, $cycle, $formerPid), $result = 70
     If $p["status"] == "CANCELLED" Then
         $result = 1223
-    ElseIf $p["status"] == "STARTED" Then
+    ElseIf $p["handle"] <> 0 Then
+        ; A returned handle remains a live ownership obligation even if
+        ; GetProcessId failed or ShellExecuteEx returned ambiguous status.
+        ; Only a positively STARTED child with confirmed exit may succeed.
         ; The fixed elevated helper may still be performing a system effect
         ; after 180 seconds. Do NOT detach on elapsed time or controller loss:
         ; that would turn a still-live operation into a fake completed failure.
@@ -99,10 +105,16 @@ Func _PB_RunRequest($root, $action, $controller, $cycle, $formerPid = 0)
         While 1
             Local $status = _PB_PollHelper($p)
             If $status == "EXITED" Then
-                If $controllerPresent And $p["exit_code"] = 0 Then $result = 0
+                If $controllerPresent And $p["status"] == "STARTED" And $p["exit_code"] = 0 Then $result = 0
                 ExitLoop
             EndIf
-            If $status <> "PRESENT" Then ExitLoop ; unknown is never success
+            If $status == "UNKNOWN" Then
+                ; Never discard a handle whose elevated process may still be
+                ; modifying drivers. Keep the request worker and UI responsive.
+                $controllerPresent = False ; unknown can never become success
+                Sleep(100)
+                ContinueLoop
+            EndIf
             $parent = _WinObsProcessRead($token)
             If $parent["status"] <> "PRESENT" Then $controllerPresent = False
             Sleep(100)
@@ -140,16 +152,19 @@ Func _PB_RequestBlocking($root, $action, $controller, $cycle, $formerPid = 0)
     DllStructSetData($s, "directory", DllStructGetPtr($directory))
     DllStructSetData($s, "show", 0)
     ConsoleWrite("Elevation request: " & $action & " cycle=" & $cycle & @CRLF)
-    Local $a = DllCall("shell32.dll", "bool", "ShellExecuteExW", "struct*", $s)
-    Local $dllError = @error, $ok = False
-    If Not $dllError Then $ok = $a[0] <> 0
-    Local $e = DllCall("kernel32.dll", "dword", "GetLastError"), $error = 0
-    If Not @error Then $error = $e[0]
+    ; Capture the raw last-error in the same initializer statement as the
+    ; shell call. A later AutoIt callback can overwrite this thread's error.
+    DllCall($g_WinObsKernel32, "none", "SetLastError", "dword", 0)
+    Local $a = DllCall("shell32.dll", "bool", "ShellExecuteExW", "struct*", $s), $dllError = @error, _
+        $captured = DllCall($g_WinObsKernel32, "dword", "GetLastError"), $captureError = @error
+    Local $error = -1, $ok = False
+    If Not $captureError Then $error = $captured[0]
+    If Not $dllError And IsArray($a) Then $ok = $a[0] <> 0
     Local $handle = DllStructGetData($s, "process")
     $p["status"] = _PB_Outcome($ok, $error, $handle)
     ConsoleWrite("Elevation result: " & $p["status"] & " win32=" & $error & @CRLF)
+    If $handle <> 0 Then $p["handle"] = $handle
     If $p["status"] <> "STARTED" Then Return $p
-    $p["handle"] = $handle
     $p["image"] = $exe
     $a = DllCall("kernel32.dll", "dword", "GetProcessId", "handle", $handle)
     If @error Or $a[0] = 0 Then

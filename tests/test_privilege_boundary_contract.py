@@ -145,6 +145,28 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn('$controllerPresent', worker)
         self.assertNotIn('While TimerDiff($clock) < 180000', worker)
 
+    def test_uac_result_captures_last_error_before_interpreter_callbacks(self):
+        source = self.text('source/PrivilegeBoundary.au3')
+        self.assertRegex(source,
+            r'(?s)Local \$a = DllCall\("shell32\.dll", "bool", "ShellExecuteExW", "struct\*", \$s\), '
+            r'\$dllError = @error, _\s*\$captured = DllCall\(\$g_WinObsKernel32, "dword", "GetLastError"\), '
+            r'\$captureError = @error')
+        self.assertIn('Local $error = -1, $ok = False', source)
+        self.assertIn('If Not $captureError Then $error = $captured[0]', source)
+        self.assertNotIn('Local $e = DllCall("kernel32.dll", "dword", "GetLastError"), $error = 0', source)
+
+    def test_uac_ambiguous_child_retains_handle_until_confirmed_exit(self):
+        source = self.text('source/PrivilegeBoundary.au3')
+        outcome = source.split('Func _PB_Outcome(')[1].split('EndFunc')[0]
+        self.assertIn('If Not $ok And $handle <> 0 Then Return "UNKNOWN"', outcome)
+        waiting = source.split('Func _PB_RunRequest(')[1].split('EndFunc')[0]
+        self.assertIn('ElseIf $p["handle"] <> 0 Then', waiting)
+        self.assertNotIn('If $status <> "PRESENT" Then ExitLoop', waiting)
+        self.assertIn('If $status == "UNKNOWN" Then', waiting)
+        self.assertIn('ContinueLoop', waiting)
+        blocking = source.split('Func _PB_RequestBlocking(')[1].split('EndFunc')[0]
+        self.assertIn('If $handle <> 0 Then $p["handle"] = $handle', blocking)
+
     def test_built_in_powershell_retains_command_process_handles(self):
         for path, variable in (
             ('scripts/vbox_sup_standalone.ps1', 'process'),
