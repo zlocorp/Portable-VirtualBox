@@ -4,6 +4,14 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Hardened · direct Machine XML and compiled multi-VM acceptance (2026-11-06)
+
+- The public read-only `--audit-vms` now accepts only one direct `Machine` child in a `VirtualBox` document with a matching supported XML namespace. Reject nested, foreign-namespace and extra-root-child Machine structures rather than accepting spoofed VM metadata (`210c53e`). It never edits the VM or registry.
+- Compiled Windows acceptance creates two local registered VMs, verifies both appear, rejects duplicate/mismatched UUID registration and malformed machine XML, and confirms the original valid fixture remains `CLEAN` (`c82d97b`). The 5 triggered Actions workflows on `c82d97b` completed successfully. Local Python suite: 245 tests, 6 Windows-dependent skips, zero failures.
+- The earlier full P0/driver/GUI source checkpoint `6d8a96e` completed all 13 triggered workflows successfully. The first 7 of 8 workflows for direct-XML checkpoint `210c53e` passed while its long real-Manager GUI workflow was still running at documentation time; **do not** count that ongoing run as passed.
+- This does not enable automatic multi-VM repair, saved-state relocation or physical cross-host acceptance. Those remain gated.
+
+
 ### Hardened · owned UAC helpers, file errors, VM inventory, ALPHA package (2026-11-05)
 
 - UAC child ownership (7ba91a7, eb01d82): an ambiguous ShellExecuteExW result that returned a process handle is no longer classified as a clean cancellation or success. The worker retains that exact handle until it can prove exit; Win32 last-error is captured before GUI callbacks. No interactive Windows 10/11 UAC acceptance is implied.
