@@ -18,6 +18,7 @@
 #include "PortableVmInventory.au3"
 #include "PortableVmRebind.au3"
 #include "PortableVmBatchPlan.au3"
+#include "PortableVmBatchRecovery.au3"
 #include "PortableProfile.au3"
 #include "LauncherSettings.au3"
 #include "PortableApp.au3"
@@ -57,7 +58,7 @@ If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
             _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
-                "  --version  --diagnose  --diagnose-services  --diagnose-services-json  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --download-app64  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --plan-vm-rebind  --plan-multi-vm-rebind  --prepare-multi-vm-rebind NEW_BACKUP_FOLDER  --prepare-vm-rebind NEW_BACKUP_FOLDER  --about  --help" & @CRLF & _
+                "  --version  --diagnose  --diagnose-services  --diagnose-services-json  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --download-app64  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --plan-vm-rebind  --plan-multi-vm-rebind  --prepare-multi-vm-rebind NEW_BACKUP_FOLDER  --review-multi-vm-rebind ORIGINAL_BACKUP  --prepare-vm-rebind NEW_BACKUP_FOLDER  --about  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
         Case "--diagnose-services-json"
@@ -178,6 +179,12 @@ If $CmdLine[0] >= $iFirst Then
             If $preparedMulti["status"] == "BACKUP_ONLY" Then Exit 0
             If $preparedMulti["status"] == "FAILED" Then Exit 3
             Exit 2
+        Case "--review-multi-vm-rebind"
+            If $CmdLine[0] <> $iFirst + 1 Then Exit 64
+            Local $progress = _PVB_Reconcile(@ScriptDir, $CmdLine[$iFirst + 1])
+            _LI_Write(_PVB_RecoveryText($progress) & @CRLF)
+            If $progress["status"] == "REVIEW_ONLY" Or $progress["status"] == "COMPLETE" Then Exit 0
+            Exit 3
         Case "--prepare-vm-rebind"
             If $CmdLine[0] <> $iFirst + 1 Then Exit 64
             Local $rebindCopy = _PVR_Backup(@ScriptDir, $CmdLine[$iFirst + 1])

@@ -175,4 +175,39 @@ $null=Invoke-Launcher ('--prepare-multi-vm-rebind "'+$batchBlocked+'"') 2 'batch
 if(Test-Path -LiteralPath $batchBlocked) { throw 'Unsafe multi-VM candidate wrote a batch backup' }
 [IO.File]::WriteAllText($registry,$twoEntries,$utf8)
 
+# Reconcile the same immutable original copy across simulated interruptions.
+# These fixtures change only the disposable test XML; the public command must
+# never execute Oracle, register a VM, write user files or claim repair authority.
+$firstLocal='<MachineEntry uuid="'+$uuid+'" src="..\Machines\Имя ВМ\Имя ВМ.vbox"/>'
+$secondLocal='<MachineEntry uuid="'+$secondId+'" src="..\Machines\Вторая ВМ\Вторая ВМ.vbox"/>'
+$recovery=Invoke-Launcher ('--lang en --review-multi-vm-rebind "'+$multiBackup+'"') 0 'batch-recovery-stale'
+if(-not $recovery.Contains('STALE=2 ABSENT=0 LOCAL=0') -or -not $recovery.Contains('NOT A COMMAND')) { throw 'Initial recovery report is not safely read-only' }
+[IO.File]::WriteAllText($registry,$regHead+$secondEntry+$regTail,$utf8)
+$recovery=Invoke-Launcher ('--lang en --review-multi-vm-rebind "'+$multiBackup+'"') 0 'batch-recovery-after-first-unregister'
+if(-not $recovery.Contains('STALE=1 ABSENT=1 LOCAL=0') -or -not $recovery.Contains('REGISTER_HINT_ONLY')) { throw 'Interrupted first unregister not recovered' }
+[IO.File]::WriteAllText($registry,$regHead+$firstLocal+$secondEntry+$regTail,$utf8)
+$recovery=Invoke-Launcher ('--lang ru --review-multi-vm-rebind "'+$multiBackup+'"') 0 'batch-recovery-one-complete'
+if(-not $recovery.Contains('STALE=1 ABSENT=0 LOCAL=1') -or -not $recovery.Contains('ТОЛЬКО ЧТЕНИЕ')) { throw 'Partially completed two-VM migration not localized' }
+[IO.File]::WriteAllText($registry,$regHead+$firstLocal+$secondLocal+$regTail,$utf8)
+$recovery=Invoke-Launcher ('--lang en --review-multi-vm-rebind "'+$multiBackup+'"') 0 'batch-recovery-finished'
+if(-not $recovery.Contains('STALE=0 ABSENT=0 LOCAL=2') -or -not $recovery.Contains('No new changes required')) { throw 'Final no-op state not recognized' }
+$badForeign='<MachineEntry uuid="{ffffffff-2222-3333-4444-abcdef123456}" src="..\Machines\Вторая ВМ\Вторая ВМ.vbox"/>'
+[IO.File]::WriteAllText($registry,$regHead+$firstLocal+$badForeign+$regTail,$utf8)
+$null=Invoke-Launcher ('--lang en --review-multi-vm-rebind "'+$multiBackup+'"') 3 'batch-recovery-foreign-uuid'
+[IO.File]::WriteAllText($registry,$regHead+$firstLocal+$secondEntry+$regTail,$utf8)
+$diskToMutate=Join-Path $secondFolder 'disk.vdi'
+$diskOriginal=[IO.File]::ReadAllBytes($diskToMutate)
+[IO.File]::WriteAllBytes($diskToMutate,[Text.Encoding]::ASCII.GetBytes('CHANGED-VM-DISK'))
+$null=Invoke-Launcher ('--lang en --review-multi-vm-rebind "'+$multiBackup+'"') 3 'batch-recovery-media-changed'
+[IO.File]::WriteAllBytes($diskToMutate,$diskOriginal)
+$recovery=Invoke-Launcher ('--lang en --review-multi-vm-rebind "'+$multiBackup+'"') 0 'batch-recovery-restored-after-reject'
+if(-not $recovery.Contains('STALE=1 ABSENT=0 LOCAL=1')) { throw 'Recovered data not recognized after rejecting mutation' }
+$null=Invoke-Launcher ('--verify-backup "'+$multiBackup+'"') 0 'batch-recovery-original-backup-preserved'
+if((Get-FileHash -LiteralPath (Join-Path $multiBackup 'data\.VirtualBox\VirtualBox.xml') -Algorithm SHA256).Hash -ne $beforeBatchRegistry) {
+  throw 'Original verified registry in backup changed during reconciliation'
+}
+# All test-only state edits must leave a valid registry before completion.
+[IO.File]::WriteAllText($registry,$twoEntries,$utf8)
+Write-Host 'PASS: compiled multi-VM original-backup reconciliation across simulated partial states and non-destructive refusal'
+
 Write-Host 'PASS: compiled two-VM read-only moved-root discovery, RU/EN, mixed origins, UUID mismatch, missing media and mutation refusal'
