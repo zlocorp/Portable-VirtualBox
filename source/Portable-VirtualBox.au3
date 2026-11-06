@@ -17,6 +17,7 @@
 #include "PortableDataBackup.au3"
 #include "PortableVmInventory.au3"
 #include "PortableVmRebind.au3"
+#include "PortableVmBatchPlan.au3"
 #include "PortableProfile.au3"
 #include "LauncherSettings.au3"
 #include "PortableApp.au3"
@@ -56,7 +57,7 @@ If $CmdLine[0] >= $iFirst Then
     Switch $CmdLine[$iFirst]
         Case "--help", "-h"
             _LI_Write(_LI("help.title") & @CRLF & _LI("help.commands") & @CRLF & _
-                "  --version  --diagnose  --diagnose-services  --diagnose-services-json  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --download-app64  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --plan-vm-rebind  --prepare-vm-rebind NEW_BACKUP_FOLDER  --about  --help" & @CRLF & _
+                "  --version  --diagnose  --diagnose-services  --diagnose-services-json  --preflight  --selftest  --profile-status  --prepare-profile  --prepare-app64 OFFICIAL_INSTALLER  --download-app64  --app-status  --check-readiness  --save-language ru|en|auto  --backup-data PATH  --verify-backup PATH  --restore-backup SOURCE NEW_DEST  --audit-vms  --plan-vm-rebind  --plan-multi-vm-rebind  --prepare-vm-rebind NEW_BACKUP_FOLDER  --about  --help" & @CRLF & _
                 _LI("help.language") & @CRLF & _LI("help.warning") & @CRLF)
             Exit 0
         Case "--diagnose-services-json"
@@ -162,6 +163,13 @@ If $CmdLine[0] >= $iFirst Then
             _LI_Write(_PVR_Text($rebindPlan) & @CRLF)
             If $rebindPlan["status"] == "READY" Then Exit 0
             If $rebindPlan["status"] == "NONE" Then Exit 2
+            Exit 3
+        Case "--plan-multi-vm-rebind"
+            If $CmdLine[0] <> $iFirst Then Exit 64
+            Local $multiPlan = _PVB_Plan(@ScriptDir)
+            _LI_Write(_PVB_Text($multiPlan) & @CRLF)
+            If $multiPlan["status"] == "REVIEW_ONLY" Then Exit 0
+            If $multiPlan["status"] == "NONE" Then Exit 2
             Exit 3
         Case "--prepare-vm-rebind"
             If $CmdLine[0] <> $iFirst + 1 Then Exit 64

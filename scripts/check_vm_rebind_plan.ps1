@@ -110,3 +110,45 @@ if((Test-Path -LiteralPath $old) -or @(Get-Process -Name VirtualBox,VirtualBoxVM
     throw 'Planner touched the former folder or started Oracle'
 }
 Write-Host 'PASS: compiled RU/EN relocated VM plan, exact UUID, snapshot chain, external/XXE refusal, SHA256 backup, no Oracle mutation'
+
+# Two-VM relocation discovery is informational only. Construct a second
+# genuine local .vbox and snapshot chain with a stale absolute registration.
+[IO.File]::WriteAllText($registry,$regHead+$entry+$regTail,$utf8)
+$secondId='{99999999-2222-3333-4444-555555555555}'
+$secondFolder=Join-Path $root 'data\Machines\Вторая ВМ'
+$secondConfig=Join-Path $secondFolder 'Вторая ВМ.vbox'
+$secondOldSource=Join-Path $old 'data\Machines\Вторая ВМ\Вторая ВМ.vbox'
+New-Item -ItemType Directory -Path (Join-Path $secondFolder 'Snapshots') -ErrorAction Stop | Out-Null
+[IO.File]::WriteAllBytes((Join-Path $secondFolder 'disk.vdi'),[Text.Encoding]::ASCII.GetBytes('SECOND-DISK'))
+[IO.File]::WriteAllBytes((Join-Path $secondFolder 'Snapshots\snap.vdi'),[Text.Encoding]::ASCII.GetBytes('SECOND-SNAP'))
+$secondBody=($xmlHead+$media+$xmlTail).Replace($uuid,$secondId).Replace('Имя ВМ','Вторая ВМ')
+[IO.File]::WriteAllText($secondConfig,$secondBody,$utf8)
+$secondEntry='<MachineEntry uuid="'+$secondId+'" src="'+$secondOldSource+'"/>'
+$twoEntries=$regHead+$entry+$secondEntry+$regTail
+[IO.File]::WriteAllText($registry,$twoEntries,$utf8)
+$report=Invoke-Launcher '--lang en --plan-multi-vm-rebind' 0 'batch-plan-two-vms'
+if(-not $report.Contains('READ-ONLY') -or -not $report.Contains($secondId) -or
+   -not $report.Contains($uuid) -or -not $report.Contains($secondConfig) -or
+   -not $report.Contains('Batch changes and cleanup remain disabled')) {
+  throw 'Two-VM discovery omitted explicit UUID/path or read-only warning'
+}
+$reportRu=Invoke-Launcher '--lang ru --plan-multi-vm-rebind' 0 'batch-plan-ru'
+if(-not $reportRu.Contains('ТОЛЬКО ЧТЕНИЕ') -or -not $reportRu.Contains('Вторая ВМ')) { throw 'Russian batch discovery missing' }
+$null=Invoke-Launcher ('--lang en --prepare-vm-rebind "'+(Join-Path $parent 'Forbidden-Batch-Backup')+'"') 2 'batch-write-remains-disabled'
+if(Test-Path -LiteralPath (Join-Path $parent 'Forbidden-Batch-Backup')) { throw 'Bulk preparation unexpectedly wrote user backup' }
+$alternateOld=Join-Path $parent 'Other Old Root'
+[IO.File]::WriteAllText($registry,$regHead+$entry+$secondEntry.Replace($old,$alternateOld)+$regTail,$utf8)
+$null=Invoke-Launcher '--lang en --plan-multi-vm-rebind' 3 'batch-plan-mixed-origins'
+[IO.File]::WriteAllText($registry,$regHead+$entry+$secondEntry.Replace($secondId,'{ffffffff-2222-3333-4444-555555555555}')+$regTail,$utf8)
+$null=Invoke-Launcher '--lang en --plan-multi-vm-rebind' 3 'batch-plan-invalid-uuid'
+[IO.File]::WriteAllText($registry,$twoEntries,$utf8)
+Remove-Item -LiteralPath (Join-Path $secondFolder 'Snapshots\snap.vdi') -ErrorAction Stop
+$null=Invoke-Launcher '--lang en --plan-multi-vm-rebind' 3 'batch-plan-missing-media'
+[IO.File]::WriteAllBytes((Join-Path $secondFolder 'Snapshots\snap.vdi'),[Text.Encoding]::ASCII.GetBytes('SECOND-SNAP'))
+[IO.File]::WriteAllText($registry,$regHead+$entry+$regTail,$utf8)
+$null=Invoke-Launcher '--lang en --plan-multi-vm-rebind' 2 'batch-plan-single-refusal'
+[IO.File]::WriteAllText($registry,$twoEntries,$utf8)
+$report=Invoke-Launcher '--lang en --plan-multi-vm-rebind' 0 'batch-plan-restored'
+if(-not $report.Contains($secondId)) { throw 'Read-only batch discovery did not recover after negative fixtures' }
+if(Test-Path -LiteralPath $old) { throw 'Read-only discovery created the old path' }
+Write-Host 'PASS: compiled two-VM read-only moved-root discovery, RU/EN, mixed origins, UUID mismatch, missing media and mutation refusal'
