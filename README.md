@@ -16,6 +16,8 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 **Read-only discovery for several moved VMs.** `Portable-VirtualBox.exe --plan-multi-vm-rebind` reports **2–16** registered machines apparently relocated together from the same absent former portable root. It checks per-VM UUID/path identity, safe machine configuration, local disk/snapshot/ancillary files, absence of saved-state references, registry/configuration hashes and idle-host observations. Exit **0 means a reviewable report, not approval to repair**; 2 means no multi-VM candidate; 3 means an unsafe/unknown case; 64 means invalid syntax. No Oracle command, registry rewrite, backup or batch repair is performed. Keep the original data and an independent verified backup. The existing `--prepare-vm-rebind` and ALPHA `Repair moved VM` still authorize **one VM only**. Physical cross-host movement and transactional multi-VM recovery are not accepted.
 
+**Verified full backup for several moved VMs.** Once `--plan-multi-vm-rebind` reports a reviewable 2–16 VM candidate, run `Portable-VirtualBox.exe --prepare-multi-vm-rebind "NEW_BACKUP_FOLDER"` to create a **new, non-overwriting, offline SHA-256 copy of the entire `data/` tree**. The tool uses the existing backup engine, independently verifies the manifest, then rechecks the registry SHA-256, every VM's reported configuration hash, inventory and idle-host state. It returns `BACKUP_ONLY`, not a registration-repair authorization. Exit 0 means **only the backup was verified**; 2 means blocked or no batch candidate, 3 means incomplete/uncertain backup, 64 means invalid arguments. If the result is uncertain, preserve the completed or `.pending` folder for inspection; never treat it as a repair permit. No bulk Oracle command, XML rewrite or elevated action is added.
+
 **Check VM portability before copying.** Use the RU/EN **Audit VM portability** GUI action or `--audit-vms` to inspect local `.vbox` configurations, snapshot counts, external/missing virtual disks and machine registrations in `data/.VirtualBox/VirtualBox.xml`. An external registered VM or unregistered `.vbox` file is shown as needing review. Backing up `data` with such findings requires explicit GUI confirmation or prints a CLI warning. External disks are **never included** in that copy. This read-only check does not modify VM XML and does not guarantee that a backup is complete.
 
 **A usable diagnostic shell.** Native Russian/English GUI and UTF-8 CLI, remembered language with an explicit “Save language” action, a return to Windows language selection, readable failure reasons, copyable diagnostics and a concise About window. A temporary `--lang` selection never overwrites the saved preference.
@@ -80,6 +82,7 @@ Portable-VirtualBox.exe --diagnose-services-json
 Portable-VirtualBox.exe --audit-vms
 Portable-VirtualBox.exe --plan-vm-rebind
 Portable-VirtualBox.exe --plan-multi-vm-rebind
+Portable-VirtualBox.exe --prepare-multi-vm-rebind "D:\Backups\Moved-VMs-original"
 Portable-VirtualBox.exe --prepare-vm-rebind "D:\Backups\Moved-VM-original"
 Portable-VirtualBox.exe --about
 Portable-VirtualBox.exe --backup-data "D:\Backups\PortableVBox-2026-10-22"

@@ -58,6 +58,15 @@ EXE's read-only `--plan-vm-rebind`, then
 It makes a verified full data copy and **does not edit VirtualBox.xml or run
 Oracle to repair the stale entry**. Keep that original backup intact.
 
+**Multiple-VM registration repair is still unavailable.** The independent
+`--prepare-multi-vm-rebind "NEW_BACKUP_FOLDER"` CLI action can now create a
+SHA-256 verified full `data/` copy for a read-only 2–16 VM candidate.
+It requires an idle host, a fresh destination and a second exact candidate
+check after copying. A `BACKUP_ONLY` result verifies files, **not**
+registration repair, ownership or permission for any system operation.
+Preserve the original root and independently inspect the backup manifest.
+Do not perform repeated single-VM ALPHA repairs to simulate a transaction.
+
 **Multiple-VM relocation is currently inspection-only.** On an idle host,
 `Portable-VirtualBox.exe --plan-multi-vm-rebind` can report 2–16 machines
 that appear to share the same absent original portable root. It verifies

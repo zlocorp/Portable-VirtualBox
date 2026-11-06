@@ -4,6 +4,13 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · verified offline backup for multiple relocated VMs (2026-11-06)
+
+- `be39db2` exposes `--prepare-multi-vm-rebind NEW_BACKUP_FOLDER` as a separate **non-elevated, backup-only** action for the previously verified 2–16 VM moved-root candidate. Uses the existing non-overwriting SHA-256 copier of the whole `data/` tree, checks the complete backup and manifest, then re-runs the offline plan and compares original registry SHA-256, per-VM config/hash report, media/snapshot counts and previous root. A changed or unknown result is not a successful proof; completed and `.pending` folders are preserved for inspection.
+- `BACKUP_ONLY` **never** authorizes mass register/unregister, XML rewrites or any driver/service cleanup. The existing single-VM explicit repair remains the only mutation-capable route. The tool does not ship a multi-VM transaction/recovery feature.
+- At this exact source checkpoint, [native Windows 42212567748](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42212567748) passed **60 batch assertions, 32 native harnesses**; [compiled Windows CLI 42212567765](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42212567765) verified a complete two-VM snapshot backup, independent `--verify-backup`, refusal to overwrite existing destination and unsafe-source refusal. Local Python suite: **251 tests, 6 Windows-dependent skips**, source audit/active-tree guards passed. Hosted real-guest Manager/helper workflows are tracked separately; Windows 10/11 interactive UAC and physical migration remain unaccepted.
+
+
 ### Added · read-only multi-VM relocation discovery (2026-11-06)
 
 - `0e41ce4` removes an unsafe single-VM false `already-local` outcome: a local registration is a no-op only if the strict one-VM inventory confirms matching UUID, no additional unregistered VMs and no missing/external media. Reuses the canonical registry validator; native and compiled checks passed. Full Manager GUI initially failed before repair at Oracle `VERR_NEM_VM_CREATE_FAILED` on hosted Windows; the identical unchanged retry passed, without relaxing acceptance.
