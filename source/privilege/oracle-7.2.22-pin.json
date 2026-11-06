@@ -1,0 +1,11 @@
+{
+  "version": "7.2.22",
+  "file_count": 185,
+  "total_bytes": 247834716,
+  "installer_sha256": "afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f",
+  "manifest_rows_sha256": "7995ca1d963882b472e075db65dca7975cac2c6d3e587b76500a46bd9089bc60",
+  "format": "UTF-8, ordinal path-sorted rows: path TAB decimal-size TAB lowercase-sha256 LF",
+  "source_run": 39567208694,
+  "source_artifact": 12329862580,
+  "source_artifact_sha256": "8c21b596033e909473cfd9815604482cf9098d970c79ce4ca105c8ce2bd6ce89"
+}

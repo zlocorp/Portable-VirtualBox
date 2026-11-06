@@ -1,0 +1,35 @@
+{
+  "sourceCommit": "0bfdfd3264dc89c8cbcc714bd108b1881bb80d75",
+  "installerSha256": "a81777d2b36380ce042a29e9c554cf032eb46a793f62e3cc82e7411e535c2c26",
+  "wrapperSignature": "Valid",
+  "signer": "CN=\"Oracle America, Inc.\", O=\"Oracle America, Inc.\", L=Redwood City, S=California, C=US",
+  "product": "Oracle VirtualBox 7.2.20",
+  "productVersion": "7.2.20",
+  "manufacturer": "Oracle and/or its affiliates",
+  "platform": "x64;1033,1031,1049,1032,1036,1040,1055,1028,2052,1053,1038,1057,1037",
+  "packages": [
+    {
+      "name": "VirtualBox-7.2.20-r175154-MultiArch_amd64.msi",
+      "architecture": "amd64",
+      "size": 58900480,
+      "sha256": "ae40bb2b2770fcd264cb9d03de2d278a621997b33956e88a2de5edc900873d2a"
+    },
+    {
+      "name": "VirtualBox-7.2.20-r175154-MultiArch_arm64.msi",
+      "architecture": "arm64",
+      "size": 56573952,
+      "sha256": "ef57fce598bf05b22614be7928ff0c51b25e5f387841e99ca5a97044c6a7bbc8"
+    },
+    {
+      "name": "common.cab",
+      "architecture": "all",
+      "size": 62090752,
+      "sha256": "65a3ac87ff3be03e4db4837139eb286e4e1387e1fd5d758d72c6ff745f6e10db"
+    }
+  ],
+  "installerExecuted": false,
+  "msiInstalled": false,
+  "vboxServiceRegistryUnchanged": true,
+  "msiDatabaseUnchanged": true,
+  "databaseOpenMode": "read-only"
+}

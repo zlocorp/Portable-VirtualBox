@@ -1,0 +1,184 @@
+name: Standalone VBoxSup signed INF investigation (disposable)
+
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - .github/workflows/sup-standalone.yml
+      - scripts/vbox_sup_standalone.ps1
+      - tests/test_sup_standalone_contract.py
+      - scripts/vbox_sup_start_owned.ps1
+      - tests/test_sup_start_contract.py
+      - scripts/vbox_vm_boot_probe.ps1
+      - tests/test_vm_boot_standalone_contract.py
+      - scripts/vbox_sup_cleanup.ps1
+      - tests/test_sup_cleanup_contract.py
+      - scripts/vbox_vm_reopen_probe.ps1
+      - tests/test_vm_reopen_contract.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-sup-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-and-probe:
+    if: github.repository == 'zlocorp/Portable-VirtualBox'
+    runs-on: windows-2022
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check standalone INF experiment contract
+        shell: pwsh
+        run: |
+          python -X utf8 -m unittest tests.test_sup_standalone_contract tests.test_sup_cleanup_contract tests.test_vm_reopen_contract -v
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone driver experiment contract failed' }
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE 'scripts\vbox_sup_cleanup.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) { throw ('VBoxSup cleanup PowerShell syntax: ' + ($parseErrors -join '; ')) }
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE 'scripts\vbox_vm_reopen_probe.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) { throw ('VM reopen PowerShell syntax: ' + ($parseErrors -join '; ')) }
+      - name: Verify official Oracle 7.2.22 installer and inspect MSI
+        shell: pwsh
+        run: ./scripts/inspect_oracle.ps1 -WorkDirectory (Join-Path $env:RUNNER_TEMP 'standalone-sup-package')
+      - name: Prepare app64 without running Oracle MSI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'standalone-sup-package'
+          $exe = Join-Path $work 'VirtualBox-7.2.22-175245-Win.exe'
+          $app = Join-Path $work 'portable VBox Тест\app64'
+          New-Item -ItemType Directory -Path (Split-Path $app -Parent) | Out-Null
+          python -X utf8 scripts/prepare_app64.py $exe $app --sha256 afd0ff1656cbe04ed88ce619594ae021419d97cce89fa9bdc443e9a963f1713f --version 7.2.22
+          if ($LASTEXITCODE -ne 0) { throw 'File-only app64 preparation failed' }
+          "STANDALONE_APP64=$app" >> $env:GITHUB_ENV
+      - name: Stage signed VBoxSup INF with pnputil on isolated Windows
+        shell: pwsh
+        run: |
+          ./scripts/vbox_sup_standalone.ps1 -AppDir $env:STANDALONE_APP64 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'standalone-sup-report') -TimeoutSeconds 75
+      - name: Start only signed owned VBoxSup on disposable runner
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:RUNNER_TEMP 'standalone-sup-report\sup-standalone.json'
+          $destination = Join-Path $env:RUNNER_TEMP 'owned-sup-start-result'
+          ./scripts/vbox_sup_start_owned.ps1 -StandaloneReport $source -OutputDirectory $destination -TimeoutSeconds 30
+      - name: Attempt blank VM start from portable app64 and standalone VBoxSup
+        shell: pwsh
+        run: |
+          $sup = Join-Path $env:RUNNER_TEMP 'standalone-sup-report\sup-standalone.json'
+          $report = Get-Content -LiteralPath $sup -Raw | ConvertFrom-Json
+          $started = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'owned-sup-start-result\sup-start-results.json') -Raw | ConvertFrom-Json
+          if ($report.pnputil_exit_code -ne 0 -or -not $report.service_registered -or -not $report.system_driver_matches_package -or
+              -not $started.driver_running) {
+            Write-Host 'Standalone VBoxSup is not running; VM start skipped with recorded installation/start evidence.'
+            exit 0
+          }
+          ./scripts/vbox_vm_boot_probe.ps1 -AppDir $env:STANDALONE_APP64 -StandaloneDriverReport $sup -OutputDirectory (Join-Path $env:RUNNER_TEMP 'standalone-vm-boot') -TimeoutSeconds 35
+      - name: Release only owned VBoxSDS and VBoxSup after confirmed private VM poweroff
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'standalone-sup-report\sup-standalone.json'
+          $started = Join-Path $env:RUNNER_TEMP 'owned-sup-start-result\sup-start-results.json'
+          $boot = Join-Path $env:RUNNER_TEMP 'standalone-vm-boot\vm-boot-results.json'
+          if (-not (Test-Path -LiteralPath $stage) -or -not (Test-Path -LiteralPath $started) -or -not (Test-Path -LiteralPath $boot)) {
+            Write-Host 'No complete standalone-driver VM boot experiment: teardown remains untested on this runner'
+            exit 0
+          }
+          $source = Get-Content -LiteralPath $stage -Raw | ConvertFrom-Json
+          $state = Get-Content -LiteralPath $started -Raw | ConvertFrom-Json
+          $vm = Get-Content -LiteralPath $boot -Raw | ConvertFrom-Json
+          if (-not $source.service_registered -or -not $state.driver_running -or -not $vm.startvm_returned_zero -or -not $vm.poweroff_succeeded) {
+            Write-Host 'Signed driver boot was not fully confirmed: no speculative cleanup is attempted'
+            exit 0
+          }
+          ./scripts/vbox_sup_cleanup.ps1 -AppDir $env:STANDALONE_APP64 -StandaloneReport $stage -DriverStartReport $started -BootReport $boot -OutputDirectory (Join-Path $env:RUNNER_TEMP 'owned-sup-cleanup') -TimeoutSeconds 45
+      - name: Reinstall the same signed VBoxSup after verified first cleanup
+        shell: pwsh
+        run: |
+          $cleanup = Join-Path $env:RUNNER_TEMP 'owned-sup-cleanup\cleanup-results.json'
+          $first = Get-Content -LiteralPath $cleanup -Raw -ErrorAction Stop | ConvertFrom-Json
+          if (-not $first.cleanup_verified -or @($first.final_vbox_services).Count -ne 0) { throw 'First cycle did not clean Windows services' }
+          ./scripts/vbox_sup_standalone.ps1 -AppDir $env:STANDALONE_APP64 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'second-sup-report') -TimeoutSeconds 75
+          $new = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'second-sup-report\sup-standalone.json') -Raw | ConvertFrom-Json
+          if (-not $new.service_registered -or @($new.services_before).Count -ne 0) { throw 'Second driver package not exclusively installed' }
+      - name: Start the second signed VBoxSup instance
+        shell: pwsh
+        run: |
+          ./scripts/vbox_sup_start_owned.ps1 -StandaloneReport (Join-Path $env:RUNNER_TEMP 'second-sup-report\sup-standalone.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'second-sup-start') -TimeoutSeconds 30
+          $r = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'second-sup-start\sup-start-results.json') -Raw | ConvertFrom-Json
+          if (-not $r.driver_running) { throw 'Second signed VBoxSup could not be started' }
+      - name: Reopen existing portable VM with unchanged UUID and boot it again
+        shell: pwsh
+        run: |
+          ./scripts/vbox_vm_reopen_probe.ps1 -AppDir $env:STANDALONE_APP64 -FirstBootDirectory (Join-Path $env:RUNNER_TEMP 'standalone-vm-boot') -FirstCleanupReport (Join-Path $env:RUNNER_TEMP 'owned-sup-cleanup\cleanup-results.json') -StandaloneDriverReport (Join-Path $env:RUNNER_TEMP 'second-sup-report\sup-standalone.json') -DriverStartReport (Join-Path $env:RUNNER_TEMP 'second-sup-start\sup-start-results.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'second-vm-boot') -TimeoutSeconds 40
+      - name: Remove only second-session owned Windows resources
+        shell: pwsh
+        run: |
+          ./scripts/vbox_sup_cleanup.ps1 -AppDir $env:STANDALONE_APP64 -StandaloneReport (Join-Path $env:RUNNER_TEMP 'second-sup-report\sup-standalone.json') -DriverStartReport (Join-Path $env:RUNNER_TEMP 'second-sup-start\sup-start-results.json') -BootReport (Join-Path $env:RUNNER_TEMP 'second-vm-boot\vm-boot-results.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'second-sup-cleanup') -TimeoutSeconds 45
+      - name: Collect probe evidence only
+        if: always()
+        shell: pwsh
+        run: |
+          $src = Join-Path $env:RUNNER_TEMP 'standalone-sup-report'
+          if (Test-Path -LiteralPath $src) {
+            $dest = 'results/standalone-sup'
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Get-ChildItem -LiteralPath $src -File |
+              Where-Object { $_.Name -in @('sup-standalone.json','pnputil.stdout.txt','pnputil.stderr.txt') } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+          }
+          $start = Join-Path $env:RUNNER_TEMP 'owned-sup-start-result'
+          if (Test-Path -LiteralPath $start) {
+            $dest = 'results/standalone-sup'
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Get-ChildItem -LiteralPath $start -File |
+              Where-Object { $_.Name -in @('sup-start-results.json','driver-start.stdout.txt','driver-start.stderr.txt') } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+          }
+          $boot = Join-Path $env:RUNNER_TEMP 'standalone-vm-boot'
+          if (Test-Path -LiteralPath $boot) {
+            $dest = 'results/standalone-sup'
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Get-ChildItem -LiteralPath $boot -File |
+              Where-Object { $_.Name -in @('vm-boot-results.json','hardening-tail.txt') -or $_.Name -match '^(set_machine_folder|create_fixture|configure_fixture|list_fixture|inspect_fixture|start_headless|show_state|poweroff_fixture)\.(stdout|stderr)\.txt$' } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+          }
+          $cleanup = Join-Path $env:RUNNER_TEMP 'owned-sup-cleanup'
+          if (Test-Path -LiteralPath $cleanup) {
+            $dest = 'results/standalone-sup'
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Get-ChildItem -LiteralPath $cleanup -File |
+              Where-Object { $_.Name -in @('cleanup-results.json','sds-unregister.stdout.txt','sds-unregister.stderr.txt','sup-stop.stdout.txt','sup-stop.stderr.txt','sup-package-remove.stdout.txt','sup-package-remove.stderr.txt') } |
+              ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+          }
+          foreach ($pair in @(
+            @{folder='second-sup-report'; label='second-stage'; files=@('sup-standalone.json','pnputil.stdout.txt')},
+            @{folder='second-sup-start'; label='second-start'; files=@('sup-start-results.json')},
+            @{folder='second-vm-boot'; label='second-boot'; files=@('vm-boot-results.json','list_original_vms.stdout.txt','reopen_original_vm.stdout.txt','start_existing_vm.stderr.txt')},
+            @{folder='second-sup-cleanup'; label='second-cleanup'; files=@('cleanup-results.json','sup-service-delete.stdout.txt','sup-package-remove.stdout.txt')}
+          )) {
+            $source = Join-Path $env:RUNNER_TEMP $pair.folder
+            if (Test-Path -LiteralPath $source) {
+              $destination = Join-Path 'results/standalone-sup' $pair.label
+              New-Item -ItemType Directory -Force -Path $destination | Out-Null
+              foreach ($filename in $pair.files) {
+                $file = Join-Path $source $filename
+                if (Test-Path -LiteralPath $file) { Copy-Item -LiteralPath $file -Destination $destination }
+              }
+            }
+          }
+      - name: Publish metadata only (no Oracle binaries/drivers)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: standalone-VBoxSup-INF-diagnostic
+          path: results/standalone-sup/
+          if-no-files-found: warn
+          retention-days: 7
