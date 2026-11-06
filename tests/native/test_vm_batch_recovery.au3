@@ -57,25 +57,35 @@ _LI_Set("ru")
 Check(StringInStr(_PVB_RecoveryText($state), "ТОЛЬКО ЧТЕНИЕ") > 0, "Russian explicitly read only")
 _LI_Set("en")
 
+Local $originalObserved = $state
 Check(WriteXml($registry, $prefix & $entryB & $suffix), "simulate first unregister in disposable XML")
 $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "REVIEW_ONLY" And $state["stale"] == 1 And $state["absent"] == 1 And $state["local"] == 0, "first unregister interrupted")
 Check($state["next_action"] == "REGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidA), "missing entry addressed before any new unregister")
+Check(_PVB_TransitionValid($originalObserved, $state, "UNREGISTER", StringLower($uuidA)), "only first unregister transition is valid")
+Local $missingFirst = $state
 
 Check(WriteXml($registry, $prefix & $firstLocal & $entryB & $suffix), "simulate first completed re-registration")
 $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "REVIEW_ONLY" And $state["local"] == 1 And $state["stale"] == 1 And $state["absent"] == 0, "first registration completed")
 Check($state["next_action"] == "UNREGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidB), "second VM pending")
+Check(_PVB_TransitionValid($missingFirst, $state, "REGISTER", StringLower($uuidA)), "only first register transition is valid")
+Check(Not _PVB_TransitionValid($originalObserved, $state, "REGISTER", StringLower($uuidA)), "skipped unregister observation is not a transaction")
+Local $firstFinished = $state
 
 Check(WriteXml($registry, $prefix & $firstLocal & $suffix), "simulate second interrupted unregister")
 $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "REVIEW_ONLY" And $state["local"] == 1 And $state["absent"] == 1 And $state["stale"] == 0, "second unregister interrupted")
 Check($state["next_action"] == "REGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidB), "second VM needs only registration")
+Check(_PVB_TransitionValid($firstFinished, $state, "UNREGISTER", StringLower($uuidB)), "only second unregister transition is valid")
+Local $missingSecond = $state
 
 Check(WriteXml($registry, $prefix & $firstLocal & $secondLocal & $suffix), "simulate completed original registration set")
 $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "COMPLETE" And $state["local"] == 2 And $state["stale"] == 0 And $state["absent"] == 0, "all machines local and complete")
 Check($state["next_action"] == "" And StringInStr(_PVB_RecoveryText($state), "No new changes required") > 0, "completed state never suggests repeating a mutation")
+Check(_PVB_TransitionValid($missingSecond, $state, "REGISTER", StringLower($uuidB)), "only second register transition is valid")
+Check(Not _PVB_TransitionValid($state, $originalObserved, "UNREGISTER", StringLower($uuidA)), "completed transaction may not regress to stale")
 
 Check(WriteXml($registry, $prefix & $firstLocal & '<MachineEntry uuid="{ffffffff-2222-3333-4444-abcdef123456}" src="..\Machines\Вторая ВМ\Вторая ВМ.vbox"/>' & $suffix), "foreign registration fixture")
 Check(_PVB_Reconcile($root, $backup)["status"] == "BLOCKED", "unknown registration refused")

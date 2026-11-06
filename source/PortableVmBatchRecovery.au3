@@ -18,6 +18,10 @@ Func _PVB_RecoveryNew()
     $r["next_path"] = ""
     $r["backup"] = ""
     $r["manifest_sha256"] = ""
+    $r["origin_sha256"] = ""
+    $r["root"] = ""
+    Local $states[]
+    $r["states"] = $states
     $r["report"] = ""
     Return $r
 EndFunc
@@ -166,8 +170,51 @@ Func _PVB_Reconcile($root, $backup)
     $r["reason"] = "no-batch-mutation-authority"
     $r["count"] = $original["count"]
     $r["backup"] = $backup
+    $r["root"] = $root
+    $r["origin_sha256"] = $original["registry_sha256"]
+    $r["states"] = $states
     $r["manifest_sha256"] = $manifest
     Return $r
+EndFunc
+
+; Pure model-level transition check for independently re-observed states.
+; It is NOT runtime authority. Every future Oracle operation would need an
+; owned controller, verified backup, exact child exit and postcondition scan.
+Func _PVB_TransitionValid($before, $after, $action, $uuid)
+    If Not IsMap($before) Or Not IsMap($after) Or Not IsString($uuid) Then Return False
+    Local $required = StringSplit("status|count|manifest_sha256|origin_sha256|root|backup|states", "|", 2)
+    For $key In $required
+        If Not MapExists($before, $key) Or Not MapExists($after, $key) Then Return False
+    Next
+    If $before["status"] <> "REVIEW_ONLY" Or _
+            ($after["status"] <> "REVIEW_ONLY" And $after["status"] <> "COMPLETE") Then Return False
+    If $before["count"] < 2 Or $before["count"] > $g_PVB_MAX_CANDIDATES Or _
+            $before["count"] <> $after["count"] Or _
+            $before["manifest_sha256"] <> $after["manifest_sha256"] Or _
+            $before["origin_sha256"] <> $after["origin_sha256"] Or _
+            $before["root"] <> $after["root"] Or $before["backup"] <> $after["backup"] Then Return False
+    Local $statesBefore = $before["states"], $statesAfter = $after["states"]
+    If Not IsMap($statesBefore) Or Not IsMap($statesAfter) Then Return False
+    Local $keys = MapKeys($statesBefore)
+    If UBound($keys) <> $before["count"] Then Return False
+    If Not MapExists($statesBefore, $uuid) Or Not MapExists($statesAfter, $uuid) Then Return False
+    Local $from = "", $to = ""
+    Switch $action
+        Case "UNREGISTER"
+            $from = "STALE"
+            $to = "ABSENT"
+        Case "REGISTER"
+            $from = "ABSENT"
+            $to = "LOCAL"
+        Case Else
+            Return False
+    EndSwitch
+    If $statesBefore[$uuid] <> $from Or $statesAfter[$uuid] <> $to Then Return False
+    For $key In $keys
+        If Not MapExists($statesAfter, $key) Then Return False
+        If $key <> $uuid And $statesBefore[$key] <> $statesAfter[$key] Then Return False
+    Next
+    Return True
 EndFunc
 
 Func _PVB_RecoveryText($r)

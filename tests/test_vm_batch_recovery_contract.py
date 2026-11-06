@@ -20,6 +20,22 @@ class BatchRecoveryContract(unittest.TestCase):
                           'FileWrite(', 'RegWrite(', 'Run(', 'RunWait(', 'ProcessClose('):
             self.assertNotIn(forbidden,active)
 
+    def test_transition_model_checks_only_one_uuid_change(self):
+        code=self.get('source/PortableVmBatchRecovery.au3')
+        native=self.get('tests/native/test_vm_batch_recovery.au3')
+        self.assertIn('Func _PVB_TransitionValid(',code)
+        for key in ('origin_sha256', 'manifest_sha256', 'statesBefore', 'statesAfter',
+                    '$statesBefore[$uuid] <> $from', '$statesAfter[$uuid] <> $to',
+                    '$key <> $uuid And $statesBefore[$key] <> $statesAfter[$key]'):
+            self.assertIn(key,code)
+        for case in ('only first unregister transition is valid',
+                     'only first register transition is valid',
+                     'skipped unregister observation is not a transaction',
+                     'only second unregister transition is valid',
+                     'only second register transition is valid',
+                     'completed transaction may not regress to stale'):
+            self.assertIn(case,native)
+
     def test_public_cli_is_readonly(self):
         entry=self.get('source/Portable-VirtualBox.au3')
         self.assertIn('PortableVmBatchRecovery.au3',entry)
