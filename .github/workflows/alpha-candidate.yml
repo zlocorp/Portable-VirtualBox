@@ -4,30 +4,20 @@ on:
   push:
     branches: [dev/modernization-2026]
     paths:
+      # The alpha ZIP contains the compiled main launcher and the documents
+      # below. Rebuild it whenever ANY runtime source or packaged byte changes,
+      # not only a hand-maintained subset of includes.
       - .github/workflows/alpha-candidate.yml
-      - source/Portable-VirtualBox.au3
-      - source/ManagerSession.au3
-      - source/HostPreflight.au3
-      - source/WindowsObservation.au3
-      - source/WindowsServiceProbe.au3
-      - source/WindowsProcessProbe.au3
-      - source/PrivilegeBoundary.au3
-      - source/ManagerWindow.au3
-      - source/LauncherGui.au3
-      - source/privilege/**
-      - scripts/build_session_helper.ps1
-      - scripts/privileged_session_worker.ps1
-      - scripts/vbox_sup_standalone.ps1
-      - scripts/vbox_sup_start_owned.ps1
-      - scripts/vbox_sup_cleanup.ps1
-      - scripts/vbox_sup_partial_cleanup.ps1
-      - scripts/package_alpha.ps1
-      - scripts/verify_alpha_archive.py
+      - source/**
+      - scripts/**
       - tests/test_alpha_archive.py
-      - scripts/build.ps1
-      - scripts/build_portable_setup.ps1
-      - docs/ALPHA-WINDOWS-TEST.md
       - tests/test_privilege_boundary_contract.py
+      - tests/test_main_manager_wiring.py
+      - README.md
+      - README.ru.md
+      - CREDITS.md
+      - LICENSE.md
+      - docs/ALPHA-WINDOWS-TEST.md
   workflow_dispatch:
 
 permissions:

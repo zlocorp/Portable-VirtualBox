@@ -138,6 +138,14 @@ class AlphaArchiveVerifier(unittest.TestCase):
 
 
 class AlphaArchiveWiring(unittest.TestCase):
+    def test_any_packaged_input_or_runtime_source_refreshes_candidate(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/alpha-candidate.yml').read_text(encoding='utf-8-sig')
+        triggers = workflow.split('  push:', 1)[1].split('  workflow_dispatch:', 1)[0]
+        for glob in ('source/**', 'scripts/**', 'README.md', 'README.ru.md',
+                     'CREDITS.md', 'LICENSE.md', 'docs/ALPHA-WINDOWS-TEST.md'):
+            with self.subTest(glob=glob):
+                self.assertIn('      - ' + glob, triggers)
+
     def test_windows_candidate_verifies_archive_before_upload(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / '.github/workflows/alpha-candidate.yml').read_text(encoding='utf-8')
