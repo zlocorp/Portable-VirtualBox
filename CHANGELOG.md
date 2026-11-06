@@ -4,6 +4,11 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Improved · display read-only multi-VM plan in the main GUI (2026-11-06)
+
+- `d43b3dd` connects the existing **Audit VM portability** button, refresh and RU/EN switching to the same strict read-only multi-VM moved-root observer already used by CLI. It appends the localized `REVIEW_ONLY` report only for an eligible 2–16 VM candidate; no new parsing, registration, driver or cleanup logic is created.
+- [Native Windows 42213453902](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42213453902) passed **62 batch assertions, zero failures**, including Russian and English GUI report contents. Local Python suite: **252 tests, 6 Windows-dependent skips**. Actual compiled GUI builds/run evidence are tracked separately in the Draft PR.
+
 ### Added · verified offline backup for multiple relocated VMs (2026-11-06)
 
 - `be39db2` exposes `--prepare-multi-vm-rebind NEW_BACKUP_FOLDER` as a separate **non-elevated, backup-only** action for the previously verified 2–16 VM moved-root candidate. Uses the existing non-overwriting SHA-256 copier of the whole `data/` tree, checks the complete backup and manifest, then re-runs the offline plan and compares original registry SHA-256, per-VM config/hash report, media/snapshot counts and previous root. A changed or unknown result is not a successful proof; completed and `.pending` folders are preserved for inspection.
