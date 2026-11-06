@@ -25,6 +25,29 @@ class BatchPlanContract(unittest.TestCase):
             lines = '\n'.join(x for x in p.splitlines() if not x.lstrip().startswith(';'))
             self.assertNotIn(unsafe, lines)
 
+    def test_batch_backup_requires_same_plan_and_verified_copy_without_registration(self):
+        plan = self.source('source/PortableVmBatchPlan.au3')
+        main = self.source('source/Portable-VirtualBox.au3')
+        native = self.source('tests/native/test_vm_batch_plan.au3')
+        compiled = self.source('scripts/check_vm_rebind_plan.ps1')
+        for marker in ('Func _PVB_Backup($root, $dest)',
+                       'If $before["status"] <> "REVIEW_ONLY" Then Return $before',
+                       '_PBK_ValidPath($root, $dest)', '_PBK_Create($root, $dest)',
+                       '_PBK_Verify($dest)', '_PVB_Plan($root)',
+                       '$after["report"] <> $before["report"]',
+                       '$after["registry_sha256"] <> $before["registry_sha256"]',
+                       '"BACKUP_ONLY"'):
+            self.assertIn(marker, plan)
+        self.assertIn('Case "--prepare-multi-vm-rebind"', main)
+        self.assertIn('Local $preparedMulti = _PVB_Backup(@ScriptDir, $CmdLine[$iFirst + 1])', main)
+        self.assertIn('If $preparedMulti["status"] == "BACKUP_ONLY" Then Exit 0', main)
+        self.assertIn('batch backup verifies every VM and original registry', native)
+        self.assertIn('batch backup refuses existing destination', native)
+        self.assertIn('batch unsafe source never creates new backup', native)
+        self.assertIn('batch-verified-backup', compiled)
+        self.assertIn('batch-backup-repeat-refused', compiled)
+        self.assertIn('batch-backup-source-blocked', compiled)
+
     def test_entrypoint_uses_independent_readonly_command(self):
         main = self.source('source/Portable-VirtualBox.au3')
         self.assertIn('PortableVmBatchPlan.au3', main)

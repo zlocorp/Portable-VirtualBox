@@ -56,7 +56,23 @@ Check(_PVR_Plan($root)["status"] == "BLOCKED", "existing single-VM preparation i
 Check(FileRead($configA) == $beforeA And FileRead($configB) == $beforeB And FileRead($registry) == $beforeRegistry, "batch plan does not change original XML")
 Check(Not FileExists($old), "planning never creates previous root")
 
+Local $dest = $parent & "\Multi-VM-Verified-Backup"
+Local $copy = _PVB_Backup($root, $dest)
+Check($copy["status"] == "BACKUP_ONLY" And $copy["count"] == 2, "batch backup verifies every VM and original registry")
+Check(_PBK_Verify($dest), "independent full data backup verification")
+Check(FileRead($dest & "\data\Machines\Первая ВМ\Первая ВМ.vbox") == $beforeA, "first VM config preserved in full copy")
+Check(FileRead($dest & "\data\Machines\Вторая ВМ\Вторая ВМ.vbox") == $beforeB, "second VM config preserved in full copy")
+Check(FileRead($dest & "\data\.VirtualBox\VirtualBox.xml") == $beforeRegistry, "original stale registration preserved in copy")
+Check(FileExists($dest & "\data\Machines\Первая ВМ\Snapshots\snap.vdi") And _
+        FileExists($dest & "\data\Machines\Вторая ВМ\Snapshots\snap.vdi"), "both disk snapshot chains included")
+Check(StringLen($copy["backup_manifest_sha256"]) == 64, "backup proof includes manifest hash")
+Check(StringInStr(_PVB_Text($copy), "does not authorize batch repair") > 0, "verified backup remains explicitly non-authorizing")
+Check(_PVB_Backup($root, $dest)["status"] == "BLOCKED", "batch backup refuses existing destination")
+Check(FileRead($configA) == $beforeA And FileRead($configB) == $beforeB And FileRead($registry) == $beforeRegistry, "independent backup did not change originals")
+
 Check(WriteXml($registry, $prefix & $entryA & StringReplace($entryB, $old, $parent & "\Other Old Root") & $suffix), "different root fixture")
+Local $unsafeDest = $parent & "\MustNotExist-Batch"
+Check(_PVB_Backup($root, $unsafeDest)["status"] == "BLOCKED" And Not FileExists($unsafeDest), "batch unsafe source never creates new backup")
 Check(_PVB_Plan($root)["status"] == "BLOCKED", "different prior roots block batch plan")
 Check(WriteXml($registry, $original), "restore original batch registry")
 Check(WriteXml($registry, $prefix & $entryA & StringReplace($entryB, $uuidB, "{ffffffff-2222-3333-4444-555555555555}") & $suffix), "wrong UUID fixture")

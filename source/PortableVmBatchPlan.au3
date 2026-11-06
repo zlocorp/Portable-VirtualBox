@@ -2,7 +2,8 @@
 #include "PortableVmRebind.au3"
 
 ; Public, read-only discovery of several VMs relocated together.
-; This report is NOT a transaction, authorization, backup or executable plan.
+; A separate explicit backup action calls the existing verified full data/
+; copier. Neither action authorizes registration changes or cleanup.
 ; The sole mutation-capable rebind controller retains its single-VM proof gate.
 Global Const $g_PVB_MAX_CANDIDATES = 16
 
@@ -15,6 +16,9 @@ Func _PVB_New()
     $r["snapshots"] = 0
     $r["media"] = 0
     $r["report"] = ""
+    $r["registry_sha256"] = ""
+    $r["backup"] = ""
+    $r["backup_manifest_sha256"] = ""
     Return $r
 EndFunc
 
@@ -110,15 +114,61 @@ Func _PVB_Plan($root)
     If _PBK_Hash($registry) <> $registryHash Then Return _PVB_Fail($r, "registry-changed-during-audit")
     If Not _PBK_Offline() Then Return _PVB_Fail($r, "host-state-changed")
     $r["old_root"] = $sourceRoot
+    $r["registry_sha256"] = $registryHash
     $r["status"] = "REVIEW_ONLY"
     $r["reason"] = "no-batch-repair-authorization"
     Return $r
+EndFunc
+
+; Creates only an independent SHA-256 verified FULL data/ backup in a new
+; directory. The returned BACKUP_ONLY status is not an authorization for
+; unregister/register, even if all VM candidates and files match afterward.
+Func _PVB_Backup($root, $dest)
+    Local $before = _PVB_Plan($root)
+    If $before["status"] <> "REVIEW_ONLY" Then Return $before
+    If Not _PBK_ValidPath($root, $dest) Then Return _PVB_Fail($before, "invalid-or-existing-backup-destination")
+    Local $result = _PBK_Create($root, $dest)
+    If $result = 2 Then Return _PVB_Fail($before, "backup-blocked-or-busy")
+    If $result <> 0 Or Not _PBK_Verify($dest) Then
+        $before["status"] = "FAILED"
+        $before["reason"] = "backup-incomplete-retain-staged-data"
+        Return $before
+    EndIf
+    Local $after = _PVB_Plan($root)
+    If $after["status"] <> "REVIEW_ONLY" Or $after["count"] <> $before["count"] Or _
+            $after["old_root"] <> $before["old_root"] Or _
+            $after["report"] <> $before["report"] Or _
+            $after["registry_sha256"] <> $before["registry_sha256"] Or _
+            $after["snapshots"] <> $before["snapshots"] Or $after["media"] <> $before["media"] Then
+        ; Do not delete a completed backup or claim it proves this batch.
+        $before["status"] = "FAILED"
+        $before["reason"] = "source-changed-after-verified-backup"
+        Return $before
+    EndIf
+    Local $manifestHash = _PBK_Hash($dest & "\SHA256SUMS.txt")
+    If StringLen($manifestHash) <> 64 Or Not _PBK_Verify($dest) Then
+        $before["status"] = "FAILED"
+        $before["reason"] = "backup-verification-unknown-retain-files"
+        Return $before
+    EndIf
+    $before["status"] = "BACKUP_ONLY"
+    $before["reason"] = "no-batch-repair-authorization"
+    $before["backup"] = $dest
+    $before["backup_manifest_sha256"] = $manifestHash
+    Return $before
 EndFunc
 
 Func _PVB_Text($r)
     If Not IsMap($r) Or Not MapExists($r, "status") Then Return ""
     Local $ru = _LI_Language() == "ru"
     Switch $r["status"]
+        Case "BACKUP_ONLY"
+            If $ru Then Return "Проверенная полная SHA-256 копия нескольких ВМ создана: " & $r["backup"] & @CRLF & _
+                "Манифест SHA-256: " & $r["backup_manifest_sha256"] & @CRLF & $r["report"] & _
+                "ВНИМАНИЕ: регистрация ВМ не изменена. Копия не разрешает массовое исправление или очистку."
+            Return "Verified full multi-VM SHA-256 backup: " & $r["backup"] & @CRLF & _
+                "SHA-256 manifest: " & $r["backup_manifest_sha256"] & @CRLF & $r["report"] & _
+                "WARNING: no VM registration was repaired. This backup does not authorize batch repair or cleanup."
         Case "REVIEW_ONLY"
             If $ru Then Return "Предварительный план переноса нескольких ВМ (ТОЛЬКО ЧТЕНИЕ): " & $r["count"] & @CRLF & _
                 "Исходная папка: " & $r["old_root"] & @CRLF & $r["report"] & _
@@ -126,6 +176,11 @@ Func _PVB_Text($r)
             Return "Multiple moved VMs (READ-ONLY discovery): " & $r["count"] & @CRLF & _
                 "Previous root: " & $r["old_root"] & @CRLF & $r["report"] & _
                 "WARNING: no VM registration was repaired. Batch changes and cleanup remain disabled until an independently verified backup/transaction is implemented."
+        Case "FAILED"
+            If $ru Then Return "Резервная копия нескольких ВМ не подтверждена. Код: " & $r["reason"] & @CRLF & _
+                "Не удаляйте существующую копию или папку .pending без проверки; исходные ВМ не менялись."
+            Return "Multiple-VM backup is not verified: " & $r["reason"] & @CRLF & _
+                "Keep existing backup or .pending for inspection. Original VM registration was not changed."
         Case "NONE"
             If $ru Then Return "Несколько перенесенных ВМ не обнаружены. Для одной машины используйте --plan-vm-rebind."
             Return "No multiple-VM relocation detected. Use --plan-vm-rebind for one machine."

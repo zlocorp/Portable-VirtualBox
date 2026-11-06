@@ -151,4 +151,28 @@ $null=Invoke-Launcher '--lang en --plan-multi-vm-rebind' 2 'batch-plan-single-re
 $report=Invoke-Launcher '--lang en --plan-multi-vm-rebind' 0 'batch-plan-restored'
 if(-not $report.Contains($secondId)) { throw 'Read-only batch discovery did not recover after negative fixtures' }
 if(Test-Path -LiteralPath $old) { throw 'Read-only discovery created the old path' }
+$multiBackup=Join-Path $parent 'Multi-VM-SHA256-Copy'
+$beforeBatchRegistry=(Get-FileHash -LiteralPath $registry -Algorithm SHA256).Hash
+$beforeBatchFirst=(Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash
+$beforeBatchSecond=(Get-FileHash -LiteralPath $secondConfig -Algorithm SHA256).Hash
+$prepared=Invoke-Launcher ('--lang en --prepare-multi-vm-rebind "'+$multiBackup+'"') 0 'batch-verified-backup'
+if(-not $prepared.Contains('Verified full multi-VM SHA-256 backup') -or -not $prepared.Contains('does not authorize batch repair') -or
+   -not (Test-Path -LiteralPath (Join-Path $multiBackup 'SHA256SUMS.txt')) -or
+   -not (Test-Path -LiteralPath (Join-Path $multiBackup 'data\Machines\Имя ВМ\Snapshots\snap.vdi')) -or
+   -not (Test-Path -LiteralPath (Join-Path $multiBackup 'data\Machines\Вторая ВМ\Snapshots\snap.vdi'))) {
+  throw 'Batch backup missing verified evidence or snapshots'
+}
+$null=Invoke-Launcher ('--verify-backup "'+$multiBackup+'"') 0 'batch-backup-independent-verification'
+$null=Invoke-Launcher ('--prepare-multi-vm-rebind "'+$multiBackup+'"') 2 'batch-backup-repeat-refused'
+if((Get-FileHash -LiteralPath $registry -Algorithm SHA256).Hash -ne $beforeBatchRegistry -or
+   (Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash -ne $beforeBatchFirst -or
+   (Get-FileHash -LiteralPath $secondConfig -Algorithm SHA256).Hash -ne $beforeBatchSecond) {
+  throw 'Multi-VM backup changed original metadata'
+}
+$batchBlocked=Join-Path $parent 'Multi-VM-Blocked-Backup'
+[IO.File]::WriteAllText($registry,$regHead+$entry+$secondEntry.Replace($secondId,'{ffffffff-2222-3333-4444-555555555555}')+$regTail,$utf8)
+$null=Invoke-Launcher ('--prepare-multi-vm-rebind "'+$batchBlocked+'"') 2 'batch-backup-source-blocked'
+if(Test-Path -LiteralPath $batchBlocked) { throw 'Unsafe multi-VM candidate wrote a batch backup' }
+[IO.File]::WriteAllText($registry,$twoEntries,$utf8)
+
 Write-Host 'PASS: compiled two-VM read-only moved-root discovery, RU/EN, mixed origins, UUID mismatch, missing media and mutation refusal'
