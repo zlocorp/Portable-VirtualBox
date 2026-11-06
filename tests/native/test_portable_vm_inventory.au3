@@ -84,6 +84,23 @@ Check(WriteXml($file, $prefix & $normal & $suffix), "restored config written")
 FileWrite($machineDir & "\not-vm.vbox-prev", "invalid")
 $r = _PVI_Inspect($root)
 Check($r["status"] == "CLEAN", "historic vbox-prev is not treated as live config")
+; Reject fake .vbox Machine payloads nested under an unrelated node,
+; or with a different XML namespace, before declaring all media portable.
+Local $badMachineInputs[3] = [ _
+    '<VirtualBox xmlns="http://www.virtualbox.org/"><Wrapper><Machine uuid="' & $uuid & '" name="Имя ВМ"><HardDisk location="disk.vdi"/></Machine></Wrapper></VirtualBox>', _
+    '<VirtualBox xmlns="http://www.virtualbox.org/"><Machine xmlns="urn:foreign" uuid="' & $uuid & '" name="Имя ВМ"><HardDisk location="disk.vdi"/></Machine></VirtualBox>', _
+    $prefix & $normal & $suffix ]
+; The third case uses an extra root-level element, not a second VirtualBox root.
+$badMachineInputs[2] = StringReplace($prefix & $normal & $suffix, '</VirtualBox>', '<Other /></VirtualBox>')
+For $i = 0 To UBound($badMachineInputs) - 1
+    Check(WriteXml($file, $badMachineInputs[$i]), "write malformed machine input")
+    $r = _PVI_Inspect($root)
+    Check($r["status"] == "BLOCKED", _
+        ($i = 0 ? "nested Machine blocks inventory" : ($i = 1 ? "foreign Machine namespace blocks inventory" : "extra top-level Machine sibling blocks inventory")))
+Next
+Check(WriteXml($file, $prefix & $normal & $suffix), "valid machine fixture restored after malformed inputs")
+$r = _PVI_Inspect($root)
+Check($r["status"] == "CLEAN", "valid direct Machine with official namespace remains portable")
 ; Multi-VM inventory is observational. This test never registers or mutates
 ; machines using Oracle. Bulk rebind remains unimplemented.
 Local $secondUuid = "{99999999-2222-3333-4444-555555555555}"

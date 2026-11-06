@@ -103,12 +103,27 @@ Func _PVI_LoadXml($path)
     Return $xml
 EndFunc
 
+; Do not accept an unrelated nested or foreign-namespace Machine element
+; as a legitimate VirtualBox VM. This is a read-only document shape check.
+Func _PVI_DirectMachine($xml)
+    If Not IsObj($xml) Then Return 0
+    Local $ns = String($xml.documentElement.namespaceURI)
+    If $ns <> "" And $ns <> "http://www.virtualbox.org/" Then Return 0
+    Local $rootChildren = $xml.documentElement.selectNodes('*')
+    Local $directMachines = $xml.documentElement.selectNodes('*[local-name()="Machine"]')
+    Local $allMachines = $xml.selectNodes('//*[local-name()="Machine"]')
+    If Not IsObj($rootChildren) Or Not IsObj($directMachines) Or Not IsObj($allMachines) Then Return 0
+    If $rootChildren.length <> 1 Or $directMachines.length <> 1 Or $allMachines.length <> 1 Then Return 0
+    Local $machine = $directMachines.item(0)
+    If String($machine.namespaceURI) <> $ns Then Return 0
+    Return $machine
+EndFunc
+
 Func _PVI_ReadMachine($configPath, ByRef $r)
     Local $xml = _PVI_LoadXml($configPath)
     If Not IsObj($xml) Then Return False
-    Local $machines = $xml.selectNodes('//*[local-name()="Machine"]')
-    If Not IsObj($machines) Or $machines.length <> 1 Then Return False
-    Local $machine = $machines.item(0)
+    Local $machine = _PVI_DirectMachine($xml)
+    If Not IsObj($machine) Then Return False
     Local $name = $machine.getAttribute("name"), $uuid = $machine.getAttribute("uuid")
     If Not IsString($name) Or StringLen($name) < 1 Or StringLen($name) > 180 Then Return False
     If StringRegExp($name, "[\x00-\x1f]") Or Not IsString($uuid) Then Return False

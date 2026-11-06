@@ -47,6 +47,19 @@ class VmInventoryContract(unittest.TestCase):
         self.assertIn('config_identities', parser)
         self.assertIn('machine_uuids', parser)
 
+    def test_machine_xml_is_direct_not_nested_or_foreign(self):
+        source = (ROOT / 'source/PortableVmInventory.au3').read_text(encoding='utf-8-sig')
+        native = (ROOT / 'tests/native/test_portable_vm_inventory.au3').read_text(encoding='utf-8-sig')
+        self.assertIn('Func _PVI_DirectMachine($xml)', source)
+        self.assertIn('Local $machine = _PVI_DirectMachine($xml)', source)
+        self.assertIn('String($machine.namespaceURI) <> $ns', source)
+        self.assertIn('allMachines.length <> 1', source)
+        self.assertIn('rootChildren.length <> 1', source)
+        for phrase in ('nested Machine blocks inventory', 'foreign Machine namespace blocks inventory',
+                       'extra top-level Machine sibling blocks inventory',
+                       'valid machine fixture restored after malformed inputs'):
+            self.assertIn(phrase, native)
+
     def test_real_native_and_compiled_smoke_exercises_public_feature(self):
         self.assertTrue((ROOT/'tests/native/test_portable_vm_inventory.au3').is_file())
         fixture=(ROOT/'scripts/check_vm_inventory.ps1').read_text(encoding='utf-8')
