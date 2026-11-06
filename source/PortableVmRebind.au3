@@ -123,26 +123,10 @@ Func _PVR_Plan($root)
     Return _PVR_ReadPlan($root)
 EndFunc
 
-; Oracle serializes one direct Global/MachineRegistry even when no machines
-; remain. Missing, duplicate or misplaced containers/entries are corruption,
-; not evidence that the exact unregister operation completed.
+; The read-only inventory owns the single canonical XML-registry validator.
+; Rebind must never use a weaker parser than the public auditor.
 Func _PVR_RegistryEntries($xml)
-    If Not IsObj($xml) Then Return 0
-    Local $rootChildren = $xml.documentElement.selectNodes('*')
-    Local $globals = $xml.selectNodes('/*[local-name()="VirtualBox"]/*[local-name()="Global"]')
-    Local $allGlobals = $xml.selectNodes('//*[local-name()="Global"]')
-    If Not IsObj($rootChildren) Or Not IsObj($globals) Or Not IsObj($allGlobals) Then Return 0
-    If $rootChildren.length <> 1 Or $globals.length <> 1 Or $allGlobals.length <> 1 Then Return 0
-    Local $registries = $globals.item(0).selectNodes('*[local-name()="MachineRegistry"]')
-    Local $allRegistries = $xml.selectNodes('//*[local-name()="MachineRegistry"]')
-    If Not IsObj($registries) Or Not IsObj($allRegistries) Then Return 0
-    If $registries.length <> 1 Or $allRegistries.length <> 1 Then Return 0
-    Local $entries = $registries.item(0).selectNodes('*[local-name()="MachineEntry"]')
-    Local $allEntries = $xml.selectNodes('//*[local-name()="MachineEntry"]')
-    Local $children = $registries.item(0).selectNodes('*')
-    If Not IsObj($entries) Or Not IsObj($allEntries) Or Not IsObj($children) Then Return 0
-    If $entries.length <> $allEntries.length Or $children.length <> $entries.length Then Return 0
-    Return $entries
+    Return _PVI_RegistryEntries($xml)
 EndFunc
 
 ; Filesystem-only candidate inspection is shared with backup revalidation
@@ -169,7 +153,16 @@ Func _PVR_ReadPlan($root)
     Local $source = $entry.getAttribute("src"), $registeredUuid = $entry.getAttribute("uuid")
     If Not IsString($source) Or Not IsString($registeredUuid) Then Return $r
     If Not StringRegExp($registeredUuid, "(?i)^\{[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\}$") Then Return $r
-    If _PVI_RegistryTarget($root, $source) <> "" Then Return _PVR_New("NONE", "already-local")
+    If _PVI_RegistryTarget($root, $source) <> "" Then
+        ; A matching path alone is insufficient: the registry UUID can be
+        ; forged and additional unregistered VMs can still need attention.
+        ; Only a complete single-VM local inventory may claim a no-op.
+        Local $localAudit = _PVI_Inspect($root)
+        If $localAudit["status"] <> "CLEAN" Or $localAudit["vm_count"] <> 1 Or _
+                $localAudit["registered_count"] <> 1 Or $localAudit["external_registry_count"] <> 0 Or _
+                $localAudit["external_count"] <> 0 Or $localAudit["missing_count"] <> 0 Then Return $r
+        Return _PVR_New("NONE", "already-local")
+    EndIf
     Local $candidate = _PVR_StaleSource($root, $source)
     If Not $candidate["ok"] Then
         $r["reason"] = "nonportable-or-ambiguous-registered-path"

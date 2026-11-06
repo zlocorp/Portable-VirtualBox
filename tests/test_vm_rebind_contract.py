@@ -37,6 +37,20 @@ class RelocationPlanContract(unittest.TestCase):
         self.assertIn('_PVR_Plan(@ScriptDir)',gui)
         self.assertIn('PortableVmRebind.au3',entry)
         self.assertIn('PortableVmRebind.au3',gui)
+    def test_local_noop_requires_strict_matching_registry_and_inventory(self):
+        source=self.text("source/PortableVmRebind.au3")
+        native=self.text("tests/native/test_portable_vm_rebind.au3")
+        self.assertIn('Return _PVI_RegistryEntries($xml)',source)
+        self.assertIn('_PVI_Inspect($root)',source)
+        self.assertIn('registered_count',source)
+        self.assertIn('locally registered UUID mismatch is not already-local success',native)
+        self.assertIn('mismatched local registration cannot confirm successful rebind',native)
+        self.assertIn('extra unregistered VM is not already-local success',native)
+        self.assertIn('valid single local registration restored',native)
+        compiled=self.text('scripts/check_vm_rebind_plan.ps1')
+        self.assertIn('wrong-local-uuid-blocked',compiled)
+        self.assertIn('extra-unregistered-vm-blocked',compiled)
+
     def test_native_and_compiled_vm_rebind_real_tests_present(self):
         self.assertTrue((ROOT/"tests/native/test_portable_vm_rebind.au3").is_file())
         win=self.text("scripts/check_vm_rebind_plan.ps1")

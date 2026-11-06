@@ -87,6 +87,19 @@ $local='<MachineEntry uuid="'+$uuid+'" src="..\Machines\Имя ВМ\Имя ВМ.
 [IO.File]::WriteAllText($registry,$regHead+$local+$regTail,$utf8)
 $none=Invoke-Launcher '--lang en --plan-vm-rebind' 2 'local-no-repair'
 if($none -notmatch 'No relocated VM registration') { throw 'An already-local registration was marked stale' }
+$wrongLocal=$local.Replace($uuid,'{ffffffff-2222-3333-4444-abcdef123456}')
+[IO.File]::WriteAllText($registry,$regHead+$wrongLocal+$regTail,$utf8)
+$null=Invoke-Launcher '--lang en --plan-vm-rebind' 3 'wrong-local-uuid-blocked'
+[IO.File]::WriteAllText($registry,$regHead+$local+$regTail,$utf8)
+$extraPath=Join-Path $root 'data\Machines\Extra\Extra.vbox'
+New-Item -ItemType Directory -Path (Split-Path $extraPath -Parent) -ErrorAction Stop | Out-Null
+[IO.File]::WriteAllText((Join-Path (Split-Path $extraPath -Parent) 'disk.vdi'),'EXTRA-DISK',$utf8)
+$extraXml='<VirtualBox xmlns="http://www.virtualbox.org/"><Machine name="Extra" uuid="{99999999-2222-3333-4444-abcdef123456}"><MediaRegistry><HardDisk location="disk.vdi"/></MediaRegistry></Machine></VirtualBox>'
+[IO.File]::WriteAllText($extraPath,$extraXml,$utf8)
+$null=Invoke-Launcher '--lang en --plan-vm-rebind' 3 'extra-unregistered-vm-blocked'
+Remove-Item -LiteralPath (Split-Path $extraPath -Parent) -Recurse -Force
+$none=Invoke-Launcher '--lang en --plan-vm-rebind' 2 'local-restored-after-adversarial-inputs'
+if($none -notmatch 'No relocated VM registration') { throw 'Correct local registration not restored' }
 [IO.File]::WriteAllText($registry,$regHead+$entry+$regTail,$utf8)
 [IO.File]::WriteAllText($config,$xmlHead+$media+'<HardDisk location="X:\foreign\private.vdi"/>'+$xmlTail,$utf8)
 $null=Invoke-Launcher '--lang en --plan-vm-rebind' 3 'foreign-media-rejected'

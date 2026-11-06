@@ -162,6 +162,22 @@ $plan=_PVR_Plan($root)
 Check($plan["status"]=="NONE","already local registration is not stale")
 Check(_PVR_Rebound($root,$verified),"registered same UUID and media chain read-only verified")
 Check(_PVR_Rebound($root,$resume),"register-only resume has the same strict final postcondition")
+; A local path is not sufficient for NONE if registry identity is
+; forged or there is an extra unregistered machine in the same root.
+Local $wrongLocal='<MachineEntry uuid="{ffffffff-2222-3333-4444-abcdef123456}" src="..\Machines\Имя ВМ\Имя ВМ.vbox"/>'
+Check(WriteXml($registry,$regHead & $wrongLocal & $regTail),"local registration wrong UUID fixture")
+Check(_PVR_Plan($root)["status"]=="BLOCKED","locally registered UUID mismatch is not already-local success")
+Check(_PVR_VerifyBackup($root,$backup)["status"]=="BLOCKED","mismatched local registration cannot confirm successful rebind")
+Check(WriteXml($registry,$regHead & $localEntry & $regTail),"restore real local UUID")
+Local $extraVm=$root & "\data\Machines\Extra\Extra.vbox", $extraDisk=$root & "\data\Machines\Extra\disk.vdi"
+Check(DirCreate($root & "\data\Machines\Extra"),"extra VM folder for no-op refusal")
+Check(WriteXml($extraDisk,"EXTRA-DISK"),"extra VM disk for no-op refusal")
+Check(WriteXml($extraVm,'<VirtualBox xmlns="http://www.virtualbox.org/"><Machine name="Extra" uuid="{99999999-2222-3333-4444-abcdef123456}"><MediaRegistry><HardDisk location="disk.vdi"/></MediaRegistry></Machine></VirtualBox>'),"unregistered extra VM fixture")
+Check(_PVR_Plan($root)["status"]=="BLOCKED","extra unregistered VM is not already-local success")
+FileDelete($extraVm)
+FileDelete($extraDisk)
+DirRemove($root & "\data\Machines\Extra")
+Check(_PVR_Plan($root)["status"]=="NONE","valid single local registration restored")
 Check(_PVR_VerifyBackup($root,$backup)["status"]=="NONE","repeated completed repair requires no command")
 Check(Not _PVR_CanRegister($root,$verified) And Not _PVR_CanRegister($root,$resume),"completed registration cannot be repeated")
 Check(Not _PVR_StillExact($root,$verified),"old-stale proof not reusable after registration")
