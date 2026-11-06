@@ -34,7 +34,9 @@ class RelocationPlanContract(unittest.TestCase):
                      '_PVR_Plan(@ScriptDir)', '_PVR_Backup(@ScriptDir', '_PVR_Text('):
             self.assertIn(term,entry)
         self.assertIn('Case $idVmAudit',gui)
-        self.assertIn('_PVR_Plan(@ScriptDir)',gui)
+        self.assertIn('Func _LG_InventoryText($root)',gui)
+        self.assertIn('_PVR_Plan($root)',gui)
+        self.assertIn('_LG_InventoryText(@ScriptDir)',gui)
         self.assertIn('PortableVmRebind.au3',entry)
         self.assertIn('PortableVmRebind.au3',gui)
     def test_local_noop_requires_strict_matching_registry_and_inventory(self):

@@ -48,6 +48,17 @@ class BatchPlanContract(unittest.TestCase):
         self.assertIn('batch-backup-repeat-refused', compiled)
         self.assertIn('batch-backup-source-blocked', compiled)
 
+    def test_gui_inventory_includes_readonly_multi_vm_report(self):
+        gui = self.source('source/LauncherGui.au3')
+        native = self.source('tests/native/test_vm_batch_plan.au3')
+        self.assertIn('#include "PortableVmBatchPlan.au3"', gui)
+        self.assertIn('Func _LG_InventoryText($root)', gui)
+        self.assertIn('Local $batch = _PVB_Plan($root)', gui)
+        self.assertIn('If $batch["status"] == "REVIEW_ONLY" Then $show &= @CRLF & _PVB_Text($batch)', gui)
+        self.assertEqual(gui.count('_LG_InventoryText(@ScriptDir)'), 2)
+        self.assertIn('Russian GUI inventory includes moved batch report', native)
+        self.assertIn('English GUI inventory explicitly read-only', native)
+
     def test_entrypoint_uses_independent_readonly_command(self):
         main = self.source('source/Portable-VirtualBox.au3')
         self.assertIn('PortableVmBatchPlan.au3', main)

@@ -1,4 +1,4 @@
-#include "..\..\source\PortableVmBatchPlan.au3"
+#include "..\..\source\LauncherGui.au3"
 ; Deterministic filesystem-only fixtures. Never run Oracle or change drivers.
 Global $checks = 0, $failures = 0
 Func Check($pass, $label)
@@ -55,6 +55,10 @@ Check(StringInStr(_PVB_Text($plan), "Batch changes and cleanup remain disabled")
 Check(_PVR_Plan($root)["status"] == "BLOCKED", "existing single-VM preparation is not authorized for batch")
 Check(FileRead($configA) == $beforeA And FileRead($configB) == $beforeB And FileRead($registry) == $beforeRegistry, "batch plan does not change original XML")
 Check(Not FileExists($old), "planning never creates previous root")
+_LI_Set("ru")
+Check(StringInStr(_LG_InventoryText($root), "ТОЛЬКО ЧТЕНИЕ") > 0, "Russian GUI inventory includes moved batch report")
+_LI_Set("en")
+Check(StringInStr(_LG_InventoryText($root), "Batch changes and cleanup remain disabled") > 0, "English GUI inventory explicitly read-only")
 
 Local $dest = $parent & "\Multi-VM-Verified-Backup"
 Local $copy = _PVB_Backup($root, $dest)
