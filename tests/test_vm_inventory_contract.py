@@ -60,6 +60,15 @@ class VmInventoryContract(unittest.TestCase):
                        'valid machine fixture restored after malformed inputs'):
             self.assertIn(phrase, native)
 
+    def test_compiled_inventory_handles_multiple_real_files_and_malformed_xml(self):
+        script = (ROOT / 'scripts/check_vm_inventory.ps1').read_text(encoding='utf-8-sig')
+        for marker in ('compiled two registered local VMs',
+                       'compiled mismatched VM UUID is rejected',
+                       'compiled nested Machine XML is rejected',
+                       'compiled foreign Machine namespace is rejected',
+                       'compiled direct Machine XML restored'):
+            self.assertIn(marker, script)
+
     def test_real_native_and_compiled_smoke_exercises_public_feature(self):
         self.assertTrue((ROOT/'tests/native/test_portable_vm_inventory.au3').is_file())
         fixture=(ROOT/'scripts/check_vm_inventory.ps1').read_text(encoding='utf-8')

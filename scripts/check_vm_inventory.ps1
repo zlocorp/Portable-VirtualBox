@@ -34,6 +34,41 @@ if (-not $en.Contains('VMs / snapshots / media') -or -not $en.Contains('ВМ с 
 $ru=Invoke-Audit 0 'ru'
 if (-not $ru.Contains('ВМ / снимки / носители')) { throw 'Russian output missing' }
 if (-not $en.Contains('Registered machines: 1')) { throw 'Actual registry was not verified' }
+# A second real, locally registered .vbox must remain valid in the public CLI,
+# and a mismatched UUID must never be misreported as a portable registration.
+$second=Join-Path $root 'data\Machines\Другая ВМ'
+New-Item -ItemType Directory -Path $second -ErrorAction Stop | Out-Null
+$secondId='{99999999-2222-3333-4444-555555555555}'
+$secondXml=Join-Path $second 'Другая ВМ.vbox'
+[IO.File]::WriteAllBytes((Join-Path $second 'disk.vdi'),[byte[]](0..63))
+[IO.File]::WriteAllText($secondXml,($head+$local+$tail).Replace($uuid,$secondId).Replace('ВМ с пробелами','Другая ВМ'),[Text.UTF8Encoding]::new($false))
+$secondEntry='<MachineEntry uuid="'+$secondId+'" src="..\Machines\Другая ВМ\Другая ВМ.vbox"/>'
+[IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$secondEntry+$registryTail,[Text.UTF8Encoding]::new($false))
+$both=Invoke-Audit 0 'en'
+if (-not $both.Contains('Registered machines: 2') -or -not $both.Contains('Другая ВМ')) {
+  throw 'compiled two registered local VMs: audit failed'
+}
+$wrongEntry=$secondEntry.Replace($secondId,$uuid)
+[IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$wrongEntry+$registryTail,[Text.UTF8Encoding]::new($false))
+$null=Invoke-Audit 3 'en'
+Write-Host 'PASS: compiled mismatched VM UUID is rejected'
+# Restore the original single-VM fixture before testing external registration.
+[IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$registryTail,[Text.UTF8Encoding]::new($false))
+Remove-Item -LiteralPath $second -Recurse -Force -ErrorAction Stop
+
+# A nested or foreign-namespace Machine is not a valid Oracle VM config.
+$goodConfig=$head+$local+$tail
+$nested='<VirtualBox xmlns="http://www.virtualbox.org/"><Wrapper><Machine uuid="'+$uuid+'" name="ВМ с пробелами"><HardDisk location="disk.vdi"/></Machine></Wrapper></VirtualBox>'
+[IO.File]::WriteAllText($xml,$nested,[Text.UTF8Encoding]::new($false))
+$null=Invoke-Audit 3 'en'
+Write-Host 'PASS: compiled nested Machine XML is rejected'
+$foreign='<VirtualBox xmlns="http://www.virtualbox.org/"><Machine xmlns="urn:foreign" uuid="'+$uuid+'" name="ВМ с пробелами"><HardDisk location="disk.vdi"/></Machine></VirtualBox>'
+[IO.File]::WriteAllText($xml,$foreign,[Text.UTF8Encoding]::new($false))
+$null=Invoke-Audit 3 'en'
+Write-Host 'PASS: compiled foreign Machine namespace is rejected'
+[IO.File]::WriteAllText($xml,$goodConfig,[Text.UTF8Encoding]::new($false))
+$null=Invoke-Audit 0 'en'
+Write-Host 'PASS: compiled direct Machine XML restored'
 # A second, externally registered VM is not in the folder: warn rather than
 # reporting complete portability based on scanning Machines alone.
 $extra='<MachineEntry uuid="{99999999-2222-3333-4444-555555555555}" src="E:\DifferentPC\external.vbox"/>'
