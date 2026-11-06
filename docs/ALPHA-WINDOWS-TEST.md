@@ -58,6 +58,18 @@ EXE's read-only `--plan-vm-rebind`, then
 It makes a verified full data copy and **does not edit VirtualBox.xml or run
 Oracle to repair the stale entry**. Keep that original backup intact.
 
+**Partial registration inspection is available without repair.** After a
+verified multi-VM full backup exists, `--review-multi-vm-rebind
+"ORIGINAL_BACKUP"` recognizes each of 2–16 original UUIDs as STALE,
+ABSENT or LOCAL, and blocks foreign/mismatched/changed data. The reported
+next action is a **hint**, never an executable Oracle command, proof of
+ownership or permission for driver cleanup. It is safe to inspect after
+the *existing* separate-session recovery has confirmed that the host is
+offline; do not manually edit production XML to simulate an interruption.
+A pure one-UUID transition verifier has native tests, but the actual
+batch mutation controller, durable transaction journal and workstation
+power-loss recovery are **still unimplemented**.
+
 **Multiple-VM registration repair is still unavailable.** The independent
 `--prepare-multi-vm-rebind "NEW_BACKUP_FOLDER"` CLI action can now create a
 SHA-256 verified full `data/` copy for a read-only 2–16 VM candidate.

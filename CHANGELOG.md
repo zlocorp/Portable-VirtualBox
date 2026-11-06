@@ -4,6 +4,13 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · read-only multi-VM partial registration reconstruction (2026-11-06)
+
+- `3f031ef` adds `--review-multi-vm-rebind ORIGINAL_BACKUP`. It independently verifies the original non-overwriting full `data/` SHA-256 backup, original exact stale UUID/path set and current complete VM files; reconciles each of 2–16 registrations as `STALE`, `ABSENT` or `LOCAL`. Foreign/malformed/duplicate entries, changed guest media, invalid/altered backup and unknown host state block. Hints are explicitly not Oracle commands or authorization to mutate.
+- `028effc` adds a pure, check-only validator for one expected step `STALE→ABSENT` or `ABSENT→LOCAL`, with the same original manifest/registry, root and all unrelated UUID states. The first native run exposed a real bookkeeping bug: `ABSENT` UUIDs were counted but omitted from the state map, so valid transitions failed.
+- `a5f9be9` fixes that cause by recording `ABSENT` explicitly, keeping all transition/ownership checks strict. [Native Windows 42225567867](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42225567867) passes **43 reconstruction/transition assertions, 33 total harnesses**. Local Python suite: **256 tests, 6 Windows-dependent skips**; source and active-tree checks passed. Compiled CLI tests simulate stopped states via disposable XML, *not a real crash or Oracle transaction*. Actual multi-VM write execution and protected recovery are **not yet enabled**.
+
+
 ### Improved · display read-only multi-VM plan in the main GUI (2026-11-06)
 
 - `d43b3dd` connects the existing **Audit VM portability** button, refresh and RU/EN switching to the same strict read-only multi-VM moved-root observer already used by CLI. It appends the localized `REVIEW_ONLY` report only for an eligible 2–16 VM candidate; no new parsing, registration, driver or cleanup logic is created.
