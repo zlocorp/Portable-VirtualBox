@@ -48,9 +48,15 @@ $both=Invoke-Audit 0 'en'
 if (-not $both.Contains('Registered machines: 2') -or -not $both.Contains('Другая ВМ')) {
   throw 'compiled two registered local VMs: audit failed'
 }
-$wrongEntry=$secondEntry.Replace($secondId,$uuid)
-[IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$wrongEntry+$registryTail,[Text.UTF8Encoding]::new($false))
+$duplicateEntry=$secondEntry.Replace($secondId,$uuid)
+[IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$duplicateEntry+$registryTail,[Text.UTF8Encoding]::new($false))
 $null=Invoke-Audit 3 'en'
+Write-Host 'PASS: compiled duplicate registration UUID is rejected'
+$swappedFirst=$registryEntry.Replace($uuid,$secondId)
+$swappedSecond=$secondEntry.Replace($secondId,$uuid)
+[IO.File]::WriteAllText($registry,$registryHead+$swappedFirst+$swappedSecond+$registryTail,[Text.UTF8Encoding]::new($false))
+$null=Invoke-Audit 3 'en'
+Write-Host 'PASS: compiled swapped unique UUIDs are rejected'
 Write-Host 'PASS: compiled mismatched VM UUID is rejected'
 # Restore the original single-VM fixture before testing external registration.
 [IO.File]::WriteAllText($registry,$registryHead+$registryEntry+$registryTail,[Text.UTF8Encoding]::new($false))

@@ -68,6 +68,9 @@ class VmInventoryContract(unittest.TestCase):
                        'compiled foreign Machine namespace is rejected',
                        'compiled direct Machine XML restored'):
             self.assertIn(marker, script)
+        self.assertIn('compiled duplicate registration UUID is rejected', script)
+        self.assertIn('compiled swapped unique UUIDs are rejected', script)
+        self.assertIn('$swappedFirst=$registryEntry.Replace($uuid,$secondId)', script)
 
     def test_real_native_and_compiled_smoke_exercises_public_feature(self):
         self.assertTrue((ROOT/'tests/native/test_portable_vm_inventory.au3').is_file())
