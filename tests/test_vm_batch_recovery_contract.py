@@ -24,6 +24,7 @@ class BatchRecoveryContract(unittest.TestCase):
         code=self.get('source/PortableVmBatchRecovery.au3')
         native=self.get('tests/native/test_vm_batch_recovery.au3')
         self.assertIn('Func _PVB_TransitionValid(',code)
+        self.assertIn('$states[$uuid] = $state', code)
         for key in ('origin_sha256', 'manifest_sha256', 'statesBefore', 'statesAfter',
                     '$statesBefore[$uuid] <> $from', '$statesAfter[$uuid] <> $to',
                     '$key <> $uuid And $statesBefore[$key] <> $statesAfter[$key]'):

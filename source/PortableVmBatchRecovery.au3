@@ -134,6 +134,9 @@ Func _PVB_Reconcile($root, $backup)
     For $uuid In $order
         Local $record = $expected[$uuid], $state = "ABSENT"
         If MapExists($states, $uuid) Then $state = $states[$uuid]
+        ; ABSENT is an observed state, not an omitted map key.
+        ; A transition proof requires the same complete UUID set on both sides.
+        $states[$uuid] = $state
         Switch $state
             Case "STALE"
                 $r["stale"] += 1
