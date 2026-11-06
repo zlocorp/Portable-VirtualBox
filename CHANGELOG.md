@@ -4,6 +4,13 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · read-only multi-VM relocation discovery (2026-11-06)
+
+- `0e41ce4` removes an unsafe single-VM false `already-local` outcome: a local registration is a no-op only if the strict one-VM inventory confirms matching UUID, no additional unregistered VMs and no missing/external media. Reuses the canonical registry validator; native and compiled checks passed. Full Manager GUI initially failed before repair at Oracle `VERR_NEM_VM_CREATE_FAILED` on hosted Windows; the identical unchanged retry passed, without relaxing acceptance.
+- `200dc45` / `382bad5` introduce `--plan-multi-vm-rebind` for bounded **2–16** registered VMs apparently moved together. Reports RU/EN old/new paths, UUID, configuration SHA-256, snapshots and media. Refuses mixed old roots, colliding sources, missing/external media, saved state, unsupported XML/UUIDs, unknown host activity, and changed observed files. It is a separate **REVIEW_ONLY** report, not a backup, authorization to repair, or transaction. No Oracle commands, user-data changes, batch unregister/register or new privilege path.
+- Real Windows [native 42210965663](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42210965663) passed **49 new assertions (0 failures), 32 harnesses total**. [Compiled ordinary CLI 42210965545](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42210965545) passed two-VM discovery, RU/EN, mixed old root, forged UUID, missing media, single-VM fallback and explicit mutation refusal. Local Python suite: **250 tests, 6 Windows-dependent skips**. The full real-guest GUI scenario is tracked separately because hosted Windows has intermittently refused NEM VM creation before the modified paths.
+
+
 ### Hardened · direct Machine XML and compiled multi-VM acceptance (2026-11-06)
 
 - The public read-only `--audit-vms` now accepts only one direct `Machine` child in a `VirtualBox` document with a matching supported XML namespace. Reject nested, foreign-namespace and extra-root-child Machine structures rather than accepting spoofed VM metadata (`210c53e`). It never edits the VM or registry.

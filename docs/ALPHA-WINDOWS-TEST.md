@@ -58,6 +58,18 @@ EXE's read-only `--plan-vm-rebind`, then
 It makes a verified full data copy and **does not edit VirtualBox.xml or run
 Oracle to repair the stale entry**. Keep that original backup intact.
 
+**Multiple-VM relocation is currently inspection-only.** On an idle host,
+`Portable-VirtualBox.exe --plan-multi-vm-rebind` can report 2–16 machines
+that appear to share the same absent original portable root. It verifies
+registered UUID/path identity, local VDI/snapshot and ancillary files, and
+unchanged observed configuration data. Exit 0 is **REVIEW_ONLY**, not an
+authorization to call Oracle or clean drivers. The command does not back up
+or repair anything. Preserve the entire original root and an independently
+verified offline backup. `--prepare-vm-rebind` and the ALPHA repair button
+remain limited to exactly one VM; do not apply them repeatedly to a batch.
+No physical cross-host, saved-state or interrupted multi-VM transaction
+acceptance exists.
+
 For the separate explicit repair acceptance on the disposable workstation:
 
 1. Open the Manager-session window under `--alpha-runtime` and select
