@@ -164,7 +164,7 @@ Check(Not _PVB_TransitionValid($originalObserved, $sameRegistry, "UNREGISTER", S
 RecoveryPhase("before-config-hash-clone")
 Local $changedHash = CloneSnapshot($state)
 Local $hashMap = $changedHash["config_sha256"]
-$hashMap[StringLower($uuidB)] = StringRepeat("a", 64)
+$hashMap[StringLower($uuidB)] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 $changedHash["config_sha256"] = $hashMap
 Check(Not _PVB_TransitionValid($originalObserved, $changedHash, "UNREGISTER", StringLower($uuidA)), "forged VM configuration hash is rejected")
 RecoveryPhase("before-invalid-hash-clone")

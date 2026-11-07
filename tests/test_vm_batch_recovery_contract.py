@@ -37,6 +37,11 @@ class BatchRecoveryContract(unittest.TestCase):
                      'completed transaction may not regress to stale'):
             self.assertIn(case,native)
 
+    def test_native_does_not_call_nonexistent_stringrepeat_builtin(self):
+        native=self.get('tests/native/test_vm_batch_recovery.au3')
+        self.assertNotIn('StringRepeat(',native)
+        self.assertIn('"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',native)
+
     def test_model_refuses_forged_counts_order_paths_and_skipped_recovery(self):
         code=self.get('source/PortableVmBatchRecovery.au3')
         native=self.get('tests/native/test_vm_batch_recovery.au3')
