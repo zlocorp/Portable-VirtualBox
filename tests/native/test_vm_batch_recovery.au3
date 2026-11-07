@@ -14,6 +14,36 @@ Func WriteXml($path, $text)
     Local $result = FileWrite($h, $text), $closed = FileClose($h)
     Return $result And $closed
 EndFunc
+; Clone ONLY the already re-observed small evidence maps for adversarial
+; model tests. Do not rescan and rehash the whole data/ tree for every
+; deliberately forged field; actual before/after snapshots are still read
+; independently by _PVB_Reconcile at each simulated registry change.
+Func CloneSnapshot($original)
+    Local $copy = _PVB_RecoveryNew()
+    For $field In MapKeys($original)
+        $copy[$field] = $original[$field]
+    Next
+    Local $sourceStates = $original["states"], $sourcePaths = $original["paths"]
+    Local $sourceHashes = $original["config_sha256"], $sourceOrder = $original["order"]
+    Local $states[], $paths[], $hashes[], $order[UBound($sourceOrder)]
+    For $uuid In MapKeys($sourceStates)
+        $states[$uuid] = $sourceStates[$uuid]
+    Next
+    For $uuid In MapKeys($sourcePaths)
+        $paths[$uuid] = $sourcePaths[$uuid]
+    Next
+    For $uuid In MapKeys($sourceHashes)
+        $hashes[$uuid] = $sourceHashes[$uuid]
+    Next
+    For $i = 0 To UBound($sourceOrder) - 1
+        $order[$i] = $sourceOrder[$i]
+    Next
+    $copy["states"] = $states
+    $copy["paths"] = $paths
+    $copy["config_sha256"] = $hashes
+    $copy["order"] = $order
+    Return $copy
+EndFunc
 Local $parent = @TempDir & "\PVB recovery test " & @AutoItPID
 Local $root = $parent & "\Новая папка", $old = $parent & "\Старая папка"
 If FileExists($parent) Then Exit 2
@@ -63,34 +93,34 @@ $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "REVIEW_ONLY" And $state["stale"] == 1 And $state["absent"] == 1 And $state["local"] == 0, "first unregister interrupted")
 Check($state["next_action"] == "REGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidA), "missing entry addressed before any new unregister")
 Check(_PVB_TransitionValid($originalObserved, $state, "UNREGISTER", StringLower($uuidA)), "only first unregister transition is valid")
-Local $badCount = _PVB_Reconcile($root, $backup)
+Local $badCount = CloneSnapshot($state)
 $badCount["absent"] = 0
 Check(Not _PVB_TransitionValid($originalObserved, $badCount, "UNREGISTER", StringLower($uuidA)), "forged state count is rejected")
-Local $badStatus = _PVB_Reconcile($root, $backup)
+Local $badStatus = CloneSnapshot($state)
 $badStatus["status"] = "COMPLETE"
 Check(Not _PVB_TransitionValid($originalObserved, $badStatus, "UNREGISTER", StringLower($uuidA)), "premature COMPLETE is rejected")
 Local $wrongHint = $originalObserved["next_uuid"]
 $originalObserved["next_uuid"] = StringLower($uuidB)
 Check(Not _PVB_TransitionValid($originalObserved, $state, "UNREGISTER", StringLower($uuidA)), "forged next step target is rejected")
 $originalObserved["next_uuid"] = $wrongHint
-Local $rogue = _PVB_Reconcile($root, $backup)
+Local $rogue = CloneSnapshot($state)
 Local $rogueStates = $rogue["states"]
 $rogueStates["{ffffffff-2222-3333-4444-abcdef123456}"] = "STALE"
 $rogue["states"] = $rogueStates
 Check(Not _PVB_TransitionValid($originalObserved, $rogue, "UNREGISTER", StringLower($uuidA)), "additional unseen state UUID is rejected")
-Local $shifted = _PVB_Reconcile($root, $backup)
+Local $shifted = CloneSnapshot($state)
 Local $shiftedOrder = $shifted["order"]
 Local $firstKey = $shiftedOrder[0]
 $shiftedOrder[0] = $shiftedOrder[1]
 $shiftedOrder[1] = $firstKey
 $shifted["order"] = $shiftedOrder
 Check(Not _PVB_TransitionValid($originalObserved, $shifted, "UNREGISTER", StringLower($uuidA)), "reordered original UUID schedule is rejected")
-Local $differentPath = _PVB_Reconcile($root, $backup)
+Local $differentPath = CloneSnapshot($state)
 Local $pathMap = $differentPath["paths"]
 $pathMap[StringLower($uuidA)] = "C:\foreign\changed.vbox"
 $differentPath["paths"] = $pathMap
 Check(Not _PVB_TransitionValid($originalObserved, $differentPath, "UNREGISTER", StringLower($uuidA)), "changed VM target path is rejected")
-Local $ignoredMissing = _PVB_Reconcile($root, $backup)
+Local $ignoredMissing = CloneSnapshot($state)
 Local $ignoredStates = $ignoredMissing["states"]
 $ignoredStates[StringLower($uuidB)] = "ABSENT"
 $ignoredMissing["states"] = $ignoredStates
@@ -98,17 +128,18 @@ $ignoredMissing["stale"] = 0
 $ignoredMissing["absent"] = 2
 Check(_PVB_StateConsistent($ignoredMissing), "synthetic second unregister state is internally consistent")
 Check(Not _PVB_TransitionValid($state, $ignoredMissing, "UNREGISTER", StringLower($uuidB)), "must recover ABSENT before unregistering another VM")
+Check(_PVB_StateConsistent($state) And _PVB_StateConsistent($originalObserved), "adversarial clones do not mutate genuine observations")
 Check(StringLen($originalObserved["current_registry_sha256"]) == 64 And _
         $originalObserved["current_registry_sha256"] <> $state["current_registry_sha256"], "successful unregister changes observed registry SHA-256")
-Local $sameRegistry = _PVB_Reconcile($root, $backup)
+Local $sameRegistry = CloneSnapshot($state)
 $sameRegistry["current_registry_sha256"] = $originalObserved["current_registry_sha256"]
 Check(Not _PVB_TransitionValid($originalObserved, $sameRegistry, "UNREGISTER", StringLower($uuidA)), "forged unchanged registry hash is rejected")
-Local $changedHash = _PVB_Reconcile($root, $backup)
+Local $changedHash = CloneSnapshot($state)
 Local $hashMap = $changedHash["config_sha256"]
 $hashMap[StringLower($uuidB)] = StringRepeat("a", 64)
 $changedHash["config_sha256"] = $hashMap
 Check(Not _PVB_TransitionValid($originalObserved, $changedHash, "UNREGISTER", StringLower($uuidA)), "forged VM configuration hash is rejected")
-Local $invalidHash = _PVB_Reconcile($root, $backup)
+Local $invalidHash = CloneSnapshot($state)
 $invalidHash["current_registry_sha256"] = "invalid"
 Check(Not _PVB_TransitionValid($originalObserved, $invalidHash, "UNREGISTER", StringLower($uuidA)), "malformed registry SHA-256 is rejected")
 Local $missingFirst = $state
