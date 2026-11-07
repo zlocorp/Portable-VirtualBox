@@ -57,6 +57,25 @@ class BatchRecoveryContract(unittest.TestCase):
                      'must recover ABSENT before unregistering another VM'):
             self.assertIn(desc,native)
 
+    def test_complete_trace_requires_all_strict_ordered_snapshots(self):
+        code=self.get('source/PortableVmBatchRecovery.au3')
+        native=self.get('tests/native/test_vm_batch_recovery.au3')
+        self.assertIn('Func _PVB_TraceValid(',code)
+        self.assertIn('_PVB_StateConsistent($observations[0])',code)
+        self.assertIn('_PVB_TransitionValid($observations[$i], $observations[$i + 1]',code)
+        self.assertIn('If $requireComplete Then Return $last["status"] == "COMPLETE"',code)
+        for marker in ('complete ordered transition trace accepted',
+                       'initial verified snapshot may be inspected',
+                       'no-step trace is never a completed batch',
+                       'interrupted first unregister trace is inspectable',
+                       'interrupted trace cannot claim complete',
+                       'trace with skipped register is rejected',
+                       'replayed unregister transition is rejected',
+                       'out-of-order UUID step is rejected',
+                       'trace without original stale baseline is rejected',
+                       'incomplete UUID event list is rejected'):
+            self.assertIn(marker,native)
+
     def test_public_cli_is_readonly(self):
         entry=self.get('source/Portable-VirtualBox.au3')
         self.assertIn('PortableVmBatchRecovery.au3',entry)

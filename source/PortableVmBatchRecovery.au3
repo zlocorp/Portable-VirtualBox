@@ -290,6 +290,31 @@ Func _PVB_TransitionValid($before, $after, $action, $uuid)
     Return True
 EndFunc
 
+; This accepts a bounded sequence of independently observed snapshots only.
+; It does not create/modify receipts, execute Oracle, prove authenticated
+; ownership or permit cleanup. Any missing intermediate observation refuses
+; a complete trace instead of guessing which command may have succeeded.
+Func _PVB_TraceValid($observations, $actions, $uuids, $requireComplete = False)
+    If Not IsArray($observations) Or Not IsArray($actions) Or Not IsArray($uuids) Or _
+            Not IsBool($requireComplete) Then Return False
+    Local $steps = UBound($actions)
+    If $steps <> UBound($uuids) Or UBound($observations) <> $steps + 1 Or _
+            $steps > 2 * $g_PVB_MAX_CANDIDATES Then Return False
+    If Not _PVB_StateConsistent($observations[0]) Then Return False
+    Local $start = $observations[0]
+    If $start["status"] <> "REVIEW_ONLY" Or $start["stale"] <> $start["count"] Or _
+            $start["absent"] <> 0 Or $start["local"] <> 0 Then Return False
+    For $i = 0 To $steps - 1
+        If Not IsString($actions[$i]) Or Not IsString($uuids[$i]) Then Return False
+        If Not _PVB_TransitionValid($observations[$i], $observations[$i + 1], _
+                $actions[$i], $uuids[$i]) Then Return False
+    Next
+    Local $last = $observations[$steps]
+    If Not _PVB_StateConsistent($last) Then Return False
+    If $requireComplete Then Return $last["status"] == "COMPLETE" And $steps = 2 * $last["count"]
+    Return True
+EndFunc
+
 Func _PVB_RecoveryText($r)
     If Not IsMap($r) Or Not MapExists($r, "status") Then Return ""
     Local $ru = _LI_Language() == "ru"

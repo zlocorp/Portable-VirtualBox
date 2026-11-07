@@ -121,6 +121,31 @@ Check($state["status"] == "COMPLETE" And $state["local"] == 2 And $state["stale"
 Check($state["next_action"] == "" And StringInStr(_PVB_RecoveryText($state), "No new changes required") > 0, "completed state never suggests repeating a mutation")
 Check(_PVB_TransitionValid($missingSecond, $state, "REGISTER", StringLower($uuidB)), "only second register transition is valid")
 Check(Not _PVB_TransitionValid($state, $originalObserved, "UNREGISTER", StringLower($uuidA)), "completed transaction may not regress to stale")
+Local $traceSteps[5] = [$originalObserved, $missingFirst, $firstFinished, $missingSecond, $state]
+Local $traceActions[4] = ["UNREGISTER", "REGISTER", "UNREGISTER", "REGISTER"]
+Local $traceUuids[4] = [StringLower($uuidA), StringLower($uuidA), StringLower($uuidB), StringLower($uuidB)]
+Check(_PVB_TraceValid($traceSteps, $traceActions, $traceUuids, True), "complete ordered transition trace accepted")
+Check(_PVB_TraceValid($traceSteps, $traceActions, $traceUuids, False), "complete trace also valid for inspection")
+Local $initialOnly[1] = [$originalObserved], $noActions[0], $noUuids[0]
+Check(_PVB_TraceValid($initialOnly, $noActions, $noUuids, False), "initial verified snapshot may be inspected")
+Check(Not _PVB_TraceValid($initialOnly, $noActions, $noUuids, True), "no-step trace is never a completed batch")
+Local $partialTrace[2] = [$originalObserved, $missingFirst]
+Local $partialActions[1] = ["UNREGISTER"], $partialUuids[1] = [StringLower($uuidA)]
+Check(_PVB_TraceValid($partialTrace, $partialActions, $partialUuids, False), "interrupted first unregister trace is inspectable")
+Check(Not _PVB_TraceValid($partialTrace, $partialActions, $partialUuids, True), "interrupted trace cannot claim complete")
+Local $skippedTrace[3] = [$originalObserved, $missingFirst, $firstFinished]
+Local $badActions[2] = ["UNREGISTER", "UNREGISTER"], $badUuids[2] = [StringLower($uuidA), StringLower($uuidB)]
+Check(Not _PVB_TraceValid($skippedTrace, $badActions, $badUuids, False), "trace with skipped register is rejected")
+Local $repeatedTrace[3] = [$originalObserved, $missingFirst, $missingFirst]
+Local $repeatActions[2] = ["UNREGISTER", "UNREGISTER"], $repeatUuids[2] = [StringLower($uuidA), StringLower($uuidA)]
+Check(Not _PVB_TraceValid($repeatedTrace, $repeatActions, $repeatUuids, False), "replayed unregister transition is rejected")
+Local $wrongOrderUuids[4] = [StringLower($uuidB), StringLower($uuidA), StringLower($uuidB), StringLower($uuidB)]
+Check(Not _PVB_TraceValid($traceSteps, $traceActions, $wrongOrderUuids, True), "out-of-order UUID step is rejected")
+Local $prematureTrace[2] = [$missingFirst, $firstFinished], $registerAction[1] = ["REGISTER"], $registerUuid[1] = [StringLower($uuidA)]
+Check(Not _PVB_TraceValid($prematureTrace, $registerAction, $registerUuid, True), "trace without original stale baseline is rejected")
+Check(Not _PVB_TraceValid($traceSteps, $traceActions, $partialUuids, True), "incomplete UUID event list is rejected")
+Local $wrongAction[4] = ["REGISTER", "REGISTER", "UNREGISTER", "REGISTER"]
+Check(Not _PVB_TraceValid($traceSteps, $wrongAction, $traceUuids, True), "wrong first action is rejected")
 
 Check(WriteXml($registry, $prefix & $firstLocal & '<MachineEntry uuid="{ffffffff-2222-3333-4444-abcdef123456}" src="..\Machines\Вторая ВМ\Вторая ВМ.vbox"/>' & $suffix), "foreign registration fixture")
 Check(_PVB_Reconcile($root, $backup)["status"] == "BLOCKED", "unknown registration refused")
