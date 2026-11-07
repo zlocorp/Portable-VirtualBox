@@ -1,17 +1,6 @@
 #include "..\..\source\PortableVmBatchRecovery.au3"
 ; Deterministic filesystem-only fixtures. Never run Oracle or change drivers.
 Global $checks = 0, $failures = 0
-Global $recoveryPhaseClock = TimerInit()
-; The CI runner exposes this private disposable test directory. On a
-; native timeout it prints the last completed phase, never VM/user paths.
-Func RecoveryPhase($name)
-    Local $root = EnvGet("PVBOX_NATIVE_TEST_DIR")
-    If $root == "" Then Return
-    Local $h = FileOpen($root & "\batch-recovery-phase.txt", 1 + 256)
-    If $h = -1 Then Return
-    FileWrite($h, Int(TimerDiff($recoveryPhaseClock)) & "ms " & $name & @CRLF)
-    FileClose($h)
-EndFunc
 Func Check($pass, $label)
     $checks += 1
     If Not $pass Then
@@ -83,7 +72,6 @@ Local $entryB = '<MachineEntry uuid="' & $uuidB & '" src="' & $sourceB & '"/>'
 Local $original = $prefix & $entryA & $entryB & $suffix
 Check(WriteXml($registry, $original), "write original two-entry old-root registry")
 Local $backup = $parent & "\Original-Full-Backup"
-RecoveryPhase("before-backup")
 Local $copy = _PVB_Backup($root, $backup)
 Check($copy["status"] == "BACKUP_ONLY", "create original full backup")
 Check(_PBK_Verify($backup), "original backup independently verified")
@@ -91,7 +79,6 @@ Local $backupBefore = FileRead($backup & "\data\.VirtualBox\VirtualBox.xml")
 Local $baseBefore = FileRead($folderB & "\disk.vdi")
 Local $firstLocal = '<MachineEntry uuid="' & $uuidA & '" src="..\Machines\Первая ВМ\Первая ВМ.vbox"/>'
 Local $secondLocal = '<MachineEntry uuid="' & $uuidB & '" src="..\Machines\Вторая ВМ\Вторая ВМ.vbox"/>'
-RecoveryPhase("before-baseline-reconcile")
 Local $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "REVIEW_ONLY" And $state["stale"] == 2 And $state["absent"] == 0 And $state["local"] == 0, "two stale registrations")
 Check($state["next_action"] == "UNREGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidA), "first step is a hint, not an Oracle call")
@@ -100,38 +87,27 @@ _LI_Set("ru")
 Check(StringInStr(_PVB_RecoveryText($state), "ТОЛЬКО ЧТЕНИЕ") > 0, "Russian explicitly read only")
 _LI_Set("en")
 
-RecoveryPhase("after-baseline-reconcile")
 Local $originalObserved = $state
 Check(WriteXml($registry, $prefix & $entryB & $suffix), "simulate first unregister in disposable XML")
 $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "REVIEW_ONLY" And $state["stale"] == 1 And $state["absent"] == 1 And $state["local"] == 0, "first unregister interrupted")
 Check($state["next_action"] == "REGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidA), "missing entry addressed before any new unregister")
-RecoveryPhase("after-first-unregister")
-RecoveryPhase("after-primary-transition")
 Check(_PVB_TransitionValid($originalObserved, $state, "UNREGISTER", StringLower($uuidA)), "only first unregister transition is valid")
-RecoveryPhase("before-first-clone")
 Local $badCount = CloneSnapshot($state)
-RecoveryPhase("after-first-clone")
 $badCount["absent"] = 0
-RecoveryPhase("after-forged-count")
 Check(Not _PVB_TransitionValid($originalObserved, $badCount, "UNREGISTER", StringLower($uuidA)), "forged state count is rejected")
-RecoveryPhase("before-second-clone")
 Local $badStatus = CloneSnapshot($state)
-RecoveryPhase("after-second-clone")
 $badStatus["status"] = "COMPLETE"
-RecoveryPhase("after-premature-complete")
 Check(Not _PVB_TransitionValid($originalObserved, $badStatus, "UNREGISTER", StringLower($uuidA)), "premature COMPLETE is rejected")
 Local $wrongHint = $originalObserved["next_uuid"]
 $originalObserved["next_uuid"] = StringLower($uuidB)
 Check(Not _PVB_TransitionValid($originalObserved, $state, "UNREGISTER", StringLower($uuidA)), "forged next step target is rejected")
 $originalObserved["next_uuid"] = $wrongHint
-RecoveryPhase("before-rogue-clone")
 Local $rogue = CloneSnapshot($state)
 Local $rogueStates = $rogue["states"]
 $rogueStates["{ffffffff-2222-3333-4444-abcdef123456}"] = "STALE"
 $rogue["states"] = $rogueStates
 Check(Not _PVB_TransitionValid($originalObserved, $rogue, "UNREGISTER", StringLower($uuidA)), "additional unseen state UUID is rejected")
-RecoveryPhase("before-order-clone")
 Local $shifted = CloneSnapshot($state)
 Local $shiftedOrder = $shifted["order"]
 Local $firstKey = $shiftedOrder[0]
@@ -139,13 +115,11 @@ $shiftedOrder[0] = $shiftedOrder[1]
 $shiftedOrder[1] = $firstKey
 $shifted["order"] = $shiftedOrder
 Check(Not _PVB_TransitionValid($originalObserved, $shifted, "UNREGISTER", StringLower($uuidA)), "reordered original UUID schedule is rejected")
-RecoveryPhase("before-path-clone")
 Local $differentPath = CloneSnapshot($state)
 Local $pathMap = $differentPath["paths"]
 $pathMap[StringLower($uuidA)] = "C:\foreign\changed.vbox"
 $differentPath["paths"] = $pathMap
 Check(Not _PVB_TransitionValid($originalObserved, $differentPath, "UNREGISTER", StringLower($uuidA)), "changed VM target path is rejected")
-RecoveryPhase("before-skipped-recovery-clone")
 Local $ignoredMissing = CloneSnapshot($state)
 Local $ignoredStates = $ignoredMissing["states"]
 $ignoredStates[StringLower($uuidB)] = "ABSENT"
@@ -157,21 +131,17 @@ Check(Not _PVB_TransitionValid($state, $ignoredMissing, "UNREGISTER", StringLowe
 Check(_PVB_StateConsistent($state) And _PVB_StateConsistent($originalObserved), "adversarial clones do not mutate genuine observations")
 Check(StringLen($originalObserved["current_registry_sha256"]) == 64 And _
         $originalObserved["current_registry_sha256"] <> $state["current_registry_sha256"], "successful unregister changes observed registry SHA-256")
-RecoveryPhase("before-registry-hash-clone")
 Local $sameRegistry = CloneSnapshot($state)
 $sameRegistry["current_registry_sha256"] = $originalObserved["current_registry_sha256"]
 Check(Not _PVB_TransitionValid($originalObserved, $sameRegistry, "UNREGISTER", StringLower($uuidA)), "forged unchanged registry hash is rejected")
-RecoveryPhase("before-config-hash-clone")
 Local $changedHash = CloneSnapshot($state)
 Local $hashMap = $changedHash["config_sha256"]
 $hashMap[StringLower($uuidB)] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 $changedHash["config_sha256"] = $hashMap
 Check(Not _PVB_TransitionValid($originalObserved, $changedHash, "UNREGISTER", StringLower($uuidA)), "forged VM configuration hash is rejected")
-RecoveryPhase("before-invalid-hash-clone")
 Local $invalidHash = CloneSnapshot($state)
 $invalidHash["current_registry_sha256"] = "invalid"
 Check(Not _PVB_TransitionValid($originalObserved, $invalidHash, "UNREGISTER", StringLower($uuidA)), "malformed registry SHA-256 is rejected")
-RecoveryPhase("after-first-unregister-forgery")
 Local $missingFirst = $state
 
 Check(WriteXml($registry, $prefix & $firstLocal & $entryB & $suffix), "simulate first completed re-registration")
@@ -180,7 +150,6 @@ Check($state["status"] == "REVIEW_ONLY" And $state["local"] == 1 And $state["sta
 Check($state["next_action"] == "UNREGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidB), "second VM pending")
 Check(_PVB_TransitionValid($missingFirst, $state, "REGISTER", StringLower($uuidA)), "only first register transition is valid")
 Check(Not _PVB_TransitionValid($originalObserved, $state, "REGISTER", StringLower($uuidA)), "skipped unregister observation is not a transaction")
-RecoveryPhase("after-first-register")
 Local $firstFinished = $state
 
 Check(WriteXml($registry, $prefix & $firstLocal & $suffix), "simulate second interrupted unregister")
@@ -188,7 +157,6 @@ $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "REVIEW_ONLY" And $state["local"] == 1 And $state["absent"] == 1 And $state["stale"] == 0, "second unregister interrupted")
 Check($state["next_action"] == "REGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidB), "second VM needs only registration")
 Check(_PVB_TransitionValid($firstFinished, $state, "UNREGISTER", StringLower($uuidB)), "only second unregister transition is valid")
-RecoveryPhase("after-second-unregister")
 Local $missingSecond = $state
 
 Check(WriteXml($registry, $prefix & $firstLocal & $secondLocal & $suffix), "simulate completed original registration set")
@@ -197,7 +165,6 @@ Check($state["status"] == "COMPLETE" And $state["local"] == 2 And $state["stale"
 Check($state["next_action"] == "" And StringInStr(_PVB_RecoveryText($state), "No new changes required") > 0, "completed state never suggests repeating a mutation")
 Check(_PVB_TransitionValid($missingSecond, $state, "REGISTER", StringLower($uuidB)), "only second register transition is valid")
 Check(Not _PVB_TransitionValid($state, $originalObserved, "UNREGISTER", StringLower($uuidA)), "completed transaction may not regress to stale")
-RecoveryPhase("before-trace-tests")
 Local $traceSteps[5] = [$originalObserved, $missingFirst, $firstFinished, $missingSecond, $state]
 Local $traceActions[4] = ["UNREGISTER", "REGISTER", "UNREGISTER", "REGISTER"]
 Local $traceUuids[4] = [StringLower($uuidA), StringLower($uuidA), StringLower($uuidB), StringLower($uuidB)]
@@ -222,10 +189,8 @@ Local $prematureTrace[2] = [$missingFirst, $firstFinished], $registerAction[1] =
 Check(Not _PVB_TraceValid($prematureTrace, $registerAction, $registerUuid, True), "trace without original stale baseline is rejected")
 Check(Not _PVB_TraceValid($traceSteps, $traceActions, $partialUuids, True), "incomplete UUID event list is rejected")
 Local $wrongAction[4] = ["REGISTER", "REGISTER", "UNREGISTER", "REGISTER"]
-RecoveryPhase("after-trace-tests")
 Check(Not _PVB_TraceValid($traceSteps, $wrongAction, $traceUuids, True), "wrong first action is rejected")
 
-RecoveryPhase("before-foreign-fixture")
 Check(WriteXml($registry, $prefix & $firstLocal & '<MachineEntry uuid="{ffffffff-2222-3333-4444-abcdef123456}" src="..\Machines\Вторая ВМ\Вторая ВМ.vbox"/>' & $suffix), "foreign registration fixture")
 Check(_PVB_Reconcile($root, $backup)["status"] == "BLOCKED", "unknown registration refused")
 Check(WriteXml($registry, $prefix & $firstLocal & $entryB & $suffix), "restore known partial state")
@@ -234,7 +199,6 @@ Check(_PVB_Reconcile($root, $backup)["status"] == "BLOCKED", "changed virtual di
 Check(WriteXml($folderB & "\disk.vdi", $baseBefore), "restore original second base disk")
 Check(_PVB_Reconcile($root, $backup)["status"] == "REVIEW_ONLY", "original incomplete state recovered after rejecting changes")
 Check(FileRead($backup & "\data\.VirtualBox\VirtualBox.xml") == $backupBefore And _PBK_Verify($backup), "original backup unchanged")
-RecoveryPhase("before-fixture-cleanup")
 Check(DirRemove($parent, 1), "remove only private test fixture")
 ConsoleWrite("Native batch registration reconciliation assertions: " & $checks & " failed=" & $failures & @CRLF)
 Exit ($failures > 0)

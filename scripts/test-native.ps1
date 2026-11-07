@@ -22,17 +22,7 @@ foreach ($test in $tests) {
         if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Native test compilation timeout' }
         if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $exe)) { throw 'Native compile failed' }
         $run = Start-Process -FilePath $exe -PassThru -NoNewWindow
-        if (-not $run.WaitForExit(30000)) {
-            if ($test.BaseName -eq 'test_vm_batch_recovery') {
-                $phase = Join-Path $env:PVBOX_NATIVE_TEST_DIR 'batch-recovery-phase.txt'
-                if (Test-Path -LiteralPath $phase -PathType Leaf) {
-                    Write-Host 'Recovery test diagnostic phases (milliseconds; no VM paths):'
-                    Get-Content -LiteralPath $phase -Encoding utf8 | ForEach-Object { Write-Host $_ }
-                }
-            }
-            $run.Kill()
-            throw 'Native test timed out'
-        }
+        if (-not $run.WaitForExit(30000)) { $run.Kill(); throw 'Native test timed out' }
         if ($run.ExitCode -ne 0) { throw "Native test exit $($run.ExitCode)" }
     } catch {
         $failure = "$($test.Name): $($_.Exception.Message)"
