@@ -63,6 +63,41 @@ $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "REVIEW_ONLY" And $state["stale"] == 1 And $state["absent"] == 1 And $state["local"] == 0, "first unregister interrupted")
 Check($state["next_action"] == "REGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidA), "missing entry addressed before any new unregister")
 Check(_PVB_TransitionValid($originalObserved, $state, "UNREGISTER", StringLower($uuidA)), "only first unregister transition is valid")
+Local $badCount = _PVB_Reconcile($root, $backup)
+$badCount["absent"] = 0
+Check(Not _PVB_TransitionValid($originalObserved, $badCount, "UNREGISTER", StringLower($uuidA)), "forged state count is rejected")
+Local $badStatus = _PVB_Reconcile($root, $backup)
+$badStatus["status"] = "COMPLETE"
+Check(Not _PVB_TransitionValid($originalObserved, $badStatus, "UNREGISTER", StringLower($uuidA)), "premature COMPLETE is rejected")
+Local $wrongHint = $originalObserved["next_uuid"]
+$originalObserved["next_uuid"] = StringLower($uuidB)
+Check(Not _PVB_TransitionValid($originalObserved, $state, "UNREGISTER", StringLower($uuidA)), "forged next step target is rejected")
+$originalObserved["next_uuid"] = $wrongHint
+Local $rogue = _PVB_Reconcile($root, $backup)
+Local $rogueStates = $rogue["states"]
+$rogueStates["{ffffffff-2222-3333-4444-abcdef123456}"] = "STALE"
+$rogue["states"] = $rogueStates
+Check(Not _PVB_TransitionValid($originalObserved, $rogue, "UNREGISTER", StringLower($uuidA)), "additional unseen state UUID is rejected")
+Local $shifted = _PVB_Reconcile($root, $backup)
+Local $shiftedOrder = $shifted["order"]
+Local $firstKey = $shiftedOrder[0]
+$shiftedOrder[0] = $shiftedOrder[1]
+$shiftedOrder[1] = $firstKey
+$shifted["order"] = $shiftedOrder
+Check(Not _PVB_TransitionValid($originalObserved, $shifted, "UNREGISTER", StringLower($uuidA)), "reordered original UUID schedule is rejected")
+Local $differentPath = _PVB_Reconcile($root, $backup)
+Local $pathMap = $differentPath["paths"]
+$pathMap[StringLower($uuidA)] = "C:\foreign\changed.vbox"
+$differentPath["paths"] = $pathMap
+Check(Not _PVB_TransitionValid($originalObserved, $differentPath, "UNREGISTER", StringLower($uuidA)), "changed VM target path is rejected")
+Local $ignoredMissing = _PVB_Reconcile($root, $backup)
+Local $ignoredStates = $ignoredMissing["states"]
+$ignoredStates[StringLower($uuidB)] = "ABSENT"
+$ignoredMissing["states"] = $ignoredStates
+$ignoredMissing["stale"] = 0
+$ignoredMissing["absent"] = 2
+Check(_PVB_StateConsistent($ignoredMissing), "synthetic second unregister state is internally consistent")
+Check(Not _PVB_TransitionValid($state, $ignoredMissing, "UNREGISTER", StringLower($uuidB)), "must recover ABSENT before unregistering another VM")
 Local $missingFirst = $state
 
 Check(WriteXml($registry, $prefix & $firstLocal & $entryB & $suffix), "simulate first completed re-registration")

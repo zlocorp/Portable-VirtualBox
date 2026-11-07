@@ -37,6 +37,26 @@ class BatchRecoveryContract(unittest.TestCase):
                      'completed transaction may not regress to stale'):
             self.assertIn(case,native)
 
+    def test_model_refuses_forged_counts_order_paths_and_skipped_recovery(self):
+        code=self.get('source/PortableVmBatchRecovery.au3')
+        native=self.get('tests/native/test_vm_batch_recovery.au3')
+        for key in ('Func _PVB_StateConsistent(', '$r["paths"] = $paths',
+                    '$r["order"] = $order', 'UBound($stateKeys) <> $r["count"]',
+                    'UBound($pathKeys) <> $r["count"]',
+                    '$countStale <> $r["stale"]', '$countAbsent <> $r["absent"]',
+                    '$r["next_action"] <> $expectedAction',
+                    '$before["next_uuid"] <> $uuid',
+                    '$pathsBefore[$key] <> $pathsAfter[$key]',
+                    '$orderBefore[$i] <> $orderAfter[$i]'):
+            self.assertIn(key,code)
+        for desc in ('forged state count is rejected','premature COMPLETE is rejected',
+                     'forged next step target is rejected',
+                     'additional unseen state UUID is rejected',
+                     'reordered original UUID schedule is rejected',
+                     'changed VM target path is rejected',
+                     'must recover ABSENT before unregistering another VM'):
+            self.assertIn(desc,native)
+
     def test_public_cli_is_readonly(self):
         entry=self.get('source/Portable-VirtualBox.au3')
         self.assertIn('PortableVmBatchRecovery.au3',entry)

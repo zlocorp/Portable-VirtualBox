@@ -20,8 +20,10 @@ Func _PVB_RecoveryNew()
     $r["manifest_sha256"] = ""
     $r["origin_sha256"] = ""
     $r["root"] = ""
-    Local $states[]
+    Local $states[], $paths[], $order[0]
     $r["states"] = $states
+    $r["paths"] = $paths
+    $r["order"] = $order
     $r["report"] = ""
     Return $r
 EndFunc
@@ -70,7 +72,7 @@ Func _PVB_Reconcile($root, $backup)
     Local $originalEntries = _PVI_RegistryEntries($originalXml)
     If Not IsObj($originalEntries) Or $originalEntries.length <> $original["count"] Then _
             Return _PVB_RecoveryBlocked($r, "original-registry-structure-changed")
-    Local $expected[], $order[0]
+    Local $expected[], $paths[], $order[0]
     For $i = 0 To $originalEntries.length - 1
         Local $entry = $originalEntries.item($i)
         Local $uuid = StringLower($entry.getAttribute("uuid")), $old = $entry.getAttribute("src")
@@ -92,6 +94,7 @@ Func _PVB_Reconcile($root, $backup)
         $record["old"] = $old
         $record["new"] = $currentFile
         $expected[$uuid] = $record
+        $paths[$uuid] = $currentFile
         ReDim $order[UBound($order) + 1]
         $order[UBound($order) - 1] = $uuid
     Next
@@ -176,30 +179,90 @@ Func _PVB_Reconcile($root, $backup)
     $r["root"] = $root
     $r["origin_sha256"] = $original["registry_sha256"]
     $r["states"] = $states
+    $r["paths"] = $paths
+    $r["order"] = $order
     $r["manifest_sha256"] = $manifest
     Return $r
+EndFunc
+
+; Validate the ENTIRE re-observed state model before examining a step.
+; These fields are only offline evidence and NEVER sufficient authority for
+; an Oracle write, protected helper action, or cleanup.
+Func _PVB_StateConsistent($r)
+    If Not IsMap($r) Then Return False
+    Local $required = StringSplit("status|count|stale|absent|local|next_action|next_uuid|next_path|manifest_sha256|origin_sha256|root|backup|states|paths|order", "|", 2)
+    For $key In $required
+        If Not MapExists($r, $key) Then Return False
+    Next
+    If Not IsInt($r["count"]) Or $r["count"] < 2 Or $r["count"] > $g_PVB_MAX_CANDIDATES Then Return False
+    If Not IsInt($r["stale"]) Or Not IsInt($r["absent"]) Or Not IsInt($r["local"]) Then Return False
+    If Not IsString($r["manifest_sha256"]) Or Not StringRegExp($r["manifest_sha256"], "^[0-9a-f]{64}$") Then Return False
+    If Not IsString($r["origin_sha256"]) Or Not StringRegExp($r["origin_sha256"], "^[0-9a-f]{64}$") Then Return False
+    If Not IsString($r["root"]) Or Not IsString($r["backup"]) Or $r["root"] == "" Or $r["backup"] == "" Then Return False
+    If Not IsString($r["next_action"]) Or Not IsString($r["next_uuid"]) Or Not IsString($r["next_path"]) Then Return False
+    If $r["status"] <> "REVIEW_ONLY" And $r["status"] <> "COMPLETE" Then Return False
+    Local $states = $r["states"], $paths = $r["paths"], $order = $r["order"]
+    If Not IsMap($states) Or Not IsMap($paths) Or Not IsArray($order) Then Return False
+    If UBound($order) <> $r["count"] Then Return False
+    Local $stateKeys = MapKeys($states), $pathKeys = MapKeys($paths)
+    If UBound($stateKeys) <> $r["count"] Or UBound($pathKeys) <> $r["count"] Then Return False
+    Local $seen[], $countStale = 0, $countAbsent = 0, $countLocal = 0
+    Local $firstAbsent = "", $firstStale = ""
+    For $uuid In $order
+        If Not IsString($uuid) Or Not StringRegExp($uuid, "^\{[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\}$") Then Return False
+        If MapExists($seen, $uuid) Or Not MapExists($states, $uuid) Or Not MapExists($paths, $uuid) Then Return False
+        $seen[$uuid] = True
+        If Not IsString($paths[$uuid]) Or $paths[$uuid] == "" Then Return False
+        Switch $states[$uuid]
+            Case "STALE"
+                $countStale += 1
+                If $firstStale == "" Then $firstStale = $uuid
+            Case "ABSENT"
+                $countAbsent += 1
+                If $firstAbsent == "" Then $firstAbsent = $uuid
+            Case "LOCAL"
+                $countLocal += 1
+            Case Else
+                Return False
+        EndSwitch
+    Next
+    If $countStale <> $r["stale"] Or $countAbsent <> $r["absent"] Or $countLocal <> $r["local"] Then Return False
+    Local $expectedAction = "", $expectedUuid = "", $expectedPath = ""
+    If $firstAbsent <> "" Then
+        $expectedAction = "REGISTER_HINT_ONLY"
+        $expectedUuid = $firstAbsent
+    ElseIf $firstStale <> "" Then
+        $expectedAction = "UNREGISTER_HINT_ONLY"
+        $expectedUuid = $firstStale
+    EndIf
+    If $expectedUuid <> "" Then $expectedPath = $paths[$expectedUuid]
+    If $r["next_action"] <> $expectedAction Or $r["next_uuid"] <> $expectedUuid Or _
+            $r["next_path"] <> $expectedPath Then Return False
+    If $r["status"] == "COMPLETE" Then Return $countLocal == $r["count"]
+    Return $countLocal <> $r["count"]
 EndFunc
 
 ; Pure model-level transition check for independently re-observed states.
 ; It is NOT runtime authority. Every future Oracle operation would need an
 ; owned controller, verified backup, exact child exit and postcondition scan.
 Func _PVB_TransitionValid($before, $after, $action, $uuid)
-    If Not IsMap($before) Or Not IsMap($after) Or Not IsString($uuid) Then Return False
-    Local $required = StringSplit("status|count|manifest_sha256|origin_sha256|root|backup|states", "|", 2)
-    For $key In $required
-        If Not MapExists($before, $key) Or Not MapExists($after, $key) Then Return False
-    Next
-    If $before["status"] <> "REVIEW_ONLY" Or _
-            ($after["status"] <> "REVIEW_ONLY" And $after["status"] <> "COMPLETE") Then Return False
+    If Not IsString($uuid) Or Not _PVB_StateConsistent($before) Or Not _PVB_StateConsistent($after) Then Return False
+    If $before["status"] <> "REVIEW_ONLY" Then Return False
     If $before["count"] < 2 Or $before["count"] > $g_PVB_MAX_CANDIDATES Or _
             $before["count"] <> $after["count"] Or _
             $before["manifest_sha256"] <> $after["manifest_sha256"] Or _
             $before["origin_sha256"] <> $after["origin_sha256"] Or _
             $before["root"] <> $after["root"] Or $before["backup"] <> $after["backup"] Then Return False
     Local $statesBefore = $before["states"], $statesAfter = $after["states"]
-    If Not IsMap($statesBefore) Or Not IsMap($statesAfter) Then Return False
+    Local $pathsBefore = $before["paths"], $pathsAfter = $after["paths"]
+    Local $orderBefore = $before["order"], $orderAfter = $after["order"]
+    For $i = 0 To $before["count"] - 1
+        If $orderBefore[$i] <> $orderAfter[$i] Then Return False
+    Next
     Local $keys = MapKeys($statesBefore)
-    If UBound($keys) <> $before["count"] Then Return False
+    For $key In $keys
+        If Not MapExists($pathsAfter, $key) Or $pathsBefore[$key] <> $pathsAfter[$key] Then Return False
+    Next
     If Not MapExists($statesBefore, $uuid) Or Not MapExists($statesAfter, $uuid) Then Return False
     Local $from = "", $to = ""
     Switch $action
@@ -212,6 +275,13 @@ Func _PVB_TransitionValid($before, $after, $action, $uuid)
         Case Else
             Return False
     EndSwitch
+    ; Never unregister a different VM while an interrupted registration
+    ; remains ABSENT. The bound next UUID/action is deterministic and a hint,
+    ; not an executable command or privilege grant.
+    If $before["next_uuid"] <> $uuid Then Return False
+    If $before["next_path"] <> $pathsBefore[$uuid] Then Return False
+    If $action == "UNREGISTER" And $before["next_action"] <> "UNREGISTER_HINT_ONLY" Then Return False
+    If $action == "REGISTER" And $before["next_action"] <> "REGISTER_HINT_ONLY" Then Return False
     If $statesBefore[$uuid] <> $from Or $statesAfter[$uuid] <> $to Then Return False
     For $key In $keys
         If Not MapExists($statesAfter, $key) Then Return False
