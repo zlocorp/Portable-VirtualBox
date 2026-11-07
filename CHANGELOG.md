@@ -4,6 +4,15 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Hardened · cryptographically bound multi-VM recovery step and trace model (2026-11-07)
+
+- `e63ae07` stores canonical UUID order and per-VM destination paths in each offline reconciliation snapshot; validates exact unique UUID sets, state counters, the deterministic next UUID/action and consistent `COMPLETE` status. An `ABSENT` registration must be re-observed as `LOCAL` before any other original VM may be unregistered. Forged counts, misplaced UUIDs, hidden registrations, reordering and path substitution are rejected without executing Oracle.
+- `8d7345d` verifies a bounded complete sequence of independently observed before/after snapshots. Interrupted traces may be inspected, but a completed batch requires all original `STALE` entries to transition individually through `ABSENT` to `LOCAL`; skipped, repeated or out-of-order steps are refused.
+- `ea38e9a` independently binds each step to the current Oracle registry SHA-256 and original SHA-256 for **all** per-VM configurations, in addition to the verified original backup manifest. A completed step must change registry bytes without changing any VM configuration identity or original backup.
+- Two initial native runs exceeded the 30-second limit because an adversarial **test fixture**, not production code, called nonexistent AutoIt `StringRepeat()` and displayed a hidden runtime-error dialog. Phase instrumentation identified the precise line; `86ea649` replaced it with fixed test bytes, and `c5cb77e` removed temporary diagnostics. The original timeout, all refusal assertions and production safety rules remain unchanged. [Windows native 42374035717](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42374035717): **68 batch-recovery assertions, 33 native harnesses, zero failures**. **All 7 workflows at `c5cb77e` passed**.
+- The transition/trace model is intentionally **non-executable**. No protected write-ahead journal, owner-bound multi-VM action worker, automatic batch unregister/register, Windows 10/11 human UAC or arbitrary power-loss recovery is certified or enabled.
+
+
 ### Added · read-only multi-VM partial registration reconstruction (2026-11-06)
 
 - `3f031ef` adds `--review-multi-vm-rebind ORIGINAL_BACKUP`. It independently verifies the original non-overwriting full `data/` SHA-256 backup, original exact stale UUID/path set and current complete VM files; reconciles each of 2–16 registrations as `STALE`, `ABSENT` or `LOCAL`. Foreign/malformed/duplicate entries, changed guest media, invalid/altered backup and unknown host state block. Hints are explicitly not Oracle commands or authorization to mutate.

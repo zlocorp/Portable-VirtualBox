@@ -66,9 +66,14 @@ next action is a **hint**, never an executable Oracle command, proof of
 ownership or permission for driver cleanup. It is safe to inspect after
 the *existing* separate-session recovery has confirmed that the host is
 offline; do not manually edit production XML to simulate an interruption.
-A pure one-UUID transition verifier has native tests, but the actual
-batch mutation controller, durable transaction journal and workstation
-power-loss recovery are **still unimplemented**.
+The read-only multi-VM transition/trace model now also verifies the exact
+original UUID order and next operation, full per-VM SHA-256 identity and
+different before/after global registry SHA-256. It refuses forged counters,
+extra IDs, skipped or repeated transitions and false completion. This is
+**not** an authenticated protected receipt, an Oracle command, or permission
+to modify/clean any resource. The actual owner-bound multi-VM mutation
+controller, durable transaction journal and workstation power-loss recovery
+remain **unimplemented and unaccepted**.
 
 **Multiple-VM registration repair is still unavailable.** The independent
 `--prepare-multi-vm-rebind "NEW_BACKUP_FOLDER"` CLI action can now create a
