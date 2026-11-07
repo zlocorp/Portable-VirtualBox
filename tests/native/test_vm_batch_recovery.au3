@@ -98,6 +98,19 @@ $ignoredMissing["stale"] = 0
 $ignoredMissing["absent"] = 2
 Check(_PVB_StateConsistent($ignoredMissing), "synthetic second unregister state is internally consistent")
 Check(Not _PVB_TransitionValid($state, $ignoredMissing, "UNREGISTER", StringLower($uuidB)), "must recover ABSENT before unregistering another VM")
+Check(StringLen($originalObserved["current_registry_sha256"]) == 64 And _
+        $originalObserved["current_registry_sha256"] <> $state["current_registry_sha256"], "successful unregister changes observed registry SHA-256")
+Local $sameRegistry = _PVB_Reconcile($root, $backup)
+$sameRegistry["current_registry_sha256"] = $originalObserved["current_registry_sha256"]
+Check(Not _PVB_TransitionValid($originalObserved, $sameRegistry, "UNREGISTER", StringLower($uuidA)), "forged unchanged registry hash is rejected")
+Local $changedHash = _PVB_Reconcile($root, $backup)
+Local $hashMap = $changedHash["config_sha256"]
+$hashMap[StringLower($uuidB)] = StringRepeat("a", 64)
+$changedHash["config_sha256"] = $hashMap
+Check(Not _PVB_TransitionValid($originalObserved, $changedHash, "UNREGISTER", StringLower($uuidA)), "forged VM configuration hash is rejected")
+Local $invalidHash = _PVB_Reconcile($root, $backup)
+$invalidHash["current_registry_sha256"] = "invalid"
+Check(Not _PVB_TransitionValid($originalObserved, $invalidHash, "UNREGISTER", StringLower($uuidA)), "malformed registry SHA-256 is rejected")
 Local $missingFirst = $state
 
 Check(WriteXml($registry, $prefix & $firstLocal & $entryB & $suffix), "simulate first completed re-registration")

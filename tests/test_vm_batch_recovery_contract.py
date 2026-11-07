@@ -57,6 +57,21 @@ class BatchRecoveryContract(unittest.TestCase):
                      'must recover ABSENT before unregistering another VM'):
             self.assertIn(desc,native)
 
+    def test_each_transition_binds_before_after_registry_and_all_vm_config_hashes(self):
+        code=self.get('source/PortableVmBatchRecovery.au3')
+        native=self.get('tests/native/test_vm_batch_recovery.au3')
+        for key in ('current_registry_sha256', 'config_sha256',
+                    '$r["current_registry_sha256"] = $registryBefore',
+                    '$configHashes[$uuid] = $currentHash',
+                    '$hashesBefore[$key] <> $hashesAfter[$key]',
+                    '$before["current_registry_sha256"] == $after["current_registry_sha256"]'):
+            self.assertIn(key,code)
+        for key in ('forged unchanged registry hash is rejected',
+                    'forged VM configuration hash is rejected',
+                    'malformed registry SHA-256 is rejected',
+                    'successful unregister changes observed registry SHA-256'):
+            self.assertIn(key,native)
+
     def test_complete_trace_requires_all_strict_ordered_snapshots(self):
         code=self.get('source/PortableVmBatchRecovery.au3')
         native=self.get('tests/native/test_vm_batch_recovery.au3')

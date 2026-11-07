@@ -19,10 +19,12 @@ Func _PVB_RecoveryNew()
     $r["backup"] = ""
     $r["manifest_sha256"] = ""
     $r["origin_sha256"] = ""
+    $r["current_registry_sha256"] = ""
     $r["root"] = ""
-    Local $states[], $paths[], $order[0]
+    Local $states[], $paths[], $configHashes[], $order[0]
     $r["states"] = $states
     $r["paths"] = $paths
+    $r["config_sha256"] = $configHashes
     $r["order"] = $order
     $r["report"] = ""
     Return $r
@@ -72,7 +74,7 @@ Func _PVB_Reconcile($root, $backup)
     Local $originalEntries = _PVI_RegistryEntries($originalXml)
     If Not IsObj($originalEntries) Or $originalEntries.length <> $original["count"] Then _
             Return _PVB_RecoveryBlocked($r, "original-registry-structure-changed")
-    Local $expected[], $paths[], $order[0]
+    Local $expected[], $paths[], $configHashes[], $order[0]
     For $i = 0 To $originalEntries.length - 1
         Local $entry = $originalEntries.item($i)
         Local $uuid = StringLower($entry.getAttribute("uuid")), $old = $entry.getAttribute("src")
@@ -86,8 +88,9 @@ Func _PVB_Reconcile($root, $backup)
         If _PVI_PathState($old) <> 0 Then Return _PVB_RecoveryBlocked($r, "old-vm-source-not-absent")
         Local $savedFile = _PVR_LocalMachine($backup, $where["relative"])
         Local $currentFile = _PVR_LocalMachine($root, $where["relative"])
-        If $savedFile == "" Or $currentFile == "" Or _
-                _PBK_Hash($savedFile) <> _PBK_Hash($currentFile) Then _
+        If $savedFile == "" Or $currentFile == "" Then Return _PVB_RecoveryBlocked($r, "machine-config-not-original")
+        Local $savedHash = _PBK_Hash($savedFile), $currentHash = _PBK_Hash($currentFile)
+        If StringLen($savedHash) <> 64 Or $savedHash <> $currentHash Then _
                 Return _PVB_RecoveryBlocked($r, "machine-config-not-original")
         Local $record[]
         $record["uuid"] = $uuid
@@ -95,6 +98,7 @@ Func _PVB_Reconcile($root, $backup)
         $record["new"] = $currentFile
         $expected[$uuid] = $record
         $paths[$uuid] = $currentFile
+        $configHashes[$uuid] = $currentHash
         ReDim $order[UBound($order) + 1]
         $order[UBound($order) - 1] = $uuid
     Next
@@ -178,8 +182,10 @@ Func _PVB_Reconcile($root, $backup)
     $r["backup"] = $backup
     $r["root"] = $root
     $r["origin_sha256"] = $original["registry_sha256"]
+    $r["current_registry_sha256"] = $registryBefore
     $r["states"] = $states
     $r["paths"] = $paths
+    $r["config_sha256"] = $configHashes
     $r["order"] = $order
     $r["manifest_sha256"] = $manifest
     Return $r
@@ -190,7 +196,7 @@ EndFunc
 ; an Oracle write, protected helper action, or cleanup.
 Func _PVB_StateConsistent($r)
     If Not IsMap($r) Then Return False
-    Local $required = StringSplit("status|count|stale|absent|local|next_action|next_uuid|next_path|manifest_sha256|origin_sha256|root|backup|states|paths|order", "|", 2)
+    Local $required = StringSplit("status|count|stale|absent|local|next_action|next_uuid|next_path|manifest_sha256|origin_sha256|current_registry_sha256|root|backup|states|paths|config_sha256|order", "|", 2)
     For $key In $required
         If Not MapExists($r, $key) Then Return False
     Next
@@ -198,21 +204,25 @@ Func _PVB_StateConsistent($r)
     If Not IsInt($r["stale"]) Or Not IsInt($r["absent"]) Or Not IsInt($r["local"]) Then Return False
     If Not IsString($r["manifest_sha256"]) Or Not StringRegExp($r["manifest_sha256"], "^[0-9a-f]{64}$") Then Return False
     If Not IsString($r["origin_sha256"]) Or Not StringRegExp($r["origin_sha256"], "^[0-9a-f]{64}$") Then Return False
+    If Not IsString($r["current_registry_sha256"]) Or Not StringRegExp($r["current_registry_sha256"], "^[0-9a-f]{64}$") Then Return False
     If Not IsString($r["root"]) Or Not IsString($r["backup"]) Or $r["root"] == "" Or $r["backup"] == "" Then Return False
     If Not IsString($r["next_action"]) Or Not IsString($r["next_uuid"]) Or Not IsString($r["next_path"]) Then Return False
     If $r["status"] <> "REVIEW_ONLY" And $r["status"] <> "COMPLETE" Then Return False
-    Local $states = $r["states"], $paths = $r["paths"], $order = $r["order"]
-    If Not IsMap($states) Or Not IsMap($paths) Or Not IsArray($order) Then Return False
+    Local $states = $r["states"], $paths = $r["paths"], $hashes = $r["config_sha256"], $order = $r["order"]
+    If Not IsMap($states) Or Not IsMap($paths) Or Not IsMap($hashes) Or Not IsArray($order) Then Return False
     If UBound($order) <> $r["count"] Then Return False
-    Local $stateKeys = MapKeys($states), $pathKeys = MapKeys($paths)
-    If UBound($stateKeys) <> $r["count"] Or UBound($pathKeys) <> $r["count"] Then Return False
+    Local $stateKeys = MapKeys($states), $pathKeys = MapKeys($paths), $hashKeys = MapKeys($hashes)
+    If UBound($stateKeys) <> $r["count"] Or UBound($pathKeys) <> $r["count"] Or _
+            UBound($hashKeys) <> $r["count"] Then Return False
     Local $seen[], $countStale = 0, $countAbsent = 0, $countLocal = 0
     Local $firstAbsent = "", $firstStale = ""
     For $uuid In $order
         If Not IsString($uuid) Or Not StringRegExp($uuid, "^\{[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\}$") Then Return False
-        If MapExists($seen, $uuid) Or Not MapExists($states, $uuid) Or Not MapExists($paths, $uuid) Then Return False
+        If MapExists($seen, $uuid) Or Not MapExists($states, $uuid) Or _
+                Not MapExists($paths, $uuid) Or Not MapExists($hashes, $uuid) Then Return False
         $seen[$uuid] = True
         If Not IsString($paths[$uuid]) Or $paths[$uuid] == "" Then Return False
+        If Not IsString($hashes[$uuid]) Or Not StringRegExp($hashes[$uuid], "^[0-9a-f]{64}$") Then Return False
         Switch $states[$uuid]
             Case "STALE"
                 $countStale += 1
@@ -255,13 +265,16 @@ Func _PVB_TransitionValid($before, $after, $action, $uuid)
             $before["root"] <> $after["root"] Or $before["backup"] <> $after["backup"] Then Return False
     Local $statesBefore = $before["states"], $statesAfter = $after["states"]
     Local $pathsBefore = $before["paths"], $pathsAfter = $after["paths"]
+    Local $hashesBefore = $before["config_sha256"], $hashesAfter = $after["config_sha256"]
+    If $before["current_registry_sha256"] == $after["current_registry_sha256"] Then Return False
     Local $orderBefore = $before["order"], $orderAfter = $after["order"]
     For $i = 0 To $before["count"] - 1
         If $orderBefore[$i] <> $orderAfter[$i] Then Return False
     Next
     Local $keys = MapKeys($statesBefore)
     For $key In $keys
-        If Not MapExists($pathsAfter, $key) Or $pathsBefore[$key] <> $pathsAfter[$key] Then Return False
+        If Not MapExists($pathsAfter, $key) Or $pathsBefore[$key] <> $pathsAfter[$key] Or _
+                Not MapExists($hashesAfter, $key) Or $hashesBefore[$key] <> $hashesAfter[$key] Then Return False
     Next
     If Not MapExists($statesBefore, $uuid) Or Not MapExists($statesAfter, $uuid) Then Return False
     Local $from = "", $to = ""
