@@ -107,22 +107,31 @@ $state = _PVB_Reconcile($root, $backup)
 Check($state["status"] == "REVIEW_ONLY" And $state["stale"] == 1 And $state["absent"] == 1 And $state["local"] == 0, "first unregister interrupted")
 Check($state["next_action"] == "REGISTER_HINT_ONLY" And $state["next_uuid"] == StringLower($uuidA), "missing entry addressed before any new unregister")
 RecoveryPhase("after-first-unregister")
+RecoveryPhase("after-primary-transition")
 Check(_PVB_TransitionValid($originalObserved, $state, "UNREGISTER", StringLower($uuidA)), "only first unregister transition is valid")
+RecoveryPhase("before-first-clone")
 Local $badCount = CloneSnapshot($state)
+RecoveryPhase("after-first-clone")
 $badCount["absent"] = 0
+RecoveryPhase("after-forged-count")
 Check(Not _PVB_TransitionValid($originalObserved, $badCount, "UNREGISTER", StringLower($uuidA)), "forged state count is rejected")
+RecoveryPhase("before-second-clone")
 Local $badStatus = CloneSnapshot($state)
+RecoveryPhase("after-second-clone")
 $badStatus["status"] = "COMPLETE"
+RecoveryPhase("after-premature-complete")
 Check(Not _PVB_TransitionValid($originalObserved, $badStatus, "UNREGISTER", StringLower($uuidA)), "premature COMPLETE is rejected")
 Local $wrongHint = $originalObserved["next_uuid"]
 $originalObserved["next_uuid"] = StringLower($uuidB)
 Check(Not _PVB_TransitionValid($originalObserved, $state, "UNREGISTER", StringLower($uuidA)), "forged next step target is rejected")
 $originalObserved["next_uuid"] = $wrongHint
+RecoveryPhase("before-rogue-clone")
 Local $rogue = CloneSnapshot($state)
 Local $rogueStates = $rogue["states"]
 $rogueStates["{ffffffff-2222-3333-4444-abcdef123456}"] = "STALE"
 $rogue["states"] = $rogueStates
 Check(Not _PVB_TransitionValid($originalObserved, $rogue, "UNREGISTER", StringLower($uuidA)), "additional unseen state UUID is rejected")
+RecoveryPhase("before-order-clone")
 Local $shifted = CloneSnapshot($state)
 Local $shiftedOrder = $shifted["order"]
 Local $firstKey = $shiftedOrder[0]
@@ -130,11 +139,13 @@ $shiftedOrder[0] = $shiftedOrder[1]
 $shiftedOrder[1] = $firstKey
 $shifted["order"] = $shiftedOrder
 Check(Not _PVB_TransitionValid($originalObserved, $shifted, "UNREGISTER", StringLower($uuidA)), "reordered original UUID schedule is rejected")
+RecoveryPhase("before-path-clone")
 Local $differentPath = CloneSnapshot($state)
 Local $pathMap = $differentPath["paths"]
 $pathMap[StringLower($uuidA)] = "C:\foreign\changed.vbox"
 $differentPath["paths"] = $pathMap
 Check(Not _PVB_TransitionValid($originalObserved, $differentPath, "UNREGISTER", StringLower($uuidA)), "changed VM target path is rejected")
+RecoveryPhase("before-skipped-recovery-clone")
 Local $ignoredMissing = CloneSnapshot($state)
 Local $ignoredStates = $ignoredMissing["states"]
 $ignoredStates[StringLower($uuidB)] = "ABSENT"
@@ -146,14 +157,17 @@ Check(Not _PVB_TransitionValid($state, $ignoredMissing, "UNREGISTER", StringLowe
 Check(_PVB_StateConsistent($state) And _PVB_StateConsistent($originalObserved), "adversarial clones do not mutate genuine observations")
 Check(StringLen($originalObserved["current_registry_sha256"]) == 64 And _
         $originalObserved["current_registry_sha256"] <> $state["current_registry_sha256"], "successful unregister changes observed registry SHA-256")
+RecoveryPhase("before-registry-hash-clone")
 Local $sameRegistry = CloneSnapshot($state)
 $sameRegistry["current_registry_sha256"] = $originalObserved["current_registry_sha256"]
 Check(Not _PVB_TransitionValid($originalObserved, $sameRegistry, "UNREGISTER", StringLower($uuidA)), "forged unchanged registry hash is rejected")
+RecoveryPhase("before-config-hash-clone")
 Local $changedHash = CloneSnapshot($state)
 Local $hashMap = $changedHash["config_sha256"]
 $hashMap[StringLower($uuidB)] = StringRepeat("a", 64)
 $changedHash["config_sha256"] = $hashMap
 Check(Not _PVB_TransitionValid($originalObserved, $changedHash, "UNREGISTER", StringLower($uuidA)), "forged VM configuration hash is rejected")
+RecoveryPhase("before-invalid-hash-clone")
 Local $invalidHash = CloneSnapshot($state)
 $invalidHash["current_registry_sha256"] = "invalid"
 Check(Not _PVB_TransitionValid($originalObserved, $invalidHash, "UNREGISTER", StringLower($uuidA)), "malformed registry SHA-256 is rejected")
