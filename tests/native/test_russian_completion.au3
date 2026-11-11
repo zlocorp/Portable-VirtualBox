@@ -38,7 +38,7 @@ Check(Not _CG_StateAllows("CONFIGURING_LANGUAGE"), "CLI gate stays closed while 
 Local $refused = _PVR_New("BLOCKED", "host-not-offline")
 Check(StringInStr(_PVR_Text($refused), "Исправление регистрации заблокировано", 1) > 0, "real rebind refusal uses explanation")
 
-Local $backupKeys = StringSplit("backup.hint|backup.running|backup.cancelled|backup.failed|backup.verified|backup.restored|backup.blocked|backup.unknown", "|", 2)
+Local $backupKeys = StringSplit("backup.hint|backup.running|backup.verifying|backup.restoring|backup.cancelled|backup.failed|backup.created|backup.verified|backup.restored|backup.blocked|backup.unknown", "|", 2)
 For $key In $backupKeys
     _LI_Set("ru")
     Local $ruText = _LG_BackupText($key, "D:\Копии\ВМ")

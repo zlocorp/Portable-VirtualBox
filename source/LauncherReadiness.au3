@@ -5,7 +5,7 @@
 #include "PortableApp.au3"
 ; Stable, read-only decision for a user-facing launch-readiness button.
 ; Never grants OS mutation authority, even when all observations are clear.
-Func _LR_Decide($profile, $blocker)
+Func _LR_Decide($profile, $blocker, $alphaMode = False)
     Local $result[]
     $result["status"]="BLOCKED"
     $result["code"]="INVALID"
@@ -38,13 +38,14 @@ Func _LR_Decide($profile, $blocker)
     EndIf
     $result["status"]="RESEARCH_ONLY"
     $result["code"]="RUNTIME_DISABLED"
-    $result["message"]=_LI("readiness.disabled")
+    ; Mode changes the explanation only, never the readiness status or code.
+    $result["message"]=_LI($alphaMode ? "readiness.alpha" : "readiness.disabled")
     Return $result
 EndFunc
 
-Func _LR_Inspect($root)
+Func _LR_Inspect($root, $alphaMode = False)
     Local $profile=_PP_Inspect($root)
-    If $profile["status"] <> "READY" Then Return _LR_Decide($profile,"")
+    If $profile["status"] <> "READY" Then Return _LR_Decide($profile,"",$alphaMode)
     Local $app = _PA_Inspect($root)
     If $app["status"] <> "PRESENT" Then
         Local $r[]
@@ -53,5 +54,5 @@ Func _LR_Inspect($root)
         $r["message"] = _PA_Message($app)
         Return $r
     EndIf
-    Return _LR_Decide($profile,_PortableReadOnlyPreflight($root))
+    Return _LR_Decide($profile,_PortableReadOnlyPreflight($root),$alphaMode)
 EndFunc

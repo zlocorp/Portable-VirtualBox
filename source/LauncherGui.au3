@@ -57,6 +57,31 @@ Func _LG_BackupText($key, $target)
     Return $text
 EndFunc
 
+; Display-only mapping of the selected operation, never operation dispatch.
+Func _LG_BackupProgressKey($action)
+    Switch $action
+        Case "--backup-data"
+            Return "backup.running"
+        Case "--verify-backup"
+            Return "backup.verifying"
+        Case "--restore-backup"
+            Return "backup.restoring"
+    EndSwitch
+    Return "backup.unknown"
+EndFunc
+
+Func _LG_BackupSuccessKey($action)
+    Switch $action
+        Case "--backup-data"
+            Return "backup.created"
+        Case "--verify-backup"
+            Return "backup.verified"
+        Case "--restore-backup"
+            Return "backup.restored"
+    EndSwitch
+    Return "backup.failed"
+EndFunc
+
 Func _LG_SettingsText($s)
     If $s["status"] == "BLOCKED" Then Return _LI("settings.blocked")
     If $s["language"] == "auto" Then Return _LI("settings.auto_status")
@@ -114,7 +139,7 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     GUICtrlSetTip($idPath, @ScriptDir)
     Local $p = _PP_Inspect(@ScriptDir)
     GUICtrlSetData($idProfile, _LG_ProfileMessage($p))
-    Local $diagnostic = _PortableDiagnosticCollect()
+    Local $diagnostic = _PortableDiagnosticCollect($g_MS_AlphaMode)
     If $showInventory Then
         GUICtrlSetData($idReport, _LG_InventoryText(@ScriptDir))
     Else
@@ -123,7 +148,7 @@ Func _LG_Fill($hGui, $idSubtitle, $idWarning, $idSection, $idReport, _
     ; Never retain a Russian status in English UI (or vice versa).
     ; Refresh a previously requested readiness probe after locale/preflight changes.
     If $showReadiness Then
-        Local $readiness = _LR_Inspect(@ScriptDir)
+        Local $readiness = _LR_Inspect(@ScriptDir, $g_MS_AlphaMode)
         GUICtrlSetData($idResult, $readiness["message"])
     Else
         GUICtrlSetData($idResult, "")
@@ -207,7 +232,7 @@ Func _LG_Show()
                     GUICtrlSetData($idSettings, _LI("settings.save_failed"))
                 EndIf
             Case $idAbout
-                MsgBox(64, _LI("gui.about"), _LA_Text(), 0, $hGui)
+                MsgBox(64, _LI("gui.about"), _LA_Text("", $g_MS_AlphaMode), 0, $hGui)
             Case $idManager
                 If _MS_Allowed(@ScriptDir, EnvGet("GITHUB_WORKSPACE")) And $backupWorker["handle"] = 0 And $setupWorker["handle"] = 0 Then
                     ; Exactly the same Manager controller, with separate helper
@@ -259,12 +284,12 @@ Func _LG_Show()
                     EndIf
                 EndIf
                 If $checked And $setupWorker["handle"] = 0 Then
-                    Local $readiness = _LR_Inspect(@ScriptDir)
+                    Local $readiness = _LR_Inspect(@ScriptDir, $g_MS_AlphaMode)
                     GUICtrlSetData($idResult, $readiness["message"])
                 EndIf
             Case $idReady
                 $checked = True
-                Local $readiness = _LR_Inspect(@ScriptDir)
+                Local $readiness = _LR_Inspect(@ScriptDir, $g_MS_AlphaMode)
                 GUICtrlSetData($idResult, $readiness["message"])
             Case $idVmAudit
                 $showInventory = True
@@ -310,7 +335,7 @@ Func _LG_Show()
                             GUICtrlSetState($idVerify, $GUI_DISABLE)
                             GUICtrlSetState($idRestore, $GUI_DISABLE)
                             If $backupAction == "--backup-data" Or $backupAction == "--restore-backup" Then GUICtrlSetState($idCancel, $GUI_ENABLE)
-                            $backupMessageKey = "backup.running"
+                            $backupMessageKey = _LG_BackupProgressKey($backupAction)
                         Else
                             $backupMessageKey = "backup.failed"
                         EndIf
@@ -358,8 +383,7 @@ Func _LG_Show()
             If $status == "EXITED" Then
                 Local $message = "backup.failed"
                 If $backupWorker["exit_code"] = 0 Then
-                    $message = "backup.verified"
-                    If $backupAction == "--restore-backup" Then $message = "backup.restored"
+                    $message = _LG_BackupSuccessKey($backupAction)
                 EndIf
                 If $backupWorker["exit_code"] = 2 Then $message = "backup.blocked"
                 $backupMessageKey = $message

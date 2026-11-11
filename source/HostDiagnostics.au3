@@ -138,7 +138,7 @@ Func _PortableServiceWrite($json = False)
     Return 0
 EndFunc
 
-Func _PortableDiagnosticCollect()
+Func _PortableDiagnosticCollect($alphaMode = False)
     Local $os = _WinObsOS(), $installed = _WinObsInstallation()
     Local $serviceRows = _PortableServiceCollect()
     Local $services = _PortableServiceCount($serviceRows), $activity = _PortableActivityCollect()
@@ -169,7 +169,7 @@ Func _PortableDiagnosticCollect()
         $s &= _LI("diag.background_processes") & $activity["background"] & @CRLF
     EndIf
     $s &= @CRLF & _PortableServiceText($serviceRows)
-    $s &= _LI("diag.runtime") & @CRLF
+    $s &= _LI($alphaMode ? "diag.runtime_alpha" : "diag.runtime") & @CRLF
     $report["text"] = $s
     If Not ($os["status"] == "PRESENT") Or $installed["status"] == "UNKNOWN" Or $services < 0 Or $processes < 0 Then
         $report["exit_code"] = 4

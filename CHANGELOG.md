@@ -4,6 +4,12 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · Russian and English operation messages (2026-11-11)
+
+- Diagnostics, readiness and About now distinguish ordinary diagnostic mode from explicitly selected experimental ALPHA. ALPHA wording retains the isolated-host requirement and incomplete interactive Windows 10/11 acceptance; readiness codes, runtime checks and permissions are unchanged.
+- Backup creation and verification have separate progress and success messages. Verifying an existing copy no longer claims that a new copy was created; restore progress describes restoration into a new folder. Backup operations and failure handling are unchanged.
+- Added native RU/EN presentation regressions and compiled CLI output checks. Local source contracts do not establish Windows execution, layout, DPI or release acceptance.
+
 ### Added · read-only partial-cleanup inspection (2026-11-11)
 
 - A developer-only Python observer compares remaining protected payload files with the independently pinned Oracle inventory and current fixed scripts, including after the protected manifest was removed. Changed, unexpected, linked or unreadable inputs are blocked; receipt completion fields remain explicitly unauthenticated claims.

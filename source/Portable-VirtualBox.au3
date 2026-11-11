@@ -149,7 +149,7 @@ If $CmdLine[0] >= $iFirst Then
             Local $backupResult = _PBK_Create(@ScriptDir, $backupPath)
             Switch $backupResult
                 Case 0
-                    _LI_Write(_LI("backup.verified") & " " & $backupPath & @CRLF)
+                    _LI_Write(_LI("backup.created") & " " & $backupPath & @CRLF)
                     Exit 0
                 Case 2
                     _LI_Write(_LI("backup.blocked") & @CRLF, True)
