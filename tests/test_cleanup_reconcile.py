@@ -164,6 +164,22 @@ class CleanupReconcile(unittest.TestCase):
         self.assertEqual(r['status'],'BLOCKED')
         self.assertLessEqual(consumed,self.mod.MAX_ENTRIES+1)
 
+    def test_windows_cached_direntry_zero_link_count_is_not_identity_evidence(self):
+        real=self.mod.os.scandir
+        class CachedEntry:
+            def __init__(inner,entry): inner.name=entry.name;inner.path=entry.path
+            def stat(inner,**kwargs):
+                fields=list(Path(inner.path).lstat())
+                fields[1]=fields[2]=fields[3]=0 # Windows DirEntry omits ino/dev/nlink.
+                return os.stat_result(fields)
+        class CachedScan:
+            def __init__(inner,path): inner.iterator=real(path)
+            def __enter__(inner): return (CachedEntry(x) for x in inner.iterator)
+            def __exit__(inner,*args): inner.iterator.close()
+        with patch.object(self.mod.os,'scandir',side_effect=CachedScan): result=self.inspect()
+        self.assertEqual(result['status'],'REVIEW_ONLY',result)
+        self.authority(result)
+
     def test_observation_opens_only_read_handles_and_preserves_bytes(self):
         before={str(p.relative_to(self.root)):p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
         original=self.mod.os.open

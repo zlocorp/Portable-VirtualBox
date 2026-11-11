@@ -153,7 +153,9 @@ def _tree(root,expected,allow_manifest=False):
             relative=prefix+item.name
             windows_relative_parts(relative)
             if relative.casefold() in seen: raise ObservationError('CASE_COLLISION')
-            seen.add(relative.casefold());info=item.stat(follow_symlinks=False)
+            # DirEntry.stat caches Windows enumeration metadata, whose
+            # ino/dev/nlink are zero. Fresh lstat preserves the hardlink check.
+            seen.add(relative.casefold());info=Path(item.path).lstat()
             if stat.S_ISDIR(info.st_mode):
                 _safe_stat(info,True)
                 if relative not in directories: raise ObservationError('UNEXPECTED_DIRECTORY')

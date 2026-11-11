@@ -45,7 +45,12 @@ fixed helper script sources; tests supply small independently pinned fixtures.
 - [x] Obtain independent review; address bounded enumeration and nonblocking-open findings.
 - [ ] Publish the scoped change and verify CI.
 
-Local verification: 18 focused tests and 286 full-suite tests pass (6 platform
+Local verification: 19 focused tests and 287 full-suite tests pass (6 platform
 skips), including the available PowerShell file-only tests. Source safety checks
 and `git diff --check` pass. The genuine Windows file-only rehearsal remains a
 CI acceptance gate, not a claim made by the local tests.
+
+Windows compatibility regression: directory-entry cached metadata must not be
+used as link-count evidence; fresh `lstat` retains strict type/reparse/hardlink
+checks. The first Windows run refused intact inputs because cached link counts
+were zero. The added portable regression reproduces that failure before the fix.
