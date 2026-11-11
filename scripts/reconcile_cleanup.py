@@ -22,6 +22,7 @@ SCRIPT_NAMES=('privileged_session_worker.ps1','vbox_sup_standalone.ps1',
               'vbox_sup_partial_cleanup.ps1','vbox_sup_package_identity.ps1')
 MAX_JSON=131072
 MAX_ENTRIES=4096
+WINDOWS=os.name=='nt'
 
 class ObservationError(ValueError):
     """A bounded diagnostic code without private paths or receipt contents."""
@@ -29,7 +30,19 @@ class ObservationError(ValueError):
 
 def _stamp(s):
     return (s.st_dev,s.st_ino,s.st_mode,s.st_size,s.st_mtime_ns,s.st_ctime_ns,s.st_nlink,
-            getattr(s,'st_file_attributes',0))
+            getattr(s,'st_file_attributes',0),getattr(s,'st_birthtime_ns',None))
+
+
+def _opening_stamp(s):
+    stamp=list(_stamp(s))
+    if WINDOWS:
+        # CPython path-stat adds synthetic execute bits for .exe/.bat/.cmd/.com;
+        # handle-stat cannot. Some versions also map ctime differently, while
+        # birthtime identifies creation consistently. Keep both same-method
+        # before/after stamps completely unmodified below.
+        stamp[2]&=~0o111
+        stamp[5]=getattr(s,'st_birthtime_ns',s.st_ctime_ns)
+    return tuple(stamp)
 
 
 def _safe_stat(s, directory):
@@ -65,7 +78,7 @@ def _read_file(path, *, limit=None, expected_size=None):
     digest=hashlib.sha256();data=[];length=0
     with os.fdopen(os.open(path,flags),'rb') as stream:
         opened=os.fstat(stream.fileno());_safe_stat(opened,False)
-        if _stamp(before)!=_stamp(opened): raise ObservationError('INPUT_CHANGED')
+        if _opening_stamp(before)!=_opening_stamp(opened): raise ObservationError('INPUT_CHANGED')
         while True:
             chunk=stream.read(1024*1024)
             if not chunk: break

@@ -7,6 +7,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -179,6 +180,55 @@ class CleanupReconcile(unittest.TestCase):
         with patch.object(self.mod.os,'scandir',side_effect=CachedScan): result=self.inspect()
         self.assertEqual(result['status'],'REVIEW_ONLY',result)
         self.authority(result)
+
+    def test_windows_filename_execute_bits_and_ctime_mapping_do_not_change_identity(self):
+        checked=self.mod._checked_path;fstat=self.mod.os.fstat
+        def copy_stat(info):
+            return SimpleNamespace(**{key:getattr(info,key) for key in dir(info) if key.startswith('st_')})
+        def path_stat(*args,**kwargs):
+            info=copy_stat(checked(*args,**kwargs))
+            info.st_birthtime_ns=123456789
+            info.st_mode|=0o111 # CPython path-stat marks executable extensions.
+            return info
+        def opened_stat(fd):
+            info=copy_stat(fstat(fd));info.st_birthtime_ns=123456789
+            info.st_mode&=~0o111;info.st_ctime_ns+=1000
+            return info
+        with patch.object(self.mod,'WINDOWS',True,create=True), patch.object(self.mod,'_checked_path',side_effect=path_stat), patch.object(self.mod.os,'fstat',side_effect=opened_stat):
+            digest,_=self.mod._read_file(self.app/'VirtualBox.exe')
+        self.assertEqual(digest,sha(self.files['VirtualBox.exe']))
+
+    def test_windows_cross_method_normalization_keeps_real_identity_strict(self):
+        fstat=self.mod.os.fstat
+        for field in ('st_dev','st_ino','st_size','st_mtime_ns','st_nlink','st_file_attributes','st_birthtime_ns','st_mode'):
+            with self.subTest(field=field):
+                def changed(fd):
+                    info=fstat(fd)
+                    data={key:getattr(info,key) for key in dir(info) if key.startswith('st_')}
+                    value=data.get(field,0)
+                    data[field]=(value^0o200) if field=='st_mode' else value+1
+                    return SimpleNamespace(**data)
+                with patch.object(self.mod,'WINDOWS',True), patch.object(self.mod.os,'fstat',side_effect=changed):
+                    with self.assertRaises(self.mod.ObservationError): self.mod._read_file(self.app/'VirtualBox.exe')
+
+    def test_windows_birthtime_missing_on_one_side_is_not_silently_ignored(self):
+        info=(self.app/'VirtualBox.exe').stat()
+        original={key:getattr(info,key) for key in dir(info) if key.startswith('st_')}
+        original.pop('st_birthtime_ns',None)
+        with_birth=dict(original,st_birthtime_ns=info.st_ctime_ns)
+        with patch.object(self.mod,'WINDOWS',True):
+            self.assertNotEqual(self.mod._opening_stamp(SimpleNamespace(**original)),self.mod._opening_stamp(SimpleNamespace(**with_birth)))
+
+    def test_windows_same_method_ctime_change_during_read_still_blocks(self):
+        fstat=self.mod.os.fstat;calls=0
+        def changing(fd):
+            nonlocal calls
+            info=fstat(fd);calls+=1
+            data={key:getattr(info,key) for key in dir(info) if key.startswith('st_')}
+            if calls>1: data['st_ctime_ns']+=1
+            return SimpleNamespace(**data)
+        with patch.object(self.mod,'WINDOWS',True), patch.object(self.mod.os,'fstat',side_effect=changing):
+            with self.assertRaises(self.mod.ObservationError): self.mod._read_file(self.app/'VirtualBox.exe')
 
     def test_observation_opens_only_read_handles_and_preserves_bytes(self):
         before={str(p.relative_to(self.root)):p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
