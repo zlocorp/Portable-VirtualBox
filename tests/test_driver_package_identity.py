@@ -38,9 +38,15 @@ class DriverPackageIdentity(unittest.TestCase):
     def test_native_package_identity_behavior(self):
         shell = POWERSHELL
         self.assertIsNotNone(shell)
+        # A Python process started from pwsh inherits PowerShell 7's module
+        # search path. Windows PowerShell 5.1 must use its own inbox modules,
+        # exactly as the fixed helper does, rather than importing a PS7 copy.
+        child_env = os.environ.copy()
+        if Path(shell).name.lower() in ('powershell.exe', 'powershell'):
+            child_env['PSModulePath'] = str(Path(shell).parent / 'Modules')
         result = subprocess.run([shell, '-NoProfile', '-NonInteractive', '-File',
                                  str(ROOT / 'tests/windows/check_driver_package_identity.ps1')],
-                                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=45)
+                                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=45, env=child_env)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('DRIVER_PACKAGE_IDENTITY_PASS', result.stdout)
 
