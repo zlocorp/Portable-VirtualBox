@@ -64,6 +64,31 @@ jobs:
       - name: Execute exact-owned failed-stopped recovery contracts (no system effects)
         shell: powershell
         run: ./tests/windows/check_failed_start_recovery.ps1 -Repository $env:GITHUB_WORKSPACE
+      - name: Record exact inherited ACL semantics on owned temporary files
+        shell: powershell
+        run: |
+          $path=Join-Path $env:RUNNER_TEMP ('pvbox-acl-observation-'+[guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $path | Out-Null
+          try {
+            $sid='S-1-5-21-111111111-222222222-333333333-1234'
+            $security=New-Object Security.AccessControl.DirectorySecurity
+            $security.SetSecurityDescriptorSddlForm(('O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;'+$sid+')(A;OICI;RC;;;OW)'))
+            [IO.Directory]::SetAccessControl($path,$security)
+            $file=Join-Path $path 'observed-file'
+            [IO.File]::WriteAllBytes($file,[byte[]](1,2,3))
+            foreach ($phase in @('inherited','owner-normalized')) {
+              if ($phase -eq 'owner-normalized') {
+                $acl=[IO.File]::GetAccessControl($file)
+                $acl.SetOwner((New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')))
+                [IO.File]::SetAccessControl($file,$acl)
+              }
+              $acl=[IO.File]::GetAccessControl($file)
+              $raw=New-Object Security.AccessControl.RawSecurityDescriptor($acl.GetSecurityDescriptorBinaryForm(),0)
+              Write-Host ($phase+': '+$acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Owner,Access'))
+              Write-Host ('flags='+$raw.ControlFlags+'; count='+$raw.DiscretionaryAcl.Count)
+              foreach ($ace in $raw.DiscretionaryAcl) { Write-Host ($ace.SecurityIdentifier.Value+' '+$ace.AceFlags+' '+$ace.AccessMask) }
+            }
+          } finally { Remove-Item -LiteralPath $path -Recurse -Force }
       - name: Execute owner-bound private payload file-only contracts
         shell: powershell
         run: ./tests/windows/check_payload_cleanup_contracts.ps1
