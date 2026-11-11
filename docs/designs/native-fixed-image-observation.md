@@ -14,9 +14,9 @@ PUSH run for this source. See the [successor execution record](../EXECUTION-2026
 
 The earlier `b2229c5` [partial checkpoint](../EXECUTION-2026-11-11-native-fixed-image-file-only.md)
 retains its eight successes and three failures. At that historical checkpoint Task 2 required separate composition review and
-hardening of the numeric sentinel diagnostic limitation. Task 2 remains
-unimplemented. Meeting the file-only prerequisite does not authorize composition
-or establish whole-product readiness.
+hardening of the numeric sentinel diagnostic limitation. Task 2 was then
+unimplemented. That historical file-only prerequisite did not establish
+composition or whole-product readiness.
 
 The successor query-only sentinel source `519056432b4d9bd045140d2ba2bbe924e5c135e9`
 (tree `45d21240a2b93e79f69b7a0c415d34ed7acdd31f`) now has independently
@@ -28,17 +28,41 @@ independently reconciled inventory has all eleven workflows successful on attemp
 (eight push, three PR), including private-payload continuation run 43101335826.
 The [sentinel execution record](../EXECUTION-2026-11-11-native-sentinel-observation.md)
 was committed locally as `31255f3`; the published tested source remains `5190564`.
-Earlier source/run records remain unchanged. The changed-source native prerequisite
-is satisfied; composition preflight review and the controller's next implementation
-assignment remain required. Existing user authorization covers local test-only
-checked-branch development without renewed user permission. This revision is
-planning only, not the implementation assignment.
+Earlier source/run records remain unchanged. At that planning checkpoint, the changed-source native prerequisite
+was satisfied and composition preflight review plus a separate implementation
+assignment remained required. The 2A–2B successor is recorded below.
 
 This is fixed-fixture observation and preflight, not privileged image admission.
 Use only owned temporary files and the existing harmless sibling child. No
 production changes, signatures, elevation, drivers, services, security settings,
 user's Windows experiments, merge or release. Preserve the nine baseline cases,
 three environment cases, their assertions and their separate evidence schemas.
+
+## Accepted build/path checkpoint 98bec8f
+
+Tasks **2A–2B** are independently accepted at
+[`98bec8f6fb035b90156b02fec8c63e9278deb010`](https://github.com/zlocorp/Portable-VirtualBox/commit/98bec8f6fb035b90156b02fec8c63e9278deb010),
+tree `c92ed011a8097b7c135d06f75585ad45b4c72a9a`. All eleven natural workflows
+passed on attempt 1 (eight push, three PR). Exact-head native push 43113061248
+and same-tree synthetic-merge PR 43113074200 preserve the nine capture, three
+environment and four file-only image cases. All ten native ZIPs and actual log
+records passed independent integrity/contract checks. Both Linux jobs passed
+423 tests/seven platform skips on the final source.
+
+The named changed-non-ASCII bridge assertion actually executed and passed in both
+native jobs: `C:\é` versus `C:\É`, true, with PowerShell 5.1/Desktop,
+Framework Release 533509, CLR 4.0.30319.42000 and mscorlib. The gate is Framework
+>=4.8 (Release >=528040); observed 533509 is not labelled exactly 4.8.0.
+The host is Windows Server 2022, not user Windows 10/11. The earlier local
+421/7 broad run and the final correction's focused 33/1 run remain distinct from
+hosted 423/7. See the [execution record](../EXECUTION-2026-11-11-fixed-fixture-build-paths.md)
+for exact checkouts, actual bridge output, full inventory and artifact digests.
+
+This accepts only the build/path prerequisite for Task 2C. Tasks **2C–2E remain
+unfinished**. The reusable path-comparison status guard is implemented, but its
+actual composed-artifact validator integration remains **Task 2E**. No schema-2
+composition, production lifetime repair or release/workstation acceptance follows.
+Later source changes require their own evidence; this record cannot certify them.
 
 ## Approaches and recommendation
 

@@ -86,6 +86,11 @@ $null=Set-PSBreakpoint -Command Compile-FixedFixtureSources -Action {
         self.assertLess(text.index('foreach ($name in $names)'), text.index('if ($ManagedOnly) { return }'))
         self.assertLess(text.index('if ($ManagedOnly) { return }'), text.index('$negative='))
         self.assertIn('Assert-FixedFixtureBuild $build', text[text.index('$append='):])
+        injected=text.index('::RunInjectedOwners($pristineBytes)')
+        self.assertLess(text.index('Assert-FixedFixtureBuild $build'), injected)
+        self.assertLess(text.index('$pristineBytes=[IO.File]::ReadAllBytes($build.PristineChild)'), injected)
+        self.assertLess(injected, text.index('if ($ManagedOnly) { return }'))
+        self.assertEqual(text.count('::RunInjectedOwners('), 1)
 
     def test_helper_dependency_triggers_native_workflow(self):
         text=(ROOT/'.github/workflows/native-tests.yml').read_text()
@@ -272,6 +277,27 @@ foreach ($stem in @('child_capture','launch_environment')) {
 
 @unittest.skipUnless(SHELL, 'PowerShell compiler required')
 class FixedImageManagedContracts(unittest.TestCase):
+    def test_recording_owner_has_no_residual_static_native_boundary(self):
+        text=(ROOT/'tests/windows/NativeFixedImageIdentity.cs').read_text()
+        owners=text[text.index(' internal sealed class FixedImageProbe {'):]
+        methods=('CreateFileW','Attributes','GetFileSizeEx','Identity',
+                 'GetFinalPathNameByHandleW','ReadFile','CloseHandle')
+        for method in methods:
+            self.assertNotIn('FixedImageNative.'+method+'(', owners)
+            self.assertEqual(text.count('return FixedImageNative.'+method+'('), 1)
+        self.assertNotIn('Marshal.GetLastWin32Error', owners)
+        self.assertEqual(text.count('readonly IFixedImageNativeCalls calls;'), 2)
+        self.assertNotIn('BindBinaryLaunch', text)
+        self.assertNotIn('FixedImageLaunchBinding', text)
+
+    def test_runner_executes_injected_owner_contracts(self):
+        result = subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-File',
+            str(ROOT/'tests/windows/check_native_fixed_image_observation.ps1'), '-ManagedOnly'],
+            capture_output=True, text=True, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertEqual(result.stdout.splitlines().count('PASS fixed image injected owners'), 1,
+                         'Runner must execute real injected-owner assertions exactly once')
+
     def test_behavioral_contracts(self):
         result = subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-File',
             str(ROOT/'tests/windows/check_native_fixed_image_observation.ps1'), '-ManagedOnly'],

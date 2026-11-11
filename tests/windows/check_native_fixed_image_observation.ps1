@@ -50,6 +50,9 @@ try {
     }
     [Reflection.Assembly]::LoadFile($harnesses[0]) | Out-Null
     if ([PortableVBox.NativeFixedImageIdentityTests]::RunManaged() -ne 0) { throw 'Fixed image managed contracts failed' }
+    Assert-FixedFixtureBuild $build
+    $pristineBytes=[IO.File]::ReadAllBytes($build.PristineChild)
+    if ([PortableVBox.NativeFixedImageIdentityTests]::RunInjectedOwners($pristineBytes) -ne 0) { throw 'Fixed image injected owners failed' }
     for ($i=0;$i -lt 3;++$i) { Write-Output ('SERIALIZER_DIAGNOSTIC '+[PortableVBox.NativeFixedImageIdentityTests]::IncompleteReport($i)) }
     if ($ManagedOnly) { return }
     # Negative setup occurs only after ALL harnesses embed unchanged pristine input.

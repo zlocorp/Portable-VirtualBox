@@ -142,6 +142,36 @@ namespace PortableVBox {
   [DllImport("kernel32.dll",SetLastError=true)] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool ReadFile(IntPtr handle,byte[] bytes,uint request,out uint read,IntPtr overlapped);
   [DllImport("kernel32.dll",SetLastError=true)] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool CloseHandle(IntPtr handle);
  }
+ // Identity-only test wiring guard, not authentication against same-assembly code.
+ internal sealed class FixedImageCallDomain {
+  internal static readonly FixedImageCallDomain Native=new FixedImageCallDomain();
+  FixedImageCallDomain() { }
+  internal static FixedImageCallDomain CreateRecording() { return new FixedImageCallDomain(); }
+ }
+ internal interface IFixedImageNativeCalls {
+  FixedImageCallDomain Domain { get; }
+  IntPtr CreateFileW(string name,uint access,uint share,IntPtr security,uint disposition,uint flags,IntPtr template);
+  bool Attributes(IntPtr handle,int info,out FixedImageNative.AttributeTag value,uint size);
+  bool GetFileSizeEx(IntPtr handle,out long size);
+  bool Identity(IntPtr handle,int info,out FixedImageNative.IdInfo value,uint size);
+  uint GetFinalPathNameByHandleW(IntPtr handle,StringBuilder buffer,uint length,uint flags);
+  bool ReadFile(IntPtr handle,byte[] bytes,uint request,out uint read,IntPtr overlapped);
+  bool CloseHandle(IntPtr handle);
+  uint CaptureLastError();
+ }
+ internal sealed class FixedImageNativeCalls : IFixedImageNativeCalls {
+  internal static readonly FixedImageNativeCalls Instance=new FixedImageNativeCalls();
+  FixedImageNativeCalls() { }
+  public FixedImageCallDomain Domain { get { return FixedImageCallDomain.Native; } }
+  public IntPtr CreateFileW(string name,uint access,uint share,IntPtr security,uint disposition,uint flags,IntPtr template) { return FixedImageNative.CreateFileW(name,access,share,security,disposition,flags,template); }
+  public bool Attributes(IntPtr handle,int info,out FixedImageNative.AttributeTag value,uint size) { return FixedImageNative.Attributes(handle,info,out value,size); }
+  public bool GetFileSizeEx(IntPtr handle,out long size) { return FixedImageNative.GetFileSizeEx(handle,out size); }
+  public bool Identity(IntPtr handle,int info,out FixedImageNative.IdInfo value,uint size) { return FixedImageNative.Identity(handle,info,out value,size); }
+  public uint GetFinalPathNameByHandleW(IntPtr handle,StringBuilder buffer,uint length,uint flags) { return FixedImageNative.GetFinalPathNameByHandleW(handle,buffer,length,flags); }
+  public bool ReadFile(IntPtr handle,byte[] bytes,uint request,out uint read,IntPtr overlapped) { return FixedImageNative.ReadFile(handle,bytes,request,out read,overlapped); }
+  public bool CloseHandle(IntPtr handle) { return FixedImageNative.CloseHandle(handle); }
+  public uint CaptureLastError() { return unchecked((uint)Marshal.GetLastWin32Error()); }
+ }
  internal sealed class FixedImageProbeCall {
   internal readonly uint Access,Share,Disposition;
   internal FixedImageProbeCall(uint access,uint share,uint disposition) { FixedImageProbe.ValidateCall(access,share,disposition);Access=access;Share=share;Disposition=disposition; }
@@ -198,27 +228,39 @@ namespace PortableVBox {
     ",\"close_state\":"+FixedImageCodec.Q(CloseState)+"}";
   }
  }
+ internal sealed class FixedImageProbeObservation {
+  internal readonly uint Access,Share,Disposition;
+  internal readonly string OpenState,CloseState;
+  internal readonly uint? OpenError;
+  internal FixedImageProbeObservation(FixedImageProbeCall call,FixedImageProbeState state) {
+   Access=call.Access;Share=call.Share;Disposition=call.Disposition;
+   OpenState=state.OpenState;CloseState=state.CloseState;OpenError=state.OpenError;
+  }
+ }
  internal sealed class FixedImageProbe {
   readonly FixedImageProbeCall call;
   readonly FixedImageProbeState state=new FixedImageProbeState();
+  readonly IFixedImageNativeCalls calls;
   IntPtr handle;
 
-  internal FixedImageProbe(uint access) {
+  internal FixedImageProbe(uint access,IFixedImageNativeCalls calls) {
+   this.calls=calls;
    call=new FixedImageProbeCall(access,7,3);
   }
   internal static void ValidateCall(uint access,uint share,uint disposition) {
    if((access!=0x40000000 && access!=0x10000) || share!=7 || disposition!=3)
     throw new ArgumentException("Exact compatible probe contract required");
   }
+  internal FixedImageProbeObservation Observation { get { return new FixedImageProbeObservation(call,state); } }
   internal bool Resolved { get { return state.Resolved; } }
   internal bool Denied { get { return state.Denied; } }
 
   internal void Run() {
    string fixedPath=Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),FixedFixtureBuildExpectation.Name);
    state.EnterOpen();
-   IntPtr result=FixedImageNative.CreateFileW(fixedPath,call.Access,call.Share,IntPtr.Zero,call.Disposition,0,IntPtr.Zero);
+   IntPtr result=calls.CreateFileW(fixedPath,call.Access,call.Share,IntPtr.Zero,call.Disposition,0,IntPtr.Zero);
    if(result==new IntPtr(-1)) {
-    uint error=unchecked((uint)Marshal.GetLastWin32Error());
+    uint error=calls.CaptureLastError();
     state.ReturnOpen(false,error);
     return;
    }
@@ -227,7 +269,8 @@ namespace PortableVBox {
    state.ReturnOpen(true,null);
    // Unexpected success always fails the sharing assertion, even after TRUE close.
    state.EnterClose();
-   bool closed=FixedImageNative.CloseHandle(handle);
+   bool closed=calls.CloseHandle(handle);
+   if(!closed)calls.CaptureLastError();
    state.ReturnClose(closed);
    GC.KeepAlive(this);
   }
@@ -237,67 +280,135 @@ namespace PortableVBox {
   }
  }
  internal sealed class FixedFixtureImage {
+  enum UseState { Fresh,StandaloneUsed,Claimed }
+  readonly object sync=new object(),leaseKey=new object();
+  readonly FixedImageCallDomain domain;
+  UseState use;
+  CompositionLease lease;
   readonly FixedImageState state;
   readonly string fixedPath;
+  readonly IFixedImageNativeCalls calls;
   IntPtr handle;
+  // Metadata calls have no schema-1 return ledger. Only a known return clears
+  // this guard; an unavailable return permanently forbids reuse or close.
+  bool operationPending;
   FixedImageProbe writeProbe,deleteProbe;
-  FixedFixtureImage() {
+  FixedFixtureImage(IFixedImageNativeCalls calls,FixedImageCallDomain domain) {
+   this.calls=calls;this.domain=domain;
    if(FixedFixtureBuildExpectation.Name!="NativeCaptureFixtureChild.exe")throw new InvalidOperationException("Compiled sibling name");
    state=new FixedImageState(new FixedImageExpectation(FixedFixtureBuildExpectation.Length,FixedFixtureBuildExpectation.Sha256));
    fixedPath=Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),FixedFixtureBuildExpectation.Name);
   }
-  internal static FixedFixtureImage CreateForObservation() { return new FixedFixtureImage(); }
-  internal FixedImageObservation Observation { get { return state.Snapshot(); } }
+  internal static FixedFixtureImage CreateForObservation() { return new FixedFixtureImage(FixedImageNativeCalls.Instance,FixedImageCallDomain.Native); }
+  internal static FixedFixtureImage CreateForRecording(IFixedImageNativeCalls calls,FixedImageCallDomain domain) {
+   if(calls==null || domain==null || Object.ReferenceEquals(domain,FixedImageCallDomain.Native) || !Object.ReferenceEquals(calls.Domain,domain))throw new ArgumentException("Matching recording image domain required");
+   return new FixedFixtureImage(calls,domain);
+  }
+  internal FixedImageCallDomain Domain { get { return domain; } }
+  internal FixedImageObservation Observation { get { lock(sync)return state.Snapshot(); } }
+  internal FixedImageProbeObservation WriteProbeObservation { get { lock(sync)return writeProbe==null?null:writeProbe.Observation; } }
+  internal FixedImageProbeObservation DeleteProbeObservation { get { lock(sync)return deleteProbe==null?null:deleteProbe.Observation; } }
   internal FixedImageExpectation Expected { get { return state.Expected; } }
-  internal bool Ready { get { return state.Refusal=="none" && state.ReadState=="complete" && state.VolumeSerial!=null && state.FileId!=null && state.HeldPath!=null; } }
-  internal bool Released { get { return state.Released && (writeProbe==null || writeProbe.Resolved) && (deleteProbe==null || deleteProbe.Resolved); } }
-  internal void PrepareOnce() {
+  bool ReadyCore { get { return !operationPending && state.OpenState=="returned-success" && state.CloseState=="not-entered" && state.Refusal=="none" && state.ReadState=="complete" && state.VolumeSerial!=null && state.FileId!=null && state.HeldPath!=null && (writeProbe==null || writeProbe.Resolved) && (deleteProbe==null || deleteProbe.Resolved); } }
+  bool ReleasedCore { get { return !operationPending && state.Released && (writeProbe==null || writeProbe.Resolved) && (deleteProbe==null || deleteProbe.Resolved); } }
+  internal bool Ready { get { lock(sync)return use==UseState.StandaloneUsed && ReadyCore; } }
+  internal bool Released { get { lock(sync)return ReleasedCore; } }
+  void UseStandalone() {
+   if(use==UseState.Claimed)throw new InvalidOperationException("Image ownership permanently transferred");
+   use=UseState.StandaloneUsed;
+  }
+  internal CompositionLease ClaimForComposition() {
+   lock(sync) {
+    if(use!=UseState.Fresh || state.OpenState!="not-entered" || state.CloseState!="not-opened" || operationPending)throw new InvalidOperationException("Only a fresh unopened image can transfer");
+    use=UseState.Claimed;
+    lease=new CompositionLease(this,leaseKey);
+    return lease;
+   }
+  }
+  // Only this permanently registered capability can mutate a transferred image.
+  // No path/handle escape, reset, transfer-back or launch binding exists in 2C.
+  internal sealed class CompositionLease {
+   readonly FixedFixtureImage owner;
+   internal CompositionLease(FixedFixtureImage owner,object key) {
+    if(owner==null || !Object.ReferenceEquals(key,owner.leaseKey) || owner.use!=UseState.Claimed || owner.lease!=null)throw new ArgumentException("Registered image capability required");
+    this.owner=owner;
+   }
+   void Validate() { if(!Object.ReferenceEquals(owner.lease,this) || owner.use!=UseState.Claimed)throw new InvalidOperationException("Unregistered image capability"); }
+   internal void PrepareOnce() { lock(owner.sync) { Validate();owner.PrepareCore(); } }
+   internal bool ObserveSharing() { lock(owner.sync) { Validate();return owner.ObserveSharingCore(); } }
+   internal bool TryRelease() { lock(owner.sync) { Validate();return owner.TryReleaseCore(); } }
+   internal bool Ready { get { lock(owner.sync) { Validate();return owner.ReadyCore; } } }
+   internal bool Released { get { lock(owner.sync) { Validate();return owner.ReleasedCore; } } }
+   internal FixedImageObservation Observation { get { lock(owner.sync) { Validate();return owner.state.Snapshot(); } } }
+   internal FixedImageProbeObservation WriteProbeObservation { get { lock(owner.sync) { Validate();return owner.writeProbe==null?null:owner.writeProbe.Observation; } } }
+   internal FixedImageProbeObservation DeleteProbeObservation { get { lock(owner.sync) { Validate();return owner.deleteProbe==null?null:owner.deleteProbe.Observation; } } }
+   internal FixedImageExpectation Expected { get { return owner.state.Expected; } }
+  }
+  internal void PrepareOnce() { lock(sync) { UseStandalone();PrepareCore(); } }
+  internal bool ObserveSharing() { lock(sync) { UseStandalone();return ObserveSharingCore(); } }
+  internal bool TryRelease() { lock(sync) { UseStandalone();return TryReleaseCore(); } }
+  void PrepareCore() {
    state.BeginPreparation();
    state.EnterOpen();
-   IntPtr result=FixedImageNative.CreateFileW(fixedPath,0x80000000,1,IntPtr.Zero,3,0x00200000,IntPtr.Zero);
-   if(result==new IntPtr(-1)) { uint error=unchecked((uint)Marshal.GetLastWin32Error());state.ReturnOpen(false,error);return; }
+   IntPtr result=calls.CreateFileW(fixedPath,0x80000000,1,IntPtr.Zero,3,0x00200000,IntPtr.Zero);
+   if(result==new IntPtr(-1)) { uint error=calls.CaptureLastError();state.ReturnOpen(false,error);return; }
    handle=result;state.ReturnOpen(true,null);
    FixedImageNative.AttributeTag attributes;
-   if(!FixedImageNative.Attributes(handle,9,out attributes,8))throw new IOException("Leaf attributes unavailable");FixedImageCodec.Leaf(attributes.Attributes);
-   long size;if(!FixedImageNative.GetFileSizeEx(handle,out size))throw new IOException("Size query unavailable");state.ObserveSize(size);
+   operationPending=true;
+   bool attributesKnown=calls.Attributes(handle,9,out attributes,8);
+   if(!attributesKnown)calls.CaptureLastError();
+   operationPending=false;
+   if(!attributesKnown)throw new IOException("Leaf attributes unavailable");FixedImageCodec.Leaf(attributes.Attributes);
+   long size;
+   operationPending=true;bool sizeKnown=calls.GetFileSizeEx(handle,out size);
+   if(!sizeKnown)calls.CaptureLastError();
+   operationPending=false;
+   if(!sizeKnown)throw new IOException("Size query unavailable");state.ObserveSize(size);
    if(size<=0 || size>FixedImageState.MaxImage || size!=state.Expected.Length)return;
    FixedImageNative.IdInfo id;
-   bool known=FixedImageNative.Identity(handle,18,out id,24);state.ObserveIdentity(known,id.Volume,id.Low,id.High);
-   var path=new StringBuilder(32768);uint count=FixedImageNative.GetFinalPathNameByHandleW(handle,path,32768,0);state.ObservePath(path.ToString(),count);
+   operationPending=true;bool known=calls.Identity(handle,18,out id,24);
+   if(!known)calls.CaptureLastError();
+   operationPending=false;state.ObserveIdentity(known,id.Volume,id.Low,id.High);
+   var path=new StringBuilder(32768);
+   operationPending=true;uint count=calls.GetFinalPathNameByHandleW(handle,path,32768,0);
+   if(count==0)calls.CaptureLastError();
+   operationPending=false;state.ObservePath(path.ToString(),count);
    using(var sha=SHA256.Create()) {
     byte[] bytes=new byte[FixedImageState.Chunk];
     while(state.BytesHashed<state.Expected.Length) {
      int request=(int)Math.Min(bytes.Length,state.Expected.Length-state.BytesHashed);uint read;
      state.EnterRead(request);
-     bool success=FixedImageNative.ReadFile(handle,bytes,(uint)request,out read,IntPtr.Zero);
-     uint? error=success?(uint?)null:unchecked((uint)Marshal.GetLastWin32Error());state.ReturnRead(success,read,error);
+     bool success=calls.ReadFile(handle,bytes,(uint)request,out read,IntPtr.Zero);
+     uint? error=success?(uint?)null:calls.CaptureLastError();state.ReturnRead(success,read,error);
      if(!success || read==0 || read>(uint)request)return;
      try { sha.TransformBlock(bytes,0,(int)read,bytes,0);state.AcceptHashed((int)read); }
      catch { state.HashFailed();throw; }
     }
     state.EnterRead(1);uint terminal;
-    bool eof=FixedImageNative.ReadFile(handle,bytes,1,out terminal,IntPtr.Zero);
-    uint? eofError=eof?(uint?)null:unchecked((uint)Marshal.GetLastWin32Error());state.ReturnRead(eof,terminal,eofError);
+    bool eof=calls.ReadFile(handle,bytes,1,out terminal,IntPtr.Zero);
+    uint? eofError=eof?(uint?)null:calls.CaptureLastError();state.ReturnRead(eof,terminal,eofError);
     if(!eof || terminal!=0)return;
     try { sha.TransformFinalBlock(new byte[0],0,0);state.CompleteHash(FixedImageCodec.Hex(sha.Hash)); }
     catch { state.HashFailed();throw; }
    }
    GC.KeepAlive(this);
   }
-  internal bool ObserveSharing() {
-   if(!Ready || !state.CanRelease || writeProbe!=null || deleteProbe!=null)throw new InvalidOperationException("Positive held-image probes only, one-shot");
-   writeProbe=new FixedImageProbe(0x40000000);writeProbe.Run();
+  bool ObserveSharingCore() {
+   if(!ReadyCore || !state.CanRelease || writeProbe!=null || deleteProbe!=null)throw new InvalidOperationException("Positive held-image probes only, one-shot");
+   writeProbe=new FixedImageProbe(0x40000000,calls);writeProbe.Run();
    if(!writeProbe.Resolved)return false;
-   deleteProbe=new FixedImageProbe(0x10000);deleteProbe.Run();
+   deleteProbe=new FixedImageProbe(0x10000,calls);deleteProbe.Run();
    return writeProbe.Denied && deleteProbe.Denied;
   }
-  internal bool TryRelease() {
-   if(Released)return true;
-   if(!state.CanRelease || (writeProbe!=null && !writeProbe.Resolved) || (deleteProbe!=null && !deleteProbe.Resolved))return false;
-   state.EnterClose();bool success=FixedImageNative.CloseHandle(handle);state.ReturnClose(success);GC.KeepAlive(this);return success;
+  bool TryReleaseCore() {
+   if(ReleasedCore)return true;
+   if(operationPending || !state.CanRelease || (writeProbe!=null && !writeProbe.Resolved) || (deleteProbe!=null && !deleteProbe.Resolved))return false;
+   state.EnterClose();bool success=calls.CloseHandle(handle);
+   if(!success)calls.CaptureLastError();
+   state.ReturnClose(success);GC.KeepAlive(this);return success;
   }
   internal string Report(string scenario,bool passed) {
-   return FixedImageEvidence.Report(Expected,Observation,scenario,passed,writeProbe==null?"null":writeProbe.Json(),deleteProbe==null?"null":deleteProbe.Json());
+   lock(sync)return FixedImageEvidence.Report(Expected,state.Snapshot(),scenario,passed,writeProbe==null?"null":writeProbe.Json(),deleteProbe==null?"null":deleteProbe.Json());
   }
  }
  internal static class FixedImageEvidence {

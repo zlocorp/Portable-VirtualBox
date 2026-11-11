@@ -17,7 +17,9 @@ namespace PortableVBox {
     else if(scenario=="size-mismatch")observed=oneShot && o.Refusal=="size-mismatch" && o.ActualSize!=null && o.ActualSize!=root.Expected.Length && o.ReadState=="not-entered" && o.ActualSha256==null && o.BytesHashed==0;
     else observed=oneShot && o.Refusal=="missing-image" && o.OpenState=="returned-failure" && o.OpenError==2 && o.ActualSize==null && o.ActualSha256==null && o.ReadState=="not-entered" && o.BytesHashed==0;
    } catch { observed=false; }
-   finally { try { passed=root.TryRelease() && observed; } catch { passed=false; } }
+   // This root is standalone only. A future composed harness must never adopt
+   // this unconditional cleanup for an image transferred to another owner.
+   finally { try { passed=root.TryRelease() && !root.Ready && observed; } catch { passed=false; } }
    Console.WriteLine(root.Report(scenario,passed));
    bool released=root.Released;GC.KeepAlive(root);
    return !released?2:passed?0:1;

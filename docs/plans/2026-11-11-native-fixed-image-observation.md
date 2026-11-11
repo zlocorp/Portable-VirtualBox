@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > or superpowers:executing-plans only after preflight review and controller assignment. Execute
 > task-by-task with TDD and independent review; steps use checkboxes.
-> Task 1 is test-only accepted; Task 2 remains a proposal.
+> Task 1 and Tasks 2A–2B are test-only accepted; Tasks 2C–2E remain unfinished.
 > This document authorizes no new implementation, publication,
 > production integration, merge, release or primary-host execution.
 
@@ -111,9 +111,9 @@ context, not pass raw paths or handles into a new launcher.
   This stage is independently useful without launching a process or modifying
   ChildCaptureOwner; publish only through a separately authorized branch process.
 
-## Task 2: Existing-owner composition proposal
+## Task 2: Build/path accepted; composition unfinished
 
-**Gate before 2A:** Task 1's accepted historical record is retained below. The
+**Historical gate before 2A:** Task 1's accepted historical record is retained below. The
 successor `519056432b4d9bd045140d2ba2bbe924e5c135e9` sentinel native artifacts have
 now been independently accepted, including unchanged file-only image results.
 That satisfies the changed-source native prerequisite, not permission to implement.
@@ -124,6 +124,15 @@ is not a prerequisite. Every subtask below is sequential and ends
 in a focused independent review; do not start its dependent subtask first.
 Publication, native execution and exact-source final acceptance retain their own
 authorization/gates. No primary/user Windows experiments are authorized here.
+
+**Accepted scope at 98bec8f:** Independent preflight, 2A, 2B and the bounded
+host-frame correction reviews are complete. The actual changed-source native
+build/path prerequisite is accepted in the
+[execution record](../EXECUTION-2026-11-11-fixed-fixture-build-paths.md).
+Only 2A–2B checkboxes below are closed. Task 2C and later stages remain unfinished
+and require their separate implementation/review and source-specific evidence.
+The schema-independent path-comparison status guard does not yet enforce actual
+composed artifacts; that integration remains 2E.
 
 ### Shared files and interface preflight
 
@@ -163,7 +172,7 @@ ExpectationSource/ExpectationSha256; `Assert-FixedFixtureBuild($Build)`;
 `Get-FixedFixtureConsumerSources($Build,[string[]]$Names)`. No owner dependency
 enters the child. The helper is build-only and never executes generated code.
 
-- [ ] Write failing `test_all_owner_consumers_build_child_before_compile`,
+- [x] Write failing `test_all_owner_consumers_build_child_before_compile`,
   `test_all_three_child_builds_use_only_runtime_sentinel_dependencies`, and
   `test_pristine_expectation_precedes_all_negative_setup`. Assert the two legacy
   runners' first managed compilation occurs after the helper; all four direct
@@ -174,9 +183,9 @@ enters the child. The helper is build-only and never executes generated code.
   harness has NativeCaptureFixtureChild.exe/config beside it; the child's bytes are
   copied unchanged from verified PristineChild and match its embedded length/hash.
   Add `test_helper_dependency_triggers_native_workflow` for the exact helper path.
-- [ ] Run the three Python modules below; confirm new assertions fail for the
+- [x] Run the three Python modules below; confirm new assertions fail for the
   specific old ordering, not a missing compiler/reference prerequisite.
-- [ ] Implement the helper and replace repeated build/generation recipes. Native
+- [x] Implement the helper and replace repeated build/generation recipes. Native
   runners build in their fresh root before managed Add-Type. Managed-only routes
   build/hash/compile but never execute child or prepare negative copies. Retain
   configs, generated source and existing full source lists; no stale fallback.
@@ -184,7 +193,7 @@ enters the child. The helper is build-only and never executes generated code.
   copied bytes, and add `tests/windows/NativeFixedFixtureBuild.ps1` to native-tests.yml
   push path triggers in the same 2A change. No new native execution is implied by
   managed-only builds.
-- [ ] Re-run the three modules and all three `-ManagedOnly` runners with official
+- [x] Re-run the three modules and all three `-ManagedOnly` runners with official
   net48 refs. Independently review the source-consumer inventory against the
   design table, including unaffected pure-sentinel and child-output compile paths.
   Record target compilation separately from the actual managed host runtime.
@@ -214,11 +223,11 @@ raises unavailable comparison. It never guesses a Unicode relation. Without exac
 comparison it may validate only structural FAIL diagnostics (affected case FAIL/
 overall UNKNOWN); every PASS summary is rejected even with require_pass=False.
 
-- [ ] Write failing `test_path_grammar_cc_utf16_and_prefix_parity` with the design's
+- [x] Write failing `test_path_grammar_cc_utf16_and_prefix_parity` with the design's
   accepted/rejected corpus, including C1 controls currently missed by Python.
   Write `test_ordinal_path_comparison_never_uses_casefold` for prefix/case agreement,
   genuine differences, Straße/STRASSE and composed/decomposed strings.
-- [ ] Write `test_nonascii_case_requires_exact_framework_bridge`: unavailable or
+- [x] Write `test_nonascii_case_requires_exact_framework_bridge`: unavailable or
   .NET Core bridge cannot certify a changed non-ASCII pair; unchanged Cyrillic/
   CJK/emoji and ASCII-only case changes are independently provable without it.
   Add `FixedImageWindowsPathBridgeContracts.test_nonascii_bridge_uses_windows_framework`
@@ -235,10 +244,10 @@ overall UNKNOWN); every PASS summary is rejected even with require_pass=False.
   unavailable bridge rejects an otherwise valid PASS summary with require_pass
   false and true, while a consistent affected-case FAIL/UNKNOWN plus FAIL summary
   is diagnostics only.
-- [ ] Witness old validator/corpus failures, extract the shared function and add the
+- [x] Witness old validator/corpus failures, extract the shared function and add the
   bounded fixed bridge plus portable safe subset. Keep raw paths and reject rather
   than normalize; do not introduce a public launch path or native API.
-- [ ] Run the fixed-image Python/managed module and PowerShell parse checks. Review
+- [x] Run the fixed-image Python/managed module and PowerShell parse checks. Review
   exact UTF-16 counts/Cc range and comparison host identification. Record Windows
   bridge execution pending until the exact Windows assertion above is actually
   observed. Carry this gate into every later task/checkpoint until satisfied;
@@ -444,7 +453,7 @@ Task 1 validators accept only schema=1/stage=file-only. Schema=2/stage=composed
 remains unavailable until the controller assigns the separately reviewed Task 2
 implementation and that implementation is completed.
 
-## Current source 5190564 planning checkpoint
+## Historical source 5190564 planning checkpoint
 
 The later source `519056432b4d9bd045140d2ba2bbe924e5c135e9`, tree
 `45d21240a2b93e79f69b7a0c415d34ed7acdd31f`, has independently accepted actual
@@ -462,3 +471,36 @@ resolves planning preflight only. Independent composition review and the control
 next assignment remain gates; existing checked-branch development authorization
 covers local test-only implementation without renewed user permission. Native
 execution/publication remain within their authorized branch workflow and review gates.
+
+## Accepted 98bec8f build/path checkpoint; next gate 2C
+
+Published source
+[`98bec8f6fb035b90156b02fec8c63e9278deb010`](https://github.com/zlocorp/Portable-VirtualBox/commit/98bec8f6fb035b90156b02fec8c63e9278deb010),
+tree `c92ed011a8097b7c135d06f75585ad45b4c72a9a`, includes only the reviewed
+2A–2B implementation and scoped host-frame correction. All eleven natural
+workflows passed on attempt 1 (eight push, three PR), without reruns. Native push
+43113061248 checked out that exact source. Native PR 43113074200 checked out
+synthetic merge `473074410cedce904af24bb03a295a12d2ca9a51`, independently verified
+to have the same tree. Both actual artifact sets preserve all nine capture,
+three environment and four file-only image cases.
+
+Both native jobs executed the named Windows Framework bridge assertion, not a
+skip: changed `C:\é` versus `C:\É` returned true through the fixed bridge,
+under PowerShell 5.1/Desktop, observed Framework Release 533509, CLR
+4.0.30319.42000/mscorlib. The minimum is Framework >=4.8/Release >=528040, not a
+claim of exactly 4.8.0. Hosted Windows Server 2022 evidence does not prove user
+Windows 10/11. The real-runtime gate is satisfied only for this source.
+
+Earlier local Task 2B broad coverage was 421 tests/seven skips. The final
+host-frame correction passed six bridge tests and 33 focused image tests/one
+skip, not another local full suite. Both actual hosted Linux full suites now
+pass **423 tests/seven skips**, including both new host-frame regressions and
+successful pinned net48 provisioning. Exact log proof, ZIP hashes and the full
+run ledger are in the [execution record](../EXECUTION-2026-11-11-fixed-fixture-build-paths.md).
+
+Only Tasks **2A–2B** are accepted here. Tasks **2C–2E remain unfinished**; their
+checkboxes are unchanged. Task 2E must integrate the reusable path-comparison
+guard into the actual stage-aware composed-artifact validator. Schema 1 remains
+file-only and cannot certify schema 2. Later ownership/composition edits require
+independent review and their own changed-source native evidence. No new primary-host,
+production, merge or release permission is conferred by this checkpoint.

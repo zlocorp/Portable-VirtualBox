@@ -1,4 +1,4 @@
-// TEST ONLY: pure modeled native returns, never manufacture uncertain native calls.
+// TEST ONLY: pure ledgers and real owners with recording calls, no uncertain OS calls.
 using System;
 using System.Security.Cryptography;
 using System.Text;
@@ -104,6 +104,278 @@ namespace PortableVBox {
     Check(!FixedImagePath.Agree(pair[0],pair[1]),"different spelling not normalized");
    // This managed host's result is not evidence of Windows Framework execution.
    Check(FixedImagePath.Agree("C:\\é","C:\\É"),"actual managed OrdinalIgnoreCase nonASCII call");
+  }
+  sealed class Unavailable : Exception { }
+  // The only fake handles in these tests belong to this adapter. No OS handle is
+  // acquired; every downstream boundary checks the exact owned recording handle.
+  sealed class RecordingFileCalls : IFixedImageNativeCalls {
+   readonly FixedImageCallDomain domain;
+   readonly byte[] bytes;
+   internal readonly System.Collections.Generic.List<string> Trace=new System.Collections.Generic.List<string>();
+   internal string Fault="";
+   internal long Size;
+   internal int PartialLimit=997;
+   internal Action BeforeClose=null;
+   int position,probe;
+   bool errorPending;
+   uint error;
+   internal RecordingFileCalls(byte[] pristine,FixedImageCallDomain domain) {
+    this.domain=domain;bytes=(byte[])pristine.Clone();Size=bytes.Length;
+   }
+   public FixedImageCallDomain Domain { get { return domain; } }
+   void Enter(string operation) {
+    Check(!errorPending,"last error must be captured before next call");Trace.Add(operation);
+    if(Fault==operation+"-unavailable")throw new Unavailable();
+   }
+   void Fail(uint code) { errorPending=true;error=code; }
+   public uint CaptureLastError() { Check(errorPending,"capture only immediately after failed return");Trace.Add("error");errorPending=false;return error; }
+   void Image(IntPtr handle) { Check(handle==new IntPtr(201),"exact image handle at every query/read"); }
+   public IntPtr CreateFileW(string name,uint access,uint share,IntPtr security,uint disposition,uint flags,IntPtr template) {
+    Check(System.IO.Path.GetFileName(name)=="NativeCaptureFixtureChild.exe" && System.IO.Path.GetDirectoryName(name)==System.IO.Path.GetDirectoryName(typeof(NativeFixedImageIdentityTests).Assembly.Location),"fixed sibling only");
+    Check(security==IntPtr.Zero && template==IntPtr.Zero && disposition==3,"noninheritable open-existing only");
+    if(access==0x80000000) {
+     Check(share==1 && flags==0x00200000,"image read/share-read/reparse-leaf refusal");Enter("open");
+     if(Fault=="open-false") { Fail(2);return new IntPtr(-1); }
+     return new IntPtr(201);
+    }
+    Check((access==0x40000000 || access==0x10000) && share==7 && flags==0,"exact compatible probe access/share/disposition");
+    ++probe;Check(access==(probe==1?0x40000000U:0x10000U),"write then delete probe order");Enter("probe"+probe);
+    if(Fault=="probe-success" || Fault=="probe-close-false" || Fault=="probe-close-unavailable")return new IntPtr(300+probe);
+    Fail(Fault=="probe-error"?5U:32U);return new IntPtr(-1);
+   }
+   public bool Attributes(IntPtr handle,int info,out FixedImageNative.AttributeTag value,uint size) {
+    Image(handle);Check(info==9 && size==8,"exact attribute query");Enter("attributes");value=new FixedImageNative.AttributeTag();value.Attributes=0x80;
+    if(Fault=="attributes-false") { Fail(5);return false; }return true;
+   }
+   public bool GetFileSizeEx(IntPtr handle,out long size) {
+    Image(handle);Enter("size");size=Size;if(Fault=="size-false") { Fail(5);return false; }return true;
+   }
+   public bool Identity(IntPtr handle,int info,out FixedImageNative.IdInfo value,uint size) {
+    Image(handle);Check(info==18 && size==24,"exact 128-bit identity query");Enter("identity");value=new FixedImageNative.IdInfo();value.Volume=0;value.Low=1;value.High=2;
+    if(Fault=="identity-false") { Fail(5);return false; }return true;
+   }
+   public uint GetFinalPathNameByHandleW(IntPtr handle,StringBuilder buffer,uint length,uint flags) {
+    Image(handle);Check(length==32768 && buffer.Capacity==32768 && flags==0,"bounded normalized DOS path query");Enter("path");
+    if(Fault=="path-false") { Fail(5);return 0; }
+    buffer.Append("C:\\fixture\\NativeCaptureFixtureChild.exe");return (uint)buffer.Length;
+   }
+   public bool ReadFile(IntPtr handle,byte[] target,uint request,out uint read,IntPtr overlapped) {
+    Image(handle);Check(overlapped==IntPtr.Zero && request>0 && request<=65536 && target.Length==65536,"bounded synchronous positive read");
+    Enter(position==bytes.Length?"eof":"read");read=0;
+    if(Fault=="read-false" || (Fault=="eof-false" && position==bytes.Length)) { Fail(5);return false; }
+    if(position==bytes.Length) {
+     Check(request==1,"positive one-byte EOF proof after exact bytes");
+     if(Fault=="extra")read=1;return true;
+    }
+    Check(request==Math.Min(65536,bytes.Length-position),"exact bounded remaining read request");
+    if(Fault=="early")return true;
+    if(Fault=="oversize") { read=request+1;return true; }
+    read=(uint)Math.Min(PartialLimit,(int)request);Array.Copy(bytes,position,target,0,(int)read);position+=(int)read;return true;
+   }
+   public bool CloseHandle(IntPtr handle) {
+    bool image=handle==new IntPtr(201);
+    Check(image || handle==new IntPtr(301) || handle==new IntPtr(302),"only exact owned image/probe handles may close");
+    Enter(image?"close":"probe-close");if(BeforeClose!=null)BeforeClose();
+    if(Fault==(image?"close-false":"probe-close-false")) { Fail(6);return false; }return true;
+   }
+  }
+  static RecordingFileCalls Calls(byte[] bytes) { return new RecordingFileCalls(bytes,FixedImageCallDomain.CreateRecording()); }
+  static FixedFixtureImage Image(RecordingFileCalls calls) { return FixedFixtureImage.CreateForRecording(calls,calls.Domain); }
+  static void ExactTrace(RecordingFileCalls calls,params string[] expected) { Check(String.Join(",",calls.Trace.ToArray())==String.Join(",",expected),"exact real-owner call order: "+String.Join(",",calls.Trace.ToArray())); }
+  static byte[] VerifiedPristine(byte[] input) {
+   if(input==null)throw new ArgumentException("Genuine completed pristine child bytes required");
+   byte[] copy=(byte[])input.Clone();
+   if(copy.LongLength!=FixedFixtureBuildExpectation.Length || Digest(copy)!=FixedFixtureBuildExpectation.Sha256)throw new ArgumentException("Genuine completed pristine child bytes required");
+   return copy;
+  }
+  static void ClaimRejectsPreparedReleasedAndReused(byte[] bytes) {
+   var calls=Calls(bytes);var fresh=Image(calls);
+   Reject(delegate { FixedFixtureImage.CreateForRecording(null,calls.Domain); },"null adapter");
+   Reject(delegate { FixedFixtureImage.CreateForRecording(calls,null); },"null domain");
+   Reject(delegate { FixedFixtureImage.CreateForRecording(calls,FixedImageCallDomain.CreateRecording()); },"wrong recording domain");
+   Reject(delegate { FixedFixtureImage.CreateForRecording(calls,FixedImageCallDomain.Native); },"recording/native domain mismatch");
+   Reject(delegate { FixedFixtureImage.CreateForRecording(FixedImageNativeCalls.Instance,FixedImageCallDomain.Native); },"native adapter forbidden in recording factory");
+   var forgedNative=new RecordingFileCalls(bytes,FixedImageCallDomain.Native);
+   Reject(delegate { FixedFixtureImage.CreateForRecording(forgedNative,forgedNative.Domain); },"recording factory cannot install native token");
+   Check(Object.ReferenceEquals(FixedImageNativeCalls.Instance.Domain,FixedImageCallDomain.Native),"native singleton domain");
+   Reject(delegate { new FixedFixtureImage.CompositionLease(fresh,new object()); },"cannot mint lease without private owner key");
+   ExactTrace(calls);ExactTrace(forgedNative);
+   var lease=fresh.ClaimForComposition();
+   Reject(delegate { fresh.ClaimForComposition(); },"claimed context rejected without altering winner");
+   ExactTrace(calls);lease.PrepareOnce();Check(lease.Ready,"winning lease still usable after losing claim");
+   Reject(delegate { fresh.ClaimForComposition(); },"prepared claimed context never reclaims");
+   Check(lease.TryRelease(),"winning lease release");
+   int count=calls.Trace.Count;
+   Reject(delegate { fresh.ClaimForComposition(); },"completed claim cannot transfer back");
+   Check(calls.Trace.Count==count,"claim rejection never enters native boundary");
+   var preparedCalls=Calls(bytes);var prepared=Image(preparedCalls);prepared.PrepareOnce();count=preparedCalls.Trace.Count;
+   Reject(delegate { prepared.ClaimForComposition(); },"standalone prepared context rejected");
+   Check(preparedCalls.Trace.Count==count && prepared.Ready && prepared.TryRelease(),"rejected claim cannot damage standalone owner");
+   Reject(delegate { prepared.ClaimForComposition(); },"standalone released context rejected");
+   var probeCalls=Calls(bytes);var probeUsed=Image(probeCalls);
+   Reject(delegate { probeUsed.ObserveSharing(); },"unprepared probe attempt refused");
+   Reject(delegate { probeUsed.ClaimForComposition(); },"even failed standalone probe attempt consumes freshness");ExactTrace(probeCalls);
+  }
+  static void ConcurrentClaimHasOneWinner(byte[] bytes) {
+   for(int attempt=0;attempt<8;attempt++) {
+    var calls=Calls(bytes);var image=Image(calls);
+    var start=new System.Threading.ManualResetEvent(false);
+    var threads=new System.Threading.Thread[6];var winners=new FixedFixtureImage.CompositionLease[6];var faults=new Exception[6];
+    for(int i=0;i<threads.Length;i++) {
+     int slot=i;
+     threads[i]=new System.Threading.Thread(delegate() {
+      if(!start.WaitOne(5000)) { faults[slot]=new Exception("claim start timeout");return; }
+      try { winners[slot]=image.ClaimForComposition(); } catch(InvalidOperationException) { } catch(Exception e) { faults[slot]=e; }
+     });threads[i].IsBackground=true;threads[i].Start();
+    }
+    start.Set();int count=0;
+    for(int i=0;i<threads.Length;i++) { Check(threads[i].Join(5000),"bounded concurrent claim join");Check(faults[i]==null,"no unexpected claim failure");if(winners[i]!=null)count++; }
+    start.Close();Check(count==1,"exactly one irreversible concurrent claim winner");ExactTrace(calls);
+    for(int i=0;i<winners.Length;i++)if(winners[i]!=null) { winners[i].PrepareOnce();Check(winners[i].Ready && winners[i].TryRelease(),"sole concurrent winner owns real preparation/release"); }
+   }
+   // A simultaneous standalone use and claim cannot both pass the same lock.
+   for(int attempt=0;attempt<8;attempt++) {
+    var calls=Calls(bytes);var image=Image(calls);int successes=0;Exception fault=null;
+    var start=new System.Threading.ManualResetEvent(false);
+    var claimant=new System.Threading.Thread(delegate() {
+     if(!start.WaitOne(5000))return;
+     try { image.ClaimForComposition();System.Threading.Interlocked.Increment(ref successes); } catch(InvalidOperationException) { } catch(Exception e) { fault=e; }
+    });
+    var releaser=new System.Threading.Thread(delegate() {
+     if(!start.WaitOne(5000))return;
+     try { Check(image.TryRelease(),"unopened standalone release");System.Threading.Interlocked.Increment(ref successes); } catch(InvalidOperationException) { } catch(Exception e) { fault=e; }
+    });
+    claimant.IsBackground=true;releaser.IsBackground=true;claimant.Start();releaser.Start();start.Set();
+    Check(claimant.Join(5000) && releaser.Join(5000) && fault==null && successes==1,"claim and standalone use serialize");start.Close();ExactTrace(calls);
+   }
+  }
+  static void TransferredFacadeCannotPrepareProbeOrRelease(byte[] bytes) {
+   var calls=Calls(bytes);var image=Image(calls);var lease=image.ClaimForComposition();
+   Check(!image.Ready && !lease.Ready && lease.Observation.OpenState=="not-entered","claim performs no native setup");
+   for(int phase=0;phase<3;phase++) {
+    int count=calls.Trace.Count;
+    Reject(delegate { image.PrepareOnce(); },"transferred facade cannot prepare");
+    Reject(delegate { image.ObserveSharing(); },"transferred facade cannot probe");
+    Reject(delegate { image.TryRelease(); },"transferred facade cannot release");
+    Reject(delegate { image.ClaimForComposition(); },"transferred facade cannot rebind");
+    Check(calls.Trace.Count==count,"disabled facade never enters native boundary");
+    if(phase==0) {
+     lease.PrepareOnce();Check(lease.Ready && !image.Ready && lease.ObserveSharing(),"only lease has live readiness and probes");
+     count=calls.Trace.Count;Reject(delegate { lease.PrepareOnce(); },"lease preparation one-shot");Reject(delegate { lease.ObserveSharing(); },"lease probes one-shot");Check(calls.Trace.Count==count,"lease one-shot guards precede calls");
+    }
+    if(phase==1) { Check(lease.TryRelease(),"lease checked close");Check(!lease.Ready && lease.Released,"lease readiness revoked after release"); }
+   }
+   Check(image.Observation.CloseState=="returned-success" && image.Released && lease.Observation.CloseState=="returned-success","facade and lease immutable snapshots remain readable forever");
+  }
+  static void ReadyRequiresLiveUnclosedKnownHandle(byte[] bytes) {
+   foreach(string fault in new string[] {"","close-false","close-unavailable"}) {
+    var calls=Calls(bytes);var image=Image(calls);Check(!image.Ready,"unopened never ready");image.PrepareOnce();
+    var snapshot=image.Observation;Check(image.Ready,"complete matching actual observation is ready while held");
+    calls.Fault=fault;calls.BeforeClose=delegate { Check(!image.Ready,"close entry immediately revokes readiness"); };
+    bool returned=false,unavailable=false;try { returned=image.TryRelease(); } catch(Unavailable) { unavailable=true; }
+    Check(returned==(fault=="") && unavailable==(fault=="close-unavailable"),"exact close result preserved");
+    Check(!image.Ready && image.Released==(fault==""),"close FALSE/unavailable cannot retain cached readiness or prove release");
+    Check(image.Observation.CloseState==(fault==""?"returned-success":fault=="close-false"?"returned-failure":"return-unknown"),"actual close ledger");
+    Check(snapshot.CloseState=="not-entered","preclose snapshot immutable");
+    int count=calls.Trace.Count;Check(image.TryRelease()==(fault==""),"repeated release returns disposition without retry");Check(calls.Trace.Count==count,"never close twice after known/unknown close");
+    Reject(delegate { image.PrepareOnce(); },"no reopen after close attempt");Reject(delegate { image.ObserveSharing(); },"no probe after close attempt");
+   }
+  }
+  static void UnopenedReleasePreventsLaterClaim(byte[] bytes) {
+   var calls=Calls(bytes);var image=Image(calls);Check(image.TryRelease(),"unopened standalone release resolves without handle");
+   Reject(delegate { image.ClaimForComposition(); },"unopened release permanently consumes freshness");ExactTrace(calls);
+  }
+  static string[] PreparedTrace(byte[] bytes,int limit,params string[] tail) {
+   var expected=new System.Collections.Generic.List<string>(new string[] {"open","attributes","size","identity","path"});
+   for(int remaining=bytes.Length;remaining>0;remaining-=Math.Min(limit,Math.Min(65536,remaining)))expected.Add("read");
+   expected.Add("eof");expected.AddRange(tail);return expected.ToArray();
+  }
+  static void RealFileOwnerUsesOnlyInjectedCalls(byte[] verified) {
+   var calls=Calls(verified);var image=Image(calls);image.PrepareOnce();
+   Check(image.Ready && image.Observation.BytesHashed==verified.Length && image.Observation.EofRequestBytes==1 && image.Observation.EofReturnBytes==0,"actual partial reads/hash/positive terminal EOF");
+   Check(image.Observation.ActualSha256==FixedFixtureBuildExpectation.Sha256 && image.Observation.VolumeSerial=="0000000000000000" && image.Observation.FileId=="01000000000000000200000000000000" && image.Observation.HeldPath=="C:\\fixture\\NativeCaptureFixtureChild.exe","actual immutable same-handle observations");
+   Check(image.ObserveSharing(),"both exact known error32 probes");
+   var write=image.WriteProbeObservation;var delete=image.DeleteProbeObservation;
+   Check(write.Access==0x40000000 && delete.Access==0x10000 && write.Share==7 && delete.Share==7 && write.Disposition==3 && delete.Disposition==3 && write.OpenError==32 && delete.OpenError==32 && write.CloseState=="not-opened" && delete.CloseState=="not-opened","immutable actual probe observations");
+   Check(image.TryRelease(),"actual image checked close");ExactTrace(calls,PreparedTrace(verified,calls.PartialLimit,"probe1","error","probe2","error","close"));
+   foreach(string fault in new string[] {"open-false","open-unavailable"}) {
+    calls=Calls(verified);calls.Fault=fault;image=Image(calls);bool unavailable=false;
+    try { image.PrepareOnce(); } catch(Unavailable) { unavailable=true; }
+    Check(unavailable==(fault=="open-unavailable") && !image.Ready,"open unavailable distinct from actual FALSE");
+    Check(image.Observation.OpenState==(unavailable?"return-unknown":"returned-failure") && image.Observation.OpenError==(unavailable?(uint?)null:2U),"actual open state/error");
+    Check(image.TryRelease()==!unavailable && image.Released==!unavailable,"unknown acquisition retained, FALSE open owns nothing");
+    int count=calls.Trace.Count;Reject(delegate { image.PrepareOnce(); },"no open retry");Reject(delegate { image.ClaimForComposition(); },"failed/unavailable standalone preparation consumes freshness");Check(calls.Trace.Count==count,"no calls on claim rejection after failed preparation");
+    if(unavailable)ExactTrace(calls,"open");else ExactTrace(calls,"open","error");
+   }
+   foreach(string operation in new string[] {"attributes","size","identity","path"})foreach(bool unavailable in new bool[] {false,true}) {
+    calls=Calls(verified);calls.Fault=operation+(unavailable?"-unavailable":"-false");image=Image(calls);bool rejected=false;
+    try { image.PrepareOnce(); } catch(Unavailable) { rejected=unavailable; } catch(System.IO.IOException) { rejected=!unavailable; } catch(ArgumentException) { rejected=!unavailable; }
+    Check(rejected && !image.Ready,"actual metadata failure/unavailable refuses preparation");
+    Check(image.TryRelease()==!unavailable && image.Released==!unavailable,"unavailable synchronous metadata retains exact owner");
+    var expected=new System.Collections.Generic.List<string>();
+    foreach(string name in new string[] {"open","attributes","size","identity","path"}) { expected.Add(name);if(name==operation)break; }
+    if(!unavailable) { expected.Add("error");expected.Add("close"); }
+    ExactTrace(calls,expected.ToArray());int count=calls.Trace.Count;
+    Reject(delegate { image.PrepareOnce(); },"no metadata retry");Check(image.TryRelease()==!unavailable && calls.Trace.Count==count,"no second metadata/close boundary");
+   }
+   foreach(string fault in new string[] {"read-false","read-unavailable","eof-false","eof-unavailable","early","oversize","extra"}) {
+    calls=Calls(verified);calls.Fault=fault;image=Image(calls);bool unavailable=false;
+    try { image.PrepareOnce(); } catch(Unavailable) { unavailable=true; }
+    Check(unavailable==fault.EndsWith("unavailable",StringComparison.Ordinal) && !image.Ready,"real read failure refuses readiness");
+    var o=image.Observation;
+    Check(o.ActualSha256==null && o.ReadState==(unavailable?"return-unknown":fault.EndsWith("false",StringComparison.Ordinal)?"returned-failure":"known-incomplete"),"no partial digest or fabricated read return");
+    Check(o.ReadError==(fault.EndsWith("false",StringComparison.Ordinal)?5U:(uint?)null),"immediate known read error only");
+    if(fault=="early")Check(o.BytesHashed==0 && o.EofRequestBytes==Math.Min(65536,verified.Length) && o.EofReturnBytes==0,"actual premature EOF counts");
+    if(fault=="oversize")Check(o.BytesHashed==0 && o.EofRequestBytes==null,"impossible count is never hashed");
+    if(fault=="extra")Check(o.BytesHashed==verified.Length && o.EofRequestBytes==1 && o.EofReturnBytes==1,"extra terminal byte never hashed");
+    Check(image.TryRelease()==!unavailable,"unknown read forbids close; known read failure permits checked close");
+    var expected=new System.Collections.Generic.List<string>(new string[] {"open","attributes","size","identity","path"});
+    if(fault.StartsWith("eof",StringComparison.Ordinal) || fault=="extra") {
+     string[] prepared=PreparedTrace(verified,calls.PartialLimit);expected.Clear();expected.AddRange(prepared);
+    } else expected.Add("read");
+    if(fault.EndsWith("false",StringComparison.Ordinal))expected.Add("error");
+    if(!unavailable)expected.Add("close");ExactTrace(calls,expected.ToArray());
+    int count=calls.Trace.Count;Reject(delegate { image.PrepareOnce(); },"no read retry");Check(image.TryRelease()==!unavailable && calls.Trace.Count==count,"never close unresolved read or retry release");
+   }
+   foreach(long size in new long[] {0,FixedImageState.MaxImage+1,verified.Length+1}) {
+    calls=Calls(verified);calls.Size=size;image=Image(calls);image.PrepareOnce();
+    Check(!image.Ready && image.Observation.Refusal=="size-mismatch" && image.Observation.ActualSize==size && image.Observation.ReadState=="not-entered" && image.TryRelease(),"size refusal precedes identity/path/hash");ExactTrace(calls,"open","attributes","size","close");
+   }
+   byte[] changed=(byte[])verified.Clone();changed[0]^=1;calls=Calls(changed);image=Image(calls);image.PrepareOnce();
+   Check(!image.Ready && image.Observation.Refusal=="digest-mismatch" && image.Observation.ReadState=="complete" && image.Observation.ActualSha256==Digest(changed) && image.Expected.Sha256==FixedFixtureBuildExpectation.Sha256 && image.TryRelease(),"negative changes verified cloned bytes, never embedded expectations");
+   foreach(string fault in new string[] {"probe1-unavailable","probe-error","probe-success","probe-close-false","probe-close-unavailable"}) {
+    calls=Calls(verified);calls.Fault=fault;image=Image(calls);image.PrepareOnce();bool unavailable=false,denied=false;
+    try { denied=image.ObserveSharing(); } catch(Unavailable) { unavailable=true; }
+    bool retained=fault=="probe1-unavailable" || fault=="probe-close-false" || fault=="probe-close-unavailable";
+    Check(!denied && unavailable==(fault=="probe1-unavailable" || fault=="probe-close-unavailable"),"exact probe false/unavailable/success outcomes");
+    Check(!retained || !image.Ready,"probe uncertainty revokes readiness");
+    var old=image.WriteProbeObservation;Check(old!=null,"actual attempted probe snapshot");
+    if(retained)Check(image.DeleteProbeObservation==null,"unresolved first probe stops second");
+    Check(image.TryRelease()==!retained && image.Released==!retained,"unresolved probe retains entire image");
+    var tail=new System.Collections.Generic.List<string>();tail.Add("probe1");
+    if(fault!="probe1-unavailable") {
+     if(fault=="probe-error") { tail.Add("error");tail.Add("probe2");tail.Add("error"); }
+     else { tail.Add("probe-close");if(fault=="probe-close-false")tail.Add("error");if(fault=="probe-success") { tail.Add("probe2");tail.Add("probe-close"); } }
+    }
+    if(!retained)tail.Add("close");ExactTrace(calls,PreparedTrace(verified,calls.PartialLimit,tail.ToArray()));
+    int count=calls.Trace.Count;Reject(delegate { image.ObserveSharing(); },"probe one-shot even after unavailable result");Check(image.TryRelease()==!retained && calls.Trace.Count==count,"never retry probe close or release retained image");
+    Check(old.OpenState==image.WriteProbeObservation.OpenState && old.CloseState==image.WriteProbeObservation.CloseState,"probe snapshot immutable");
+   }
+  }
+  public static int RunInjectedOwners(byte[] pristineBytes) {
+   byte[] verified=VerifiedPristine(pristineBytes);
+   Reject(delegate { VerifiedPristine(null); },"null pristine bytes");
+   Reject(delegate { VerifiedPristine(new byte[0]); },"empty pristine bytes");
+   byte[] wrong=(byte[])verified.Clone();wrong[0]^=1;
+   Reject(delegate { VerifiedPristine(wrong); },"same-size altered pristine bytes rejected before fake setup");
+   byte[] copy=VerifiedPristine(verified);copy[0]^=1;Check(Digest(verified)==FixedFixtureBuildExpectation.Sha256,"verified input cloned before use");
+   ClaimRejectsPreparedReleasedAndReused(verified);
+   ConcurrentClaimHasOneWinner(verified);
+   TransferredFacadeCannotPrepareProbeOrRelease(verified);
+   ReadyRequiresLiveUnclosedKnownHandle(verified);
+   UnopenedReleasePreventsLaterClaim(verified);
+   RealFileOwnerUsesOnlyInjectedCalls(verified);
+   Console.WriteLine("PASS fixed image injected owners");return 0;
   }
   public static int RunManaged() {
    var expected=new FixedImageExpectation(1,new string('a',64));
