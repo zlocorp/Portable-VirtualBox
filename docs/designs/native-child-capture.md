@@ -67,3 +67,12 @@ Native submission-unknown, persistent wait failure, arbitrary allocation failure
 malicious children, loader/environment interference and descendant containment
 are not claimed as exercised OS cases. Managed decisions and fail-closed source
 paths cover the first limitations; this fixture cannot establish production safety.
+
+## Observed checkpoint
+
+Independent review accepted the exact-source push and synthetic-merge PR native
+observations for source `50262c86658ce99453845a021786b781d68aae87`: all nine
+cases completed with the stated byte/hash, fault, exit/EOF and release facts.
+The [execution record](../EXECUTION-2026-11-11-fixed-child-capture.md) distinguishes
+tested checkout revisions and preserves digests, all 11 successful workflow runs
+and remaining limits. This does not broaden the test-only boundary above.

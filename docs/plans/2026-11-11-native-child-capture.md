@@ -37,12 +37,24 @@ executable behavior tests, not source-text substitutes.
 
 Both new executables compile with C# 5, x64, warnings-as-errors and official .NET
 Framework 4.8 reference assemblies. The active-tree check and diff whitespace check
-pass. Native Windows execution and measured runtime are still pending hosted CI;
-Linux compilation and managed tests are not Windows observation evidence.
+pass. Native Windows execution was pending at local verification; the subsequent
+source-associated hosted results below establish the native observation. Linux
+compilation and managed tests alone are not Windows observation evidence.
 
 Final local aggregate: `python -X utf8 -m unittest discover -s tests -v` passed
 345 tests with 6 platform skips, using the restored PowerShell for managed tests.
 The 21 new tests include strict evidence rejection cases and the actual managed
 C# report serializer without calling Prepare, Run, or any native API; those
 synthetic serializer records are not presented as OS evidence. PowerShell/YAML
-parsing also passed. Hosted Windows remains the required next native check.
+parsing also passed.
+
+## Hosted source checkpoint
+
+Source `50262c86658ce99453845a021786b781d68aae87` passed all 11 naturally
+triggered workflows on attempt 1. Native push tested the exact source; native PR
+tested synthetic merge `cc47573496fad6d6133b3e17c9d818c77c6f2337`. Independent
+review accepted both nine-case runs, recomputed all 18 stream counts/hashes per
+run and checked observed faults, fair terminal reads and explicit owner release.
+The actual child steps took approximately 3.66 and 3.58 seconds on Windows Server
+2022. See the [execution record and limits](../EXECUTION-2026-11-11-fixed-child-capture.md).
+No production lifetime repair, sanitized environment or workstation approval follows.
