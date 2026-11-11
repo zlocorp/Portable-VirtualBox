@@ -2,15 +2,19 @@
 
 ## Status and scope
 
-This test-only design is implemented and independently reviewed locally. Hosted
-Windows observation of this increment is still pending.
+This test-only design is implemented and independently reviewed. At source
+`929c3463d1c717f6bceefabb276e4f3b63f38691`, all 11 naturally triggered workflows
+passed on attempt 1. Independent artifact review accepted all three environment
+cases and rechecked all nine baseline cases on push and PR. See the
+[execution record](../EXECUTION-2026-11-11-native-launch-environment.md) for exact
+checkouts, actual captured bytes, artifact digests and limitations.
 Baseline source `50262c86658ce99453845a021786b781d68aae87` has nine fixed-child
 capture cases. Preserve their cases, output expectations and lifetime assertions.
 Baseline capture observations on both push and PR have been accepted separately.
 All 11 baseline workflows subsequently passed; none of that evidence verifies this
 new environment increment.
 
-The next independently useful increment supplies an explicit bounded Unicode
+This independently useful increment supplies an explicit bounded Unicode
 environment to the retained native owner and observes it in the harmless fixed
 child. No production source, elevation, services, PnP, downloads, security settings,
 primary-host experiments or executable selection are in scope. Passing observations

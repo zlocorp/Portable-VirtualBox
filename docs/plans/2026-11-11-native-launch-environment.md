@@ -141,9 +141,11 @@ build-generated digest source before implementation. No new production files.
 ## Verification record
 
 Tasks 1–3 have local implementation, managed RED/GREEN and independent review.
-Hosted Windows environment observations and baseline runtime regression on the new
-source remain pending. All 11 baseline workflows passed separately; that does not
-verify this increment. See the local checkpoint below for its actual test results.
+At source `929c3463d1c717f6bceefabb276e4f3b63f38691`, all 11 naturally triggered
+workflows passed on attempt 1. Independent artifact review accepted all three
+environment cases and rechecked all nine baseline cases on both native push and PR.
+See the [execution record](../EXECUTION-2026-11-11-native-launch-environment.md)
+for exact checkouts, actual captured bytes, digests and limitations.
 
 ## Local implementation checkpoint (2026-11-11)
 
@@ -166,12 +168,16 @@ YAML parsed with the existing six-minute budget; the environment harness and fix
 child compiled as C# 5/x64/.NET Framework 4.8 with warnings as errors.
 
 Independent implementation review found no remaining blockers and independently
-reran all 24 environment contracts with PowerShell. Exact-head hosted Windows
-observations are still pending. Local managed execution is not native Windows evidence. The native
-sentinel absence/empty/nonempty restoration matrix, all three environment cases,
-and all nine baseline regression cases must pass on hosted Windows before writing
-an execution acceptance record. No production source, production helper semantics,
-image-admission policy, release or merge authorization changed.
+reran all 24 environment contracts with PowerShell. Subsequent hosted push tested
+the exact source; PR tested synthetic merge
+`dcb89ac8a59e6ee51b51814884508cfec7e51f75`. The native sentinel
+absence/empty/nonempty restoration matrix, all three environment cases and all nine
+baseline regression cases passed. Independent decoding verified the actual
+110-byte PVE1 record, including Unicode, present-empty value, absent sentinel and
+both OS-derived directories. The diagnostic fault occurred at stdout byte eight
+before the full record; retained capture still parsed it. No production source,
+production helper semantics, image-admission policy, release or merge authorization
+changed. Local managed execution is not substituted for native Windows evidence.
 
 The artifact now includes independently decodable actual PVE1 bytes and the
 separate OS-query directory expectation. Mutation tests reject forged observation
