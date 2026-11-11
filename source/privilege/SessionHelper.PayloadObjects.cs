@@ -61,7 +61,7 @@ namespace PortableVBox {
      // not an optional 3/4-ACE fallback. The mandatory BA owner check above is
      // essential: the medium caller must not gain implicit owner WRITE_DAC.
      // Parent directories retain OWNER_RIGHTS throughout the creation window.
-     if((actual.ControlFlags&ControlFlags.DiscretionaryAclProtected)!=0 || actual.DiscretionaryAcl.Count!=3) throw new InvalidDataException("Untrusted payload file ACL");
+     if((actual.ControlFlags&ControlFlags.DiscretionaryAclProtected)!=0 || actual.DiscretionaryAcl.Count!=3) throw new InvalidDataException("Untrusted payload file ACL: flags="+actual.ControlFlags+"; count="+actual.DiscretionaryAcl.Count+"; "+actual.GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access));
      var identities=new[]{SystemSid,Admins,new SecurityIdentifier(sid)};
      var masks=new[]{0x1f01ff,0x1f01ff,0x1200a9};
      for(int i=0;i<identities.Length;i++) {
@@ -80,7 +80,8 @@ namespace PortableVBox {
    if(count==0) throw new Win32Exception(Marshal.GetLastWin32Error());
    string resolved=final.ToString();if(resolved.StartsWith("\\\\?\\",StringComparison.Ordinal)) resolved=resolved.Substring(4);
    if(count>=final.Capacity || !String.Equals(resolved,Full(path),StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Payload path identity changed");
-   VerifyPayloadAcl(handle,sid,directory);
+   try {VerifyPayloadAcl(handle,sid,directory);}
+   catch(InvalidDataException e) {throw new InvalidDataException("Payload "+Path.GetFileName(path)+": "+e.Message,e);}
    string identity;
    IntPtr buffer=Marshal.AllocHGlobal(24);
    try {

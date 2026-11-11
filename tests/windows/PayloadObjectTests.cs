@@ -29,8 +29,14 @@ namespace PortableVBox {
   }
   static byte[] Descriptor(string sddl) {var sd=new RawSecurityDescriptor(sddl);var bytes=new byte[sd.BinaryLength];sd.GetBinaryForm(bytes,0);return bytes;}
   static void SetSecurity(string path,bool directory) {
-   byte[] bytes=directory?((DirectorySecurity)Call("Security",sid)).GetSecurityDescriptorBinaryForm():Descriptor("O:BA");
-   if(!SetFileSecurityW(path,directory?0x80000005U:1U,bytes)) throw new Win32Exception(Marshal.GetLastWin32Error());
+   if(directory) {
+    byte[] bytes=((DirectorySecurity)Call("Security",sid)).GetSecurityDescriptorBinaryForm();
+    if(!SetFileSecurityW(path,0x80000005U,bytes)) throw new Win32Exception(Marshal.GetLastWin32Error());
+   } else {
+    // Match WriteNew/ValidateAndStage exactly. The legacy SetFileSecurityW
+    // OWNER-only API does not have the same inherited-ACE normalization.
+    var security=File.GetAccessControl(path);security.SetOwner(new SecurityIdentifier("S-1-5-32-544"));File.SetAccessControl(path,security);
+   }
   }
   static string NewFile(string name) {string path=Path.Combine(root,name);File.WriteAllBytes(path,new byte[]{1,2,3});SetSecurity(path,false);return path;}
   static string NewDirectory(string name) {string path=Path.Combine(root,name);Directory.CreateDirectory(path);SetSecurity(path,true);return path;}
@@ -51,7 +57,9 @@ namespace PortableVBox {
    try {
     SetSecurity(root,true);
     Check(!(bool)Call("PayloadExists",Path.Combine(root,"missing")),"explicit missing is absent");
-    string file=NewFile("file"),identity=Capture(file,false);
+    string file=NewFile("file");
+    Console.WriteLine("NATIVE_FILE_ACL="+File.GetAccessControl(file).GetSecurityDescriptorSddlForm(AccessControlSections.Owner|AccessControlSections.Access));
+    string identity=Capture(file,false);
     Check(identity==Capture(file,false),"stable file handle identity");
     File.Move(file,file+".old");NewFile("file");
     Check(identity!=Capture(file,false),"same bytes recreated file has different identity");
