@@ -8,6 +8,14 @@ on:
       - tests/windows/check_portable_cli.ps1
       - tests/windows/check_durable_journal.ps1
       - tests/windows/DurableJournalTests.cs
+      - tests/windows/NativeLaunchFixtureChild.cs
+      - tests/windows/NativeLaunchObservation.cs
+      - tests/windows/NativeLaunchObservationNative.cs
+      - tests/windows/NativeLaunchObservationNativeTests.cs
+      - tests/windows/NativeLaunchObservationTests.cs
+      - tests/windows/NativeProcessRuntimeInspection.cs
+      - tests/windows/check_native_launch_observation.ps1
+      - tests/test_native_launch_observation_contract.py
       - scripts/vbox_sup_package_identity.ps1
       - tests/windows/check_driver_package_identity.ps1
       - tests/windows/check_driver_start_gate.ps1
@@ -92,3 +100,17 @@ jobs:
       - name: Execute owner-bound private payload file-only contracts
         shell: powershell
         run: ./tests/windows/check_payload_cleanup_contracts.ps1
+      - name: Observe fixed harmless native child lifetime (file-only, no authority)
+        id: native_launch_observation
+        shell: powershell
+        run: ./tests/windows/check_native_launch_observation.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-launch-evidence')
+      - name: Store bounded native launch and CLR observations (text only)
+        if: always() && steps.native_launch_observation.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-launch-observation
+          path: |
+            ${{ runner.temp }}/pvbox-native-launch-evidence/native-launch-observations.jsonl
+            ${{ runner.temp }}/pvbox-native-launch-evidence/runtime-process-inspection.json
+          if-no-files-found: error
+          retention-days: 7
