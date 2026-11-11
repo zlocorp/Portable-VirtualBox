@@ -73,6 +73,17 @@ namespace PortableVBox {
    Refuses(()=>PortableCli.ValidateBinding(binding,receipt,controller,caller,@"C:\portable",@"C:\protected\pvbox-manager-123-3",123,3),"different desktop session refused");caller.Session=2;
    caller.Sid="S-1-5-21-2";
    Refuses(()=>PortableCli.ValidateBinding(binding,receipt,controller,caller,@"C:\portable",@"C:\protected\pvbox-manager-123-3",123,3),"different SID refused");
+   string leaseRoot=Path.Combine(Path.GetTempPath(),"pvbox-cli-lease-"+Guid.NewGuid().ToString("N"));
+   Directory.CreateDirectory(leaseRoot);
+   string lockedDir=Path.Combine(leaseRoot,"locked"),movedDir=Path.Combine(leaseRoot,"moved");Directory.CreateDirectory(lockedDir);
+   try {
+    using(var lease=new CliFiles()) {
+     lease.LockDirectory(lockedDir);bool refused=false;
+     try {Directory.Move(lockedDir,movedDir);} catch(IOException) {refused=true;}
+     Check(refused,"actual CLI directory lease prevents rename while held");
+    }
+    Directory.Move(lockedDir,movedDir);Check(Directory.Exists(movedDir),"CLI directory rename allowed only after lease closes");
+   } finally {Directory.Delete(leaseRoot,true);}
    Console.WriteLine("PASS portable CLI: "+count+" native argument/profile/receipt assertions");return 0;
   }
  }

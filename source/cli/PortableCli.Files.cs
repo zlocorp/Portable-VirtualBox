@@ -39,7 +39,9 @@ namespace PortableVBox {
    if(directories.Contains(path)) return;
    FileAttributes a=File.GetAttributes(path);
    if((a&FileAttributes.ReparsePoint)!=0 || (a&FileAttributes.Directory)==0) throw new InvalidOperationException("Unsafe directory");
-   var h=CreateFileW(path,0x80,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero); // read attributes; no share-delete
+   // FILE_LIST_DIRECTORY is necessary for actual share-delete exclusion;
+   // metadata-only READ_ATTRIBUTES opens do not pin the namespace.
+   var h=CreateFileW(path,0x81,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero); // list/read; no share-delete
    if(h.IsInvalid) {h.Dispose();throw new Win32Exception(Marshal.GetLastWin32Error());}
    leases.Add(h);ExactHandle(h,path);
    if((File.GetAttributes(path)&FileAttributes.ReparsePoint)!=0) throw new InvalidOperationException("Reparse directory refused");

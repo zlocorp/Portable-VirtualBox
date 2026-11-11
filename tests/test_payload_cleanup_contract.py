@@ -24,6 +24,8 @@ class PayloadCleanupContracts(unittest.TestCase):
         self.assertNotIn('File.Exists(',text)
         self.assertNotIn('Directory.Exists(',text)
         self.assertIn('ReleasePayloadLocks',self.source('source/privilege/SessionHelper.cs'))
+        self.assertIn('CreateFileW(path,0x81,3',self.source('source/privilege/SessionHelper.cs'))
+        self.assertIn('CreateFileW(path,0x20081,3',text)
     def test_build_compiles_fixed_modules_and_native_contracts_execute(self):
         build=self.source('scripts/build_session_helper.ps1')
         for name in ('PayloadCleanupJournal.cs','PayloadCleanupPlan.cs','SessionHelper.PayloadCleanup.cs','System.ServiceProcess.dll'):

@@ -34,7 +34,7 @@ namespace PortableVBox {
   }
   static SafeFileHandle OpenPayloadObject(string path,bool directory,bool deleting) {
    path=Full(path);LockParents(Path.GetDirectoryName(path));
-   uint access=0x20080U | (directory?0U:0x80000000U) | (deleting?0x10000U:0U);
+   uint access=0x20081U | (directory?0U:0x80000000U) | (deleting?0x10000U:0U);
    // OPEN_REPARSE_POINT + BACKUP_SEMANTICS; FILE_SHARE_READ only prevents
    // competing write/delete handles for the entire validation and disposition.
    SafeFileHandle handle=CreateFileW(path,access,1,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
@@ -107,9 +107,10 @@ namespace PortableVBox {
   }
   static IDisposable OpenPayloadEvidenceGuard(string path,string sid) {
    path=Full(path);LockParents(Path.GetDirectoryName(path));
-   // Metadata-only access is compatible with the journal's read/write stream.
-   // Denying FILE_SHARE_DELETE pins this exact evidence object for its lifetime.
-   var handle=CreateFileW(path,0x20080,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
+   // READ_DATA is essential: metadata-only opens do not participate in Win32
+   // share denial. ShareRead|ShareWrite keeps the journal writer compatible,
+   // while this read handle denies rename/delete for its entire lifetime.
+   var handle=CreateFileW(path,0x20081,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
    if(handle.IsInvalid) {int error=Marshal.GetLastWin32Error();handle.Dispose();throw new Win32Exception(error);}
    try {VerifyPayloadObject(handle,path,sid,false,0,null,false);return handle;}
    catch {handle.Dispose();throw;}

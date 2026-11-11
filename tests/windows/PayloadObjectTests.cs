@@ -142,7 +142,7 @@ namespace PortableVBox {
   static string Full(string path) {return Path.GetFullPath(path).TrimEnd('\\');}
   static void LockParents(string path) {
    if(String.IsNullOrEmpty(path)) return;LockParents(Path.GetDirectoryName(path));if(!LockedDirs.Add(path)) return;
-   var handle=CreateFileW(path,0x80,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
+   var handle=CreateFileW(path,0x81,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero);
    if(handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());Locks.Add(handle);
   }
   static string Hash(Stream stream) {using(var hash=SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(stream)).Replace("-","").ToLowerInvariant();}

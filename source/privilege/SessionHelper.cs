@@ -67,7 +67,9 @@ namespace PortableVBox {
             if(!LockedDirs.Add(path)) return;
             FileAttributes a=File.GetAttributes(path);
             if((a&FileAttributes.ReparsePoint)!=0 || (a&FileAttributes.Directory)==0) throw new InvalidOperationException("Unsafe directory");
-            var h=CreateFileW(path,0x80,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero); // no FILE_SHARE_DELETE
+            // FILE_LIST_DIRECTORY participates in Win32 share checks. A handle
+            // requesting only READ_ATTRIBUTES does NOT prevent directory rename.
+            var h=CreateFileW(path,0x81,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero); // no FILE_SHARE_DELETE
             if(h.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
             HoldLock(h,path);
             var final=new StringBuilder(32768);
