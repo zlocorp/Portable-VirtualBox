@@ -6,6 +6,8 @@ on:
       - 'source/**'
       - 'tests/native/**'
       - tests/windows/check_portable_cli.ps1
+      - tests/windows/check_durable_journal.ps1
+      - tests/windows/DurableJournalTests.cs
       - scripts/test-native.ps1
       - .github/workflows/native-tests.yml
   pull_request:
@@ -39,3 +41,6 @@ jobs:
       - name: Execute portable CLI argument and receipt contracts
         shell: pwsh
         run: ./tests/windows/check_portable_cli.ps1
+      - name: Execute durable journal storage and interruption contracts
+        shell: pwsh
+        run: ./tests/windows/check_durable_journal.ps1
