@@ -1,6 +1,6 @@
 # Native Launch Observation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+This plan records the implementation steps, independent review and exact-commit verification of the test-only experiment.
 
 **Goal:** Replace hypothetical child-lifetime premises with bounded, test-only Windows observations.
 
@@ -55,15 +55,15 @@ Files: `.github/workflows/native-tests.yml`, one `docs/RELEASE-GATES.md` blockin
 
 - [x] Add real test source path dependencies, one file-only execution step and a bounded text-only artifact.
 - [x] Run full `python -m unittest discover -s tests` with the installed PowerShell environment.
-- [x] Run `git diff --check`; report exclusions and exact test counts to the parent.
-- [x] Parent independently reviews and controls publication; this worker does not commit or push.
+- [x] Run `git diff --check`; record exclusions and exact test counts.
+- [x] Require independent review before publication for hosted verification.
 
 ## Execution record
 
 - Base: `c9eba877c25adc3632be3ae03898b5e046006d22`.
 - RED: focused Python suite, three assertion failures for missing safe native runner (2026-11-11).
 - RED: compiled managed C# runner failed the actual acknowledgment assertion, "A real write/flush/readback must precede acknowledgment". A prior sandbox file-write restriction and compiler warning were resolved before counting this behavioral RED.
-- Ruling: implement in the existing parent-owned branch with disjoint test/doc files, not a new worktree; the parent coordinates shared work and publication.
+- Scope: implement in the existing development branch using only the listed test and documentation files.
 - Ruling: use this requested plan file as the durable execution record, rather than additional workflow bookkeeping files outside the assigned scope.
 - RED to GREEN: real held-writer acknowledgment and storage-stage poisoning, malformed-surrogate refusal, cleanup after a missed drain counter, and unavailable native outcome with no published handle. The latter is a managed decision simulation, not a reproduced marshalling/allocation failure.
 - RED to GREEN: inspector real method decode, late-call retention after verbose truncation, malformed-JSON unavailable metadata/hash paths, and strict Python parsing of all three metadata reports. Unresolved tokens report unsupported; on-disk bytes do not attest loaded module bytes.
@@ -72,7 +72,7 @@ Files: `.github/workflows/native-tests.yml`, one `docs/RELEASE-GATES.md` blockin
 - GREEN: four focused Python tests; full suite 317 tests with 6 skips; both harness and fixed child C#5/x64/net48-reference compilation with warnings-as-errors; diff whitespace check.
 - Pre-publication status: native Windows tests were implemented but not executed locally. Actual native FALSE, timeout/exit259, serviced Framework IL and retained child behavior still required hosted observation; the later results are recorded below.
 - Pre-publication review approved the final 12-file diff for exact-SHA hosted CI after focused/full-suite/net48 checks passed. Windows observations were then pending; that review was not runtime acceptance.
-- No source/privilege, production script, build/package input, runtime callback, primary Windows, VBox/system effect, commit, push, merge or release action was performed by this worker.
+- This experiment changed no production source, privilege boundary, production script, build/package input or runtime callback. It ran no VBox/system effect or primary-Windows test and did not merge or release a build.
 
 ## Hosted execution result
 

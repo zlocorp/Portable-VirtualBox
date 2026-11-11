@@ -1,7 +1,7 @@
 # SYSTEM cleanup outcomes model implementation plan
 
-> For agentic workers: use the repository test-first workflow; this task is an
-> explicitly assigned internal implementation, with parent review before publishing.
+This plan records the test-first implementation of a non-authorizing model,
+with independent review required before publication.
 
 **Goal:** executable non-authorizing SYSTEM outcome specification.
 **Architecture:** pure typed-event inspector plus fault-injected in-memory writer;
@@ -29,7 +29,7 @@ All decision results must explicitly deny mutation authority.
   `SimulatedWriter.append(record, *, fault)` / `inspect()` in the test-only module.
   Expose no native operation or continuation API.
 - [x] Run targeted tests and the full `python3 -m unittest discover -s tests -v` suite.
-- [x] Review four-file diff; report evidence/limits to parent without commit/push.
+- [x] Review the four-file diff and record evidence and limitations before publication.
 
 ## Verification record
 
@@ -39,9 +39,10 @@ All decision results must explicitly deny mutation authority.
 - Final targeted green: 12 tests pass, including 781 short event sequences and
   36 simulated fault boundaries.
 - Full suite: 307 tests, OK, 11 platform-specific skips. No Windows run claimed.
-- `git diff --check` passes. Only the four assigned files were created by this
-  worker; parent-owned security documentation changes were left untouched.
-- No commits or pushes performed. Independent parent review remains required.
+- `git diff --check` passes. This implementation created only the four listed
+  files and left security documentation unchanged.
+- Pre-publication status: no commit or push was included in this implementation;
+  independent review remained required.
 
 ## Review follow-up
 
