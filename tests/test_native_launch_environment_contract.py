@@ -22,8 +22,12 @@ class EnvironmentManagedContract(unittest.TestCase):
         script = r'''
 $ErrorActionPreference='Stop'
 $root='__ROOT__'
-$sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs','NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') | ForEach-Object { Join-Path $root $_ }
-Add-Type -Path $sources
+. (Join-Path $root 'NativeFixedFixtureBuild.ps1')
+$parent=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-direct-owner-build-'+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $parent | Out-Null
+$build=New-FixedFixtureBuild $parent
+$names=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs','NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs')
+Add-Type -Path @(Get-FixedFixtureConsumerSources $build $names)
 $a=[PortableVBox.NativePipeTransportTests].Assembly
 $t=$a.GetType('PortableVBox.ChildCaptureOwner',$true)
 $e=$a.GetType('PortableVBox.CaptureCase',$true)
@@ -411,11 +415,15 @@ class EnvironmentRunnerContract(unittest.TestCase):
         script=r"""
 $ErrorActionPreference='Stop'
 $root='__ROOT__'
-$sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
+. (Join-Path $root 'NativeFixedFixtureBuild.ps1')
+$parent=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-direct-owner-build-'+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $parent | Out-Null
+$build=New-FixedFixtureBuild $parent
+$names=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
  'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
  'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeLaunchEnvironmentObservation.cs',
- 'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs','NativeLaunchEnvironmentTests.cs','NativeLaunchEnvironmentPolicyTests.cs') | ForEach-Object { Join-Path $root $_ }
-Add-Type -Path $sources
+ 'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs','NativeLaunchEnvironmentTests.cs','NativeLaunchEnvironmentPolicyTests.cs','NativeFixedImageIdentity.cs')
+Add-Type -Path @(Get-FixedFixtureConsumerSources $build $names)
 $a=[PortableVBox.NativePipeTransportTests].Assembly
 $t=$a.GetType('PortableVBox.ChildCaptureOwner',$true)
 $e=$a.GetType('PortableVBox.CaptureCase',$true)

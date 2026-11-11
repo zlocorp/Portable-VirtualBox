@@ -1,11 +1,15 @@
 # Test-only exact sentinel observation
 
-Status: preflight review and pure Task 1 source/interface review are complete.
-Task 2 adapter, fresh-parent and fixed-child composition is implemented locally
-with managed behavioral tests. Independent Task 2 review and changed-source Windows
-observation remain pending. No new native success is claimed. The
-[implementation plan](../plans/2026-11-11-native-sentinel-observation.md) preserves
-the staged contract and verification gates.
+Status: preflight, pure Task 1, native-composition and final integration reviews
+are complete. Published source `519056432b4d9bd045140d2ba2bbe924e5c135e9` passed
+both natural Windows native runs and all 11 triggered workflows on attempt 1.
+Independent artifact review accepted nine capture, three environment and four
+file-only image cases per native run. See the [execution record](../EXECUTION-2026-11-11-native-sentinel-observation.md)
+for exact checkouts, same-tree PR evidence, artifact digests and inference limits.
+The [implementation plan](../plans/2026-11-11-native-sentinel-observation.md)
+preserves the staged contract and verification sequence. This is test-only
+acceptance; fixed-image process composition and production lifetime repair remain
+outside this increment.
 
 ## Motivation and scope
 
@@ -300,7 +304,12 @@ cases continue to observe files only and do not launch this child. Keep pristine
 image expectation generation before negative copies; changed executable bytes
 receive genuinely regenerated build expectations, not patched old hashes.
 
-Actual Windows behavior for this proposal remains pending. Native observations
-after an authorized source change must be recorded separately from the b2229c5
-failure and from managed contracts. Do not weaken assertions, manufacture a
-collision, add retries, raise timeouts or claim production safety to obtain green.
+Actual Windows observations are now accepted only for the published source/tree
+and runs in the [execution record](../EXECUTION-2026-11-11-native-sentinel-observation.md).
+Both native runs passed the unchanged 9+3+4 assertions and strict validators.
+The normalized PVC2 result does not expose which exclusion branch ran or establish
+native error-1656 coverage. Those distinctions remain deterministic managed-model
+and raw-call-fake coverage, not an actual collision/race experiment. The b2229c5
+failure remains unchanged and separate. No assertions were weakened, collisions
+manufactured, retries added, timeouts raised or failed CI rerun to obtain green.
+No production safety or release claim follows.

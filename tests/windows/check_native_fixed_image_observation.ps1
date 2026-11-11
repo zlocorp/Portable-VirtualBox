@@ -3,6 +3,7 @@
 param([switch]$ManagedOnly,[string]$EvidenceDirectory='')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'NativeFixedFixtureBuild.ps1')
 $windows=([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
 if (-not $ManagedOnly -and -not $windows) {
     Write-Output 'SKIP native fixed image observation: Windows required'
@@ -20,29 +21,6 @@ $total=0
 $failed=0
 $stop='none'
 $valid=$false
-function Compile-Fixed([string[]]$Sources,[string]$Output,[string]$MainType) {
-    if ($windows) {
-        $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-        & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ ('/main:'+$MainType) ('/out:'+$Output) @Sources
-        if ($LASTEXITCODE -ne 0) { throw 'Fixed image C#5/x64 compilation failed' }
-    } else {
-        # Managed-only compilation against explicitly provided official net48 refs.
-        # This path never invokes a generated executable or supplies native inputs.
-        if (-not $ManagedOnly -or -not $env:PVBOX_TEST_NET48_REFERENCES) { throw 'Managed-only compilation requires PVBOX_TEST_NET48_REFERENCES' }
-        Add-Type -Path (Join-Path $PSHOME 'Microsoft.CodeAnalysis.dll')
-        Add-Type -Path (Join-Path $PSHOME 'Microsoft.CodeAnalysis.CSharp.dll')
-        $parse=[Microsoft.CodeAnalysis.CSharp.CSharpParseOptions]::new([Microsoft.CodeAnalysis.CSharp.LanguageVersion]::CSharp5)
-        $trees=[Microsoft.CodeAnalysis.SyntaxTree[]]@($Sources | ForEach-Object { [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([IO.File]::ReadAllText($_),$parse) })
-        $references=[Microsoft.CodeAnalysis.MetadataReference[]]@(@('mscorlib.dll','System.dll','System.Core.dll','System.Security.dll') | ForEach-Object { [Microsoft.CodeAnalysis.MetadataReference]::CreateFromFile((Join-Path $env:PVBOX_TEST_NET48_REFERENCES $_)) })
-        $options=[Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions]::new([Microsoft.CodeAnalysis.OutputKind]::ConsoleApplication)
-        $options=$options.WithPlatform([Microsoft.CodeAnalysis.Platform]::X64).WithGeneralDiagnosticOption([Microsoft.CodeAnalysis.ReportDiagnostic]::Error).WithMainTypeName($MainType)
-        $compile=[Microsoft.CodeAnalysis.CSharp.CSharpCompilation]::Create([IO.Path]::GetFileNameWithoutExtension($Output),$trees,$references,$options)
-        $stream=[IO.File]::Open($Output,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
-        try { $result=$compile.Emit($stream) } finally { $stream.Dispose() }
-        if (-not $result.Success) { $result.Diagnostics | ForEach-Object { Write-Output $_.ToString() };throw 'Managed-only C#5/x64/net48 compilation failed' }
-    }
-    [IO.File]::WriteAllText(($Output+'.config'),'<configuration><startup><supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" /></startup></configuration>',$encoder)
-}
 function Write-Record([string]$Line) {
     if ($Line.Length -gt 16383 -or $script:records -ge 5) { throw 'Fixed image record bound' }
     $bytes=$encoder.GetBytes($Line+"`n")
@@ -52,20 +30,9 @@ function Write-Record([string]$Line) {
     Write-Output $Line
 }
 try {
-    $pristine=Join-Path $out 'pristine'
-    New-Item -ItemType Directory -Path $pristine | Out-Null
-    $child=Join-Path $pristine 'NativeCaptureFixtureChild.exe'
-    Compile-Fixed @((Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs'),(Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs'),(Join-Path $PSScriptRoot 'NativeSentinelObservation.cs'),(Join-Path $PSScriptRoot 'NativeSentinelObservationNative.cs')) $child 'PortableVBox.NativeCaptureFixtureChild'
-    # Hash completed pristine bytes ONCE, before any negative copy is prepared.
+    $build=New-FixedFixtureBuild $out
+    $child=$build.PristineChild
     $length=(Get-Item -LiteralPath $child).Length
-    if ($length -le 0 -or $length -gt 16777216) { throw 'Pristine image size bound' }
-    $digest=(Get-FileHash -LiteralPath $child -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($digest -cnotmatch '\A[0-9a-f]{64}\z') { throw 'Pristine digest syntax' }
-    $expectation=Join-Path $out 'FixedFixtureBuildExpectation.g.cs'
-    $generated="// Generated from completed pristine harmless build bytes. TEST ONLY.`nnamespace PortableVBox { internal static class FixedFixtureBuildExpectation { internal const string Name = `"NativeCaptureFixtureChild.exe`"; internal const long Length = "+$length.ToString([Globalization.CultureInfo]::InvariantCulture)+"L; internal const string Sha256 = `""+$digest+"`"; } }`n"
-    if ($encoder.GetByteCount($generated) -gt 2048) { throw 'Generated expectation source bound' }
-    [IO.File]::WriteAllText($expectation,$generated,$encoder)
-    $expectationDigest=(Get-FileHash -LiteralPath $expectation -Algorithm SHA256).Hash
     $harnesses=@()
     # Fixed Cyrillic+CJK case segment; keep script bytes ASCII for Windows PS 5.1.
     $caseRoot=Join-Path $out ('fixed-'+[char]0x0416+'-'+[char]0x6f22)
@@ -77,8 +44,8 @@ try {
         $caseSource=Join-Path $directory 'FixedFixtureCase.g.cs'
         [IO.File]::WriteAllText($caseSource,('namespace PortableVBox { internal static class FixedFixtureCase { internal const string Name = "'+$name+'"; } }'),$encoder)
         $exe=Join-Path $directory 'NativeFixedImageIdentityTests.exe'
-        if (-not (Test-Path -LiteralPath $expectation -PathType Leaf) -or (Get-FileHash -LiteralPath $expectation -Algorithm SHA256).Hash -ne $expectationDigest) { throw 'Missing or stale pristine expectation' }
-        Compile-Fixed @((Join-Path $PSScriptRoot 'NativeFixedImageIdentity.cs'),(Join-Path $PSScriptRoot 'NativeFixedImageIdentityTests.cs'),(Join-Path $PSScriptRoot 'NativeFixedImageIdentityNativeTests.cs'),$expectation,$caseSource) $exe 'PortableVBox.NativeFixedImageIdentityNativeTests'
+        $sources=@(Get-FixedFixtureConsumerSources $build @('NativeFixedImageIdentity.cs','NativeFixedImageIdentityTests.cs','NativeFixedImageIdentityNativeTests.cs'))
+        Compile-FixedFixtureSources @($sources+$caseSource) $exe 'PortableVBox.NativeFixedImageIdentityNativeTests'
         $harnesses+=,$exe
     }
     [Reflection.Assembly]::LoadFile($harnesses[0]) | Out-Null
@@ -94,7 +61,7 @@ try {
     $larger=Join-Path (Split-Path $harnesses[2] -Parent) 'NativeCaptureFixtureChild.exe'
     $append=[IO.File]::Open($larger,[IO.FileMode]::Append,[IO.FileAccess]::Write,[IO.FileShare]::None)
     try { $append.WriteByte(0);$append.Flush($true) } finally { $append.Dispose() }
-    if ((Get-FileHash -LiteralPath $expectation -Algorithm SHA256).Hash -ne $expectationDigest) { throw 'Pristine expectation changed after negative setup' }
+    Assert-FixedFixtureBuild $build
     $writer=[IO.File]::Open($log,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
     foreach ($exe in $harnesses) {
         $seen=0

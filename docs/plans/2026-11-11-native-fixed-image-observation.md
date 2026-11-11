@@ -1,6 +1,8 @@
 # Native Fixed-Image Observation Implementation Plan
 
-> Execute task-by-task with TDD and independent review.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> or superpowers:executing-plans only after preflight review and controller assignment. Execute
+> task-by-task with TDD and independent review; steps use checkboxes.
 > Task 1 is test-only accepted; Task 2 remains a proposal.
 > This document authorizes no new implementation, publication,
 > production integration, merge, release or primary-host execution.
@@ -13,7 +15,7 @@ ChildCaptureOwner without duplicating launch/capture logic.
 **Tech Stack:** C# 5 x64 .NET Framework 4.8, Windows PowerShell 5.1, Python unittest.
 **Spec:** [Fixed-image observation](../designs/native-fixed-image-observation.md).
 
-## Constraints and review focus
+## Global constraints
 
 - Preserve all nine baseline and three environment cases and both artifact schemas.
 - No external native-entry path/digest/manifest inputs and no arbitrary launcher.
@@ -24,6 +26,19 @@ ChildCaptureOwner without duplicating launch/capture logic.
 - Same-length corruption must reach the hash comparison; appending tests only size.
 - Process-image query uses only Original.Process; post-create failures still drain.
 - Existing managed FileStream disposal does not become verified native close.
+
+## Review focus
+
+- A generated owner dependency can break direct Add-Type consumers before any test:
+  Task 2A covers every entry and builds the independent child first.
+- A facade retained by its caller can close a transferred image or reuse released
+  readiness: Task 2C pins exclusive irreversible claim and live Ready semantics.
+- A failed image query can incorrectly poison acquisition and skip drainage:
+  Task 2D distinguishes diagnostic UNKNOWN from unknown create/operation ownership.
+- A fake process handle can escape into a real wait/close/pipe call: Task 2D uses
+  a closed recording domain and traces the actual Run/Release branches.
+- Unicode tables and legacy file-only success can falsely validate composed PASS:
+  Tasks 2B/2E pin path proof/runtime and stage-specific schemas and failure prefixes.
 
 ## Task 1: File-only exact owner and build expectation
 
@@ -96,44 +111,317 @@ context, not pass raw paths or handles into a new launcher.
   This stage is independently useful without launching a process or modifying
   ChildCaptureOwner; publish only through a separately authorized branch process.
 
-## Task 2: Opt-in existing-owner composition
+## Task 2: Existing-owner composition proposal
 
-**Modify:** `tests/windows/NativeChildCaptureNative.cs`, the Task 1 harness/tests,
-`tests/windows/check_native_child_capture.ps1`,
-`tests/windows/check_native_launch_environment.ps1`, affected compile contracts,
-and `.github/workflows/native-tests.yml` only to extend Task 1 wiring with required
-dependencies and composed observation. Reuse its separate bounded artifact contract.
-Do not change the fixed child's behavior.
+**Gate before 2A:** Task 1's accepted historical record is retained below. The
+successor `519056432b4d9bd045140d2ba2bbe924e5c135e9` sentinel native artifacts have
+now been independently accepted, including unchanged file-only image results.
+That satisfies the changed-source native prerequisite, not permission to implement.
+Obtain independent review of this revised design/plan and the controller's next
+implementation assignment before changing any code. Existing user authorization
+already covers local test-only checked-branch development; renewed user permission
+is not a prerequisite. Every subtask below is sequential and ends
+in a focused independent review; do not start its dependent subtask first.
+Publication, native execution and exact-source final acceptance retain their own
+authorization/gates. No primary/user Windows experiments are authorized here.
 
-**Interface:** `ChildCaptureOwner(FixedFixtureImage)` selects existing Binary
-behavior with a sealed unused image context. Legacy constructors remain unchanged.
-Prepare the context before native creation; use its fixed application/root; query
-only Original.Process after successful creation. Preserve existing capture slots
-and environment semantics. Keep old evidence schemas intact.
+### Shared files and interface preflight
 
-- [ ] Write failing tests for null/reused context, preparation rejection before
-  Proof.BeforeCreate/CreateCalls, and exact zero-create missing/digest/size cases.
-  Keep negative copies isolated from every positive launch.
-- [ ] Write tests for original-handle-only image query, query failure followed by
-  normal retained-owner drainage, unknown-create retention, image-close failure,
-  single-use Run refusal and sticky diagnostic UNKNOWN after successful release.
-- [ ] Implement only the opt-in composition and checked image-release participation.
-  No PID reopen, second launcher, CREATE_SUSPENDED or general executable input.
-- [ ] Update all compile-source paths to include generated expectations without
-  native placeholders. Run unchanged baseline and environment assertions/schema
-  validation; inspect differences to ensure no weaker release or output checks.
-- [ ] Extend separate evidence to prove positive process-path observation and the
-  three zero-create refusals. Preserve raw path observations and fail unsupported
-  path forms rather than silently normalizing or truncating them.
-- [ ] Run the full Python suite, active-tree and whitespace checks, both old native
-  runners and the new runner on permitted Windows. Recheck workflow/PowerShell
-  parsing, C# 5/x64 warnings-as-errors and existing timeout budget.
-- [ ] Independently review implementation and exact-source Windows artifacts.
-  Require all nine baseline plus three environment cases and new image cases.
-  Keep failed/unknown artifacts distinct and mark native evidence pending until
-  actually observed. Publication requires its separate authorized branch process.
+| Owner subtask | Files/interfaces it establishes | Downstream consumers and review stop |
+| --- | --- | --- |
+| 2A build graph | New `tests/windows/NativeFixedFixtureBuild.ps1`: New-FixedFixtureBuild, Assert-FixedFixtureBuild, Get-FixedFixtureConsumerSources; unchanged generated-source format | All three existing runners and four direct Python owner compiles, then new composition consumer. Stop if a child source depends on owner/expectations. |
+| 2B path semantics | New `tests/windows/NativeFixedImagePath.cs`: Validate, Comparable, Agree; new `check_native_fixed_image_paths.ps1` fixed net48 bridge | Image codec, composed query, Python local_path and comparison validation. Stop rather than assume Linux/.NET Core Unicode equivalence. |
+| 2C file ownership | `NativeFixedImageIdentity.cs`: IFixedImageNativeCalls, irreversible ClaimForComposition, nested ownership-only CompositionLease, live Ready; command binding deferred to 2D | Existing file-only harness remains schema 1; owner consumes only private lease. Stop if raw handle/public arbitrary path or external facade mutators escape. |
+| 2D composition | New `NativeFixedImageComposition.cs`: IChildCaptureProcessCalls, IChildCaptureFlow, query/wait ledgers; one shared NativeFixedFixtureCommand.cs formatter and lease command binding; `NativeChildCaptureNative.cs` real integration; new `NativeFixedImageCompositionTests.cs` recording rig | Actual Run/Launch/Refresh/Release plus fake boundary tests. Stop if synthetic handles can reach a real native API, or Launch/Pump/Release is duplicated. |
+| 2E harness/evidence | New `NativeFixedImageCompositionNativeTests.cs`, `check_native_fixed_image_composition.ps1`; stage-aware serializer/validator; unchanged full Binary assertion shared | New composed artifact, old nine/three/four evidence sets and narrow workflow wiring. Stop if file-only can satisfy composed acceptance or retained owner permits later cases. |
 
-## Current verification checkpoint
+`NativeChildCaptureNative.cs` becomes a partial sealed class only to place the
+composition-specific adapters/ledgers in its new companion; retain existing launch,
+transport and release implementations. Every source-list consumer of that partial
+class receives its companion, image/path sources and generated expectations in
+2D as one change. The four direct owner compilation sites are named in the design's
+build-consumer table; line references there are 5190564 anchors, not future offsets.
+
+### Task 2A: Make every consumer child-first
+
+**Files:**
+- Create `tests/windows/NativeFixedFixtureBuild.ps1`.
+- Modify `tests/windows/check_native_child_capture.ps1`,
+  `tests/windows/check_native_launch_environment.ps1`,
+  `tests/windows/check_native_fixed_image_observation.ps1`.
+- Modify `tests/test_native_child_capture_contract.py`,
+  `tests/test_native_launch_environment_contract.py`,
+  `tests/test_native_fixed_image_observation_contract.py` for build-order/source-list
+  contracts and the four direct Add-Type sites.
+- Modify `.github/workflows/native-tests.yml` for the narrow helper dependency
+  trigger in this task, not deferred to 2E.
+
+**Consumes:** Existing four runtime child sources, C# 5/x64/net48 compiler settings,
+fixed expectation format and pinned official reference provisioning.
+**Produces:** `New-FixedFixtureBuild([string]$Parent)` with Root/PristineChild/
+ExpectationSource/ExpectationSha256; `Assert-FixedFixtureBuild($Build)`;
+`Get-FixedFixtureConsumerSources($Build,[string[]]$Names)`. No owner dependency
+enters the child. The helper is build-only and never executes generated code.
+
+- [ ] Write failing `test_all_owner_consumers_build_child_before_compile`,
+  `test_all_three_child_builds_use_only_runtime_sentinel_dependencies`, and
+  `test_pristine_expectation_precedes_all_negative_setup`. Assert the two legacy
+  runners' first managed compilation occurs after the helper; all four direct
+  owner scripts use it; exact four child sources contain no test/owner/generated
+  dependency; generated source exactly hashes completed pristine bytes and stays
+  unchanged after all harness builds/mutation. Add missing/stale-source failure.
+  Add `test_legacy_harnesses_have_verified_pristine_siblings`: each legacy native
+  harness has NativeCaptureFixtureChild.exe/config beside it; the child's bytes are
+  copied unchanged from verified PristineChild and match its embedded length/hash.
+  Add `test_helper_dependency_triggers_native_workflow` for the exact helper path.
+- [ ] Run the three Python modules below; confirm new assertions fail for the
+  specific old ordering, not a missing compiler/reference prerequisite.
+- [ ] Implement the helper and replace repeated build/generation recipes. Native
+  runners build in their fresh root before managed Add-Type. Managed-only routes
+  build/hash/compile but never execute child or prepare negative copies. Retain
+  configs, generated source and existing full source lists; no stale fallback.
+  Copy verified pristine child/config beside each legacy native harness, check the
+  copied bytes, and add `tests/windows/NativeFixedFixtureBuild.ps1` to native-tests.yml
+  push path triggers in the same 2A change. No new native execution is implied by
+  managed-only builds.
+- [ ] Re-run the three modules and all three `-ManagedOnly` runners with official
+  net48 refs. Independently review the source-consumer inventory against the
+  design table, including unaffected pure-sentinel and child-output compile paths.
+  Record target compilation separately from the actual managed host runtime.
+
+### Task 2B: Pin exact path validation and comparison
+
+**Files:** Create `tests/windows/NativeFixedImagePath.cs`,
+`tests/windows/check_native_fixed_image_paths.ps1`; modify
+`tests/windows/NativeFixedImageIdentity.cs`, `NativeFixedImageIdentityTests.cs`,
+`test_native_fixed_image_observation_contract.py`, helper consumer lists and
+`.github/workflows/native-tests.yml` for the exact Windows bridge assertion step
+and narrow `NativeFixedImagePath.cs`/`check_native_fixed_image_paths.ps1` triggers.
+All unqualified C#/PowerShell paths here and below are under `tests/windows/`;
+Python paths are under `tests/`.
+
+**Consumes:** Task 2A source resolution; existing fixed-image bounds.
+**Produces:** `FixedImagePath.Validate(string raw) -> string` (unchanged raw),
+`Comparable(string raw) -> string` (only exact recognized DOS prefix removed),
+`Agree(string held,string process) -> bool` (OrdinalIgnoreCase). The bridge reads
+<=4 path pairs/128 KiB UTF-8 total from stdin, validates exact pair keys/types and
+path bounds, emits exactly ordered true/false values, rejects arguments and wrong
+runtime. It compiles only the fixed repository path source plus a constant public managed
+comparison wrapper, then calls the actual shared function under Windows PowerShell
+5.1/.NET Framework 4.8; no executable/source selectors. Python comparison returns
+known Boolean for the design's portable safe subset, otherwise uses this bridge or
+raises unavailable comparison. It never guesses a Unicode relation. Without exact
+comparison it may validate only structural FAIL diagnostics (affected case FAIL/
+overall UNKNOWN); every PASS summary is rejected even with require_pass=False.
+
+- [ ] Write failing `test_path_grammar_cc_utf16_and_prefix_parity` with the design's
+  accepted/rejected corpus, including C1 controls currently missed by Python.
+  Write `test_ordinal_path_comparison_never_uses_casefold` for prefix/case agreement,
+  genuine differences, Straße/STRASSE and composed/decomposed strings.
+- [ ] Write `test_nonascii_case_requires_exact_framework_bridge`: unavailable or
+  .NET Core bridge cannot certify a changed non-ASCII pair; unchanged Cyrillic/
+  CJK/emoji and ASCII-only case changes are independently provable without it.
+  Add `FixedImageWindowsPathBridgeContracts.test_nonascii_bridge_uses_windows_framework`
+  without the existing generic compiler-skip decorator. In native-tests.yml under
+  shell=powershell/windows-2022, before the existing fixed-image observation step,
+  run exactly:
+  `python -X utf8 tests/test_native_fixed_image_observation_contract.py FixedImageWindowsPathBridgeContracts.test_nonascii_bridge_uses_windows_framework -v`.
+  It invokes the fixed bridge with the exact Windows PowerShell 5.1 executable
+  under SystemRoot, forces changed non-ASCII case units, asserts an actual bridge
+  match and records runtime/host identity. Missing bridge/runtime must fail rather
+  than skip on Windows. General non-Windows discovery may mark only this Windows
+  execution assertion unavailable; Linux compilation cannot discharge it.
+  Add `test_unavailable_exact_comparison_rejects_pass_summary_without_require_pass`:
+  unavailable bridge rejects an otherwise valid PASS summary with require_pass
+  false and true, while a consistent affected-case FAIL/UNKNOWN plus FAIL summary
+  is diagnostics only.
+- [ ] Witness old validator/corpus failures, extract the shared function and add the
+  bounded fixed bridge plus portable safe subset. Keep raw paths and reject rather
+  than normalize; do not introduce a public launch path or native API.
+- [ ] Run the fixed-image Python/managed module and PowerShell parse checks. Review
+  exact UTF-16 counts/Cc range and comparison host identification. Record Windows
+  bridge execution pending until the exact Windows assertion above is actually
+  observed. Carry this gate into every later task/checkpoint until satisfied;
+  later managed passes cannot erase it or stand in for the native runtime.
+
+### Task 2C: Make file ownership exclusively transferable
+
+**Files:** Modify `NativeFixedImageIdentity.cs`, `NativeFixedImageIdentityTests.cs`,
+`NativeFixedImageIdentityNativeTests.cs`, `check_native_fixed_image_observation.ps1`,
+`test_native_fixed_image_observation_contract.py`.
+
+**Consumes:** Task 2B path function; Task 2A genuine expectations.
+**Produces:** `FixedImageCallDomain` and `IFixedImageNativeCalls` matching all
+file/probe entry signatures/domain in the design; native implementation forwards to existing interop. `ClaimForComposition()`
+returns the nested sealed CompositionLease once. Implement its ownership,
+preparation, probe and release members here; BindBinaryLaunch/FixedImageLaunchBinding
+are explicitly deferred to 2D after its shared formatter extraction. No temporary
+command formatter is added in 2C. Facade mutations are permanently disabled after claim. Private native handle never leaves the context.
+`FixedFixtureImage.CreateForRecording(IFixedImageNativeCalls calls,
+FixedImageCallDomain domain)` accepts only recording calls/domain, never path or
+expectation overrides. `RunInjectedOwners(byte[] pristineBytes)` receives bytes
+from the helper's pristine child and validates them against the real embedded
+expectation before supplying them through fake ReadFile. The image runner must
+actually invoke this integer-returning method with verified pristine bytes, before
+negative setup, in both managed-only and native paths, and reject nonzero return.
+
+- [ ] Write failing managed `ClaimRejectsPreparedReleasedAndReused`,
+  `ConcurrentClaimHasOneWinner`, `TransferredFacadeCannotPrepareProbeOrRelease`,
+  `ReadyRequiresLiveUnclosedKnownHandle`, and `UnopenedReleasePreventsLaterClaim`.
+  Assert no native calls during claim/rejection and a single irreversible winner.
+- [ ] Write `RealFileOwnerUsesOnlyInjectedCalls`: prepare/hash/probes/release use
+  the actual image owner with fake calls, including partial reads, EOF bounds,
+  failed/open-unavailable/read-unavailable/probe-unknown and close FALSE/unavailable.
+  Assert exact call order/handle, readiness revocation, no retry and retained owners.
+  Keep the existing pure ledgers, but do not substitute them for this coverage.
+  Add `test_runner_executes_injected_owner_contracts`: execute the image runner
+  -ManagedOnly and require exactly one `PASS fixed image injected owners` marker,
+  emitted only by the invoked method after its actual owner/fake-call assertions.
+- [ ] Witness failures, then add locked use-state transitions, capability binding
+  and native adapters without changing the accepted file-observation algorithm.
+  Both standalone/lease operations call shared private implementations. Add no
+  arbitrary filename/digest setters, raw-handle access or public path getter.
+- [ ] Run fixed-image managed/validator tests. Review that standalone file-only
+  Main still releases only its own nontransferred image and schema-1 evidence is
+  unchanged; a composed Main must never inherit that unconditional finally close.
+
+### Task 2D: Compose the existing Binary owner and real decisions
+
+**Files:** Create `NativeFixedImageComposition.cs`,
+`NativeFixedImageCompositionTests.cs`, `NativeFixedFixtureCommand.cs`; modify
+`NativeFixedImageIdentity.cs` for deferred lease command binding,
+`NativeChildCaptureNative.cs` and
+all three runners/four direct Python owner compile lists as one dependency change.
+Keep all existing child/sentinel/pipe/environment sources and assertions.
+
+**Consumes:** Task 2C unused context/capability; Task 2B path comparator; Task 2A
+build record and checked generated source.
+**Produces:** `ChildCaptureOwner(FixedFixtureImage image)` (Binary only) and
+internal `ChildCaptureOwner(FixedFixtureImage image, FixedImageCompositionBindings bindings)`,
+with the same actual constructor/claim decisions;
+`IChildCaptureProcessCalls`/`IChildCaptureFlow` signatures from the design,
+`PrepareImageOnce()`, `ObserveProcessImageOnce()` and real `ObserveExit()`/`Release()`
+ledgers. Extract the current inline command construction exactly once as
+`FixedFixtureCommand.Format(string image,string scenario,long candidate,string token)
+-> StringBuilder` in NativeFixedFixtureCommand.cs, preserving legacy command bytes.
+Only then implement the lease's BindBinaryLaunch/FixedImageLaunchBinding; both it
+and legacy Launch consume that shared formatter. Every image/owner consumer gains
+this pure formatter source in 2D, while the four-source child remains independent.
+`FixedImageCompositionTestRig.CreateOwner()` supplies one inseparable fake
+image/process/flow/sentinel domain for managed tests, with no native selector. The new
+`NativeFixedImageCompositionTests.RunManaged(byte[] pristineBytes)` is invoked
+from a managed consumer built/loaded by the image runner; its full owner sources
+are explicit and distinct from the four child sources. Genuine pristine build
+bytes are verified and fed through fake ReadFile, never a digest override.
+Default constructors always install native adapters. The constructor claims last,
+without native calls; legacy constructor signatures/allowed scenarios stay closed.
+
+- [ ] Write failing `RealConstructorClaimsOnce`, `RealRunRefusesBeforeTransportOrCreate`
+  (missing/size/digest/probe failures), and `RealRunIsOneShot`. Assert zero
+  Proof.BeforeCreate/CreateCalls/query entries on every preflight refusal, no
+  transport setup, and actual checked image resolution where permitted.
+- [ ] Write `RealLaunchUsesFixedBindingAndOriginalHandles`: same existing create
+  method/flags/allowlist, one create, no second FileStream lease in composed mode,
+  exact query Original.Process/flags 0/capacity 32768, never thread/PID substitute.
+  Add `SharedCommandFormatterPreservesLegacyBytes`: all existing scenario strings,
+  quoted paths/spaces, invariant decimal candidates and tokens produce byte-for-byte
+  the original inline command; the composed Binary binding calls that same formatter.
+  Assert there is no second formatter or temporary 2C command-construction body.
+- [ ] Write `QueryDiagnosticFailureStillClosesWritersPumpsAndReleases` for FALSE,
+  unavailable, malformed/truncated/unsupported and valid-but-different paths.
+  The recording flow feeds capture/EOF events and invokes real exit observation;
+  writer close, sentinel inspection (including injected wait) and recovery forward
+  to the real methods, with zero real transport/allocation handles;
+  assert the actual Run trace continues through writer close, pump, sentinel,
+  Refresh and Release, with sticky UNKNOWN even after successful image release.
+- [ ] Write `UnknownCreateAndInvalidOriginalsRetainWithoutQuery`,
+  `UnavailableExitDoesNotFabricateWaitZero`, `ImageCloseFailureRetainsWholeOwner`,
+  and `MixedNativeAndRecordingDomainsAreRejected`. Assert exact unavailable states,
+  actual wait returns including 258/0xffffffff, no speculative close/retry, no fake
+  process close through PipeNative, and no synthetic pipe/unmanaged-slot handles.
+- [ ] Witness failures, implement shared decisions/adapters and immutable ledgers.
+  The flow delegates side effects only; existing Run owns every branch and existing
+  Release enforces every old gate plus both EOFs for known-success composed
+  launches before adding checked image release. No duplicate
+  launcher/lifecycle model, PID reopen, CREATE_SUSPENDED or production change.
+- [ ] Run the three Python modules plus managed composition tests with genuine
+  expectations. Review every reachable downstream native boundary for recording
+  handles. Audit a known successful query fault separately from uncertain create;
+  refuse 2E if either can bypass drainage or close an unresolved acquisition.
+
+### Task 2E: Prove composed evidence and full Binary behavior
+
+**Files:** Create `NativeFixedImageCompositionNativeTests.cs`,
+`check_native_fixed_image_composition.ps1`; modify `NativeFixedImageIdentity.cs`
+(stage-specific evidence serialization), `NativeFixedImageComposition.cs`,
+`NativeFixedImageCompositionTests.cs`, `NativeChildCaptureNativeTests.cs`
+(AssertCase visibility only), `test_native_fixed_image_observation_contract.py`,
+source-list contracts and `.github/workflows/native-tests.yml` (additional composed
+source triggers and separate composed step/text artifact; retain helper/path bridge
+triggers and the Windows bridge assertion already introduced in 2A/2B). Preserve file-only execution/artifact too.
+
+**Consumes:** Accepted 2A-2D interfaces; existing full Binary AssertCase, old nine/
+three assertion sets and schema-1 file-only fields.
+**Produces:** Schema-2/stage=composed bounded records exactly as the design matrix;
+`validate_records(..., expected_stage='file-only', path_comparer=None)` and
+`validate_evidence` with the same parameters plus require_pass. CLI
+`--expected-stage composed` is compulsory in both composed runner validation calls;
+old runner pins file-only. New native Main has no arguments and a compile-time
+allowlisted case constant; new runner accepts ManagedOnly/EvidenceDirectory only.
+
+- [ ] Write failing `test_composed_stage_rejects_file_only_and_mixed_schema`,
+  `test_composed_failure_matrix_nullability_and_owner_consistency`,
+  `test_composed_retained_owner_stops_prefix`, and
+  `test_composed_binary_assertions_are_complete`. Use the real C# serializer on
+  recording-rig executions, not only handwritten JSON. Mutate each new field/state,
+  including a fake wait=0, missing capture, discarded/hash/EOF/fairness mismatch,
+  create_calls>1, query-after-zero-create, unavailable exact comparison with a PASS
+  summary even when require_pass=False, released image with unknown creation,
+  owner-released with image retained, and continued cases after a retained owner.
+- [ ] Witness failures, implement the separate exact schema and strict stage pin.
+  Every design-matrix row gets a managed serialized diagnostic test; only the
+  four expected native cases may PASS. Unavailable values stay null. Neither
+  schema-1 acceptance nor synthetic records count as actual composed evidence.
+- [ ] Implement four isolated fixed harness builds using the shared pristine
+  expectation. Only after all builds, prepare matching/same-size-corrupt/appended/
+  absent copies in that order; never execute either corrupt copy. Each Main roots
+  the real owner before Run, checks the expected refusal or calls unchanged full
+  Binary AssertCase, reports snapshots and keeps unresolved roots. No unconditional
+  transferred-image finally release. Exit 2 means any composed/file/probe owner
+  remains retained; runner stops later cases and emits the attempted FAIL prefix.
+- [ ] Keep old native nine capture/three environment/four file-only suites intact.
+  The positive composed assertion must include the design's exact Binary lengths,
+  hashes, PVC2 exclusion, independent sentinel, both EOFs, terminal/released slots,
+  fairness, exit 0, one create and one-shot refusal, plus matching image query and
+  checked file release. No reduced assertion helper or UNKNOWN success exception.
+- [ ] Run the full managed/source suite, active-tree/whitespace checks, C# 5/x64
+  warnings-as-errors and PowerShell/workflow parse checks against the final tree.
+  Confirm new runner/helper scripts stay ASCII-safe for Windows PowerShell 5.1.
+- [ ] On separately permitted disposable/hosted Windows, execute all four runners
+  (old capture/environment/file-only plus new composed), preserve actual logs and
+  bounded artifacts, and validate the exact-source records in their explicit modes.
+  Record actual runtime/path-comparison host. Verify the unchanged six-minute
+  workflow budget from observed execution; do not raise it or drop gates silently.
+- [ ] Obtain independent code and actual exact-source artifact review, including
+  original-handle query, all four new cases, old nine/three/four suites, zero-create
+  negatives, full Binary checks and every retained-owner failure contract.
+  Native evidence stays pending until observed; publication is a separate branch
+  authorization. No merge/release or user-host safety claim follows from this work.
+
+**Managed commands for the subtask cycles:**
+
+- `python -X utf8 -m unittest discover -s tests -p test_native_child_capture_contract.py -v`
+- `python -X utf8 -m unittest discover -s tests -p test_native_launch_environment_contract.py -v`
+- `python -X utf8 -m unittest discover -s tests -p test_native_fixed_image_observation_contract.py -v`
+- Final: `python -X utf8 -m unittest discover -s tests -v`, then `git diff --check`
+  and the repository's active-tree gate. A failure from unavailable official refs/
+  compiler is a prerequisite blocker, not the required TDD behavioral failure.
+
+During eventual implementation, each 2A-2E cycle is independently reviewable before
+its successor. Stage a focused commit only if separately authorized; this planning
+revision explicitly permits no commit, publication, native tests or code edits.
+
+## Historical Task 1 verification checkpoint
 
 Task 1 is test-only accepted at published source
 `33447ae2ff048230675c05c72509857d252fceee`, tree
@@ -147,10 +435,30 @@ attempt 1, with no rerun; there is no native PUSH run for this source. See the
 [successor execution record](../EXECUTION-2026-11-11-net48-reference-provisioning.md).
 
 The earlier `b2229c5` [partial record](../EXECUTION-2026-11-11-native-fixed-image-file-only.md)
-remains eight successes and three failures. Task 2 is unimplemented and still
-requires separate composition review after hardening the known numeric sentinel
-diagnostic limitation. The exact-source file-only prerequisite is satisfied for
-Task 1; it is not whole-product readiness, privileged admission or release
+remains eight successes and three failures. At that checkpoint Task 2 was
+unimplemented and still required separate composition review and numeric sentinel
+diagnostic hardening. The exact-source file-only prerequisite is satisfied for Task 1; it is not whole-product readiness, privileged admission or release
 approval.
 
-Task 1 validators accept only `stage=file-only`; `composed` validation remains unavailable until Task 2 passes its prerequisite gate.
+Task 1 validators accept only schema=1/stage=file-only. Schema=2/stage=composed
+remains unavailable until the controller assigns the separately reviewed Task 2
+implementation and that implementation is completed.
+
+## Current source 5190564 planning checkpoint
+
+The later source `519056432b4d9bd045140d2ba2bbe924e5c135e9`, tree
+`45d21240a2b93e79f69b7a0c415d34ed7acdd31f`, has independently accepted actual
+native push 43101335942 and same-tree PR 43101344284 artifacts after query-only
+sentinel hardening. Each retains all nine capture, three environment and four
+file-only image cases; both Linux jobs ran 403 tests with six unchanged platform
+skips. The final independently reconciled inventory has all eleven naturally
+triggered workflows successful on attempt 1 (eight push, three PR), including
+private-payload continuation 43101335826. The verified
+[sentinel execution record](../EXECUTION-2026-11-11-native-sentinel-observation.md)
+was committed locally as `31255f3`; the published tested source remains `5190564`.
+Earlier partial results remain unchanged. The exact changed-source native
+prerequisite is satisfied. Composition remains unimplemented and this revision
+resolves planning preflight only. Independent composition review and the controller's
+next assignment remain gates; existing checked-branch development authorization
+covers local test-only implementation without renewed user permission. Native
+execution/publication remain within their authorized branch workflow and review gates.

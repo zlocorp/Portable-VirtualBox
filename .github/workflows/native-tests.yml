@@ -41,7 +41,10 @@ on:
       - tests/windows/NativeLaunchEnvironmentNativeTests.cs
       - tests/windows/check_native_launch_environment.ps1
       - tests/test_native_launch_environment_contract.py
+      - tests/windows/NativeFixedFixtureBuild.ps1
       - tests/windows/NativeFixedImageIdentity.cs
+      - tests/windows/NativeFixedImagePath.cs
+      - tests/windows/check_native_fixed_image_paths.ps1
       - tests/windows/NativeFixedImageIdentityTests.cs
       - tests/windows/NativeFixedImageIdentityNativeTests.cs
       - tests/windows/check_native_fixed_image_observation.ps1
@@ -180,6 +183,9 @@ jobs:
           path: ${{ runner.temp }}/pvbox-native-environment-evidence/native-launch-environment.jsonl
           if-no-files-found: error
           retention-days: 7
+      - name: Verify exact Windows Framework path comparison bridge
+        shell: powershell
+        run: python -X utf8 tests/test_native_fixed_image_observation_contract.py FixedImageWindowsPathBridgeContracts.test_nonascii_bridge_uses_windows_framework -v
       - name: Observe fixed harmless image bytes (file-only, no fixture child launch)
         id: native_fixed_image_observation
         shell: powershell

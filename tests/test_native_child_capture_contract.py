@@ -237,15 +237,18 @@ class SentinelSourceWiringContract(unittest.TestCase):
     def test_all_three_child_builds_use_only_runtime_sentinel_dependencies(self):
         expected = {'NativeCaptureFixtureChild.cs', 'NativeLaunchEnvironmentObservation.cs',
                     'NativeSentinelObservation.cs', 'NativeSentinelObservationNative.cs'}
+        helper = (ROOT / 'tests/windows/NativeFixedFixtureBuild.ps1').read_text()
+        child = helper.split('$childNames=@(', 1)[1].split(')', 1)[0]
+        names = re.findall(r"'([A-Za-z]+\.cs)'", child)
+        self.assertEqual(set(names), expected)
+        self.assertEqual(len(names), len(expected))
         for runner in ('check_native_child_capture.ps1', 'check_native_launch_environment.ps1',
                        'check_native_fixed_image_observation.ps1'):
             text = (ROOT / 'tests/windows' / runner).read_text(encoding='utf-8')
-            line = next(line for line in text.splitlines()
-                        if ('& $csc' in line or 'Compile-Fixed @' in line) and '$child' in line)
-            names = re.findall(r"'([A-Za-z]+\.cs)'", line)
             with self.subTest(runner=runner):
-                self.assertEqual(set(names), expected)
-                self.assertEqual(len(names), len(expected))
+                self.assertIn(". (Join-Path $PSScriptRoot 'NativeFixedFixtureBuild.ps1')", text)
+                self.assertEqual(text.count('New-FixedFixtureBuild $out'), 1)
+                self.assertNotIn('NativeCaptureFixtureChild.cs', text)
         workflow = (ROOT / '.github/workflows/native-tests.yml').read_text(encoding='utf-8')
         for name in ('NativeSentinelObservation.cs', 'NativeSentinelObservationNative.cs',
                      'NativeSentinelObservationNativeTests.cs'):
@@ -268,7 +271,8 @@ class SentinelSourceWiringContract(unittest.TestCase):
         expected = {'NativePipeTransport.cs', 'NativePipeTransportTests.cs', 'NativePipeTransportNative.cs',
                     'NativeChildCapture.cs', 'NativeChildCaptureTests.cs', 'NativeChildCaptureNative.cs',
                     'NativeChildCaptureNativeTests.cs', 'NativeLaunchEnvironment.cs', 'NativeLaunchEnvironmentNative.cs',
-                    'NativeSentinelObservation.cs', 'NativeSentinelObservationNative.cs', 'NativeSentinelObservationNativeTests.cs'}
+                    'NativeSentinelObservation.cs', 'NativeSentinelObservationNative.cs', 'NativeSentinelObservationNativeTests.cs',
+                    'NativeFixedImageIdentity.cs'}
         names = re.findall(r"'([A-Za-z]+\.cs)'", managed)
         self.assertEqual(set(names), expected)
         self.assertEqual(len(names), len(expected))
@@ -585,11 +589,15 @@ class NativeChildRunnerContract(unittest.TestCase):
         script = r'''
         $ErrorActionPreference='Stop'
         $root='__ROOT__'
-        Add-Type -Path @('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
+        . (Join-Path $root 'NativeFixedFixtureBuild.ps1')
+        $parent=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-direct-owner-build-'+[guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $parent | Out-Null
+        $build=New-FixedFixtureBuild $parent
+        $names=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
             'NativeChildCapture.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
             'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs',
-            'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs' |
-            ForEach-Object { Join-Path $root $_ })
+            'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs','NativeFixedImageIdentity.cs')
+        Add-Type -Path @(Get-FixedFixtureConsumerSources $build $names)
         if ([PortableVBox.NativeSentinelObservationNativeTests]::__METHOD__() -ne 0) { throw 'Actual native-boundary contract failed' }
         '''.replace('__ROOT__', str(ROOT / 'tests/windows').replace("'", "''")).replace('__METHOD__', method)
         result = subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-Command', script],
@@ -690,10 +698,13 @@ class NativeChildRunnerContract(unittest.TestCase):
         script = r'''
         $ErrorActionPreference='Stop'
         $root='__ROOT__'
-        $sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
-            'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') |
-            ForEach-Object { Join-Path $root $_ }
-        Add-Type -Path $sources
+        . (Join-Path $root 'NativeFixedFixtureBuild.ps1')
+        $parent=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-direct-owner-build-'+[guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $parent | Out-Null
+        $build=New-FixedFixtureBuild $parent
+        $names=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
+            'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs')
+        Add-Type -Path @(Get-FixedFixtureConsumerSources $build $names)
         $assembly=[PortableVBox.NativePipeTransportTests].Assembly
         $ownerType=$assembly.GetType('PortableVBox.ChildCaptureOwner',$true)
         $caseType=$assembly.GetType('PortableVBox.CaptureCase',$true)

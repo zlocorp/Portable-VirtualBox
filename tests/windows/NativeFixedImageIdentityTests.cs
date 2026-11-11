@@ -78,6 +78,33 @@ namespace PortableVBox {
    return FixedImageEvidence.Report(image.Expected,image.Snapshot(),"matching-image",false,
        probe.Json(new FixedImageProbeCall(0x40000000,7,3)),"null");
   }
+  static void PathContracts() {
+   foreach(string raw in new string[] {"C:\\", "z:\\file", @"\\?\C:\fixed", "C:\\Привет\\漢字-é-\U0001f642", "C:\\a/../b ", "C:\\"+new string('x',32764), "C:\\"+new string('x',32762)+"\U0001f642"}) {
+    Check(Object.ReferenceEquals(FixedImagePath.Validate(raw),raw),"supported path raw units unchanged");
+    Check(FixedImageCodec.LocalPath(raw)==raw,"held image consumes shared path validation");
+    Check(FixedImagePath.Agree(raw,raw),"identical paths agree");
+   }
+   foreach(string raw in new string[] {null,"",@"\\server\share",@"\\?\UNC\server\share",@"\\.\C:\file",@"\\?\Volume{abc}\file",@"\\?\\\?\C:\file","C:relative","C:/slash",@"\root","/root","C:\\bad\ud800","C:\\bad\udc00","C:\\"+new string('x',32765),"C:\\"+new string('x',32763)+"\U0001f642"}) {
+    Reject(delegate { FixedImagePath.Validate(raw); },"unsupported grammar/UTF16/bound");
+    Reject(delegate { FixedImagePath.Comparable(raw); },"comparable always validates");
+    Reject(delegate { FixedImagePath.Agree("C:\\x",raw); },"comparison always validates");
+   }
+   for(int i=0;i<=159;i++)if(i<=31 || i>=127) {
+    string raw="C:\\bad"+(char)i+"path";
+    Reject(delegate { FixedImagePath.Validate(raw); },"all C0/DEL/C1 rejected");
+    Reject(delegate { FixedImageCodec.LocalPath(raw); },"image codec uses shared Cc rejection");
+   }
+   Check(FixedImagePath.Comparable(@"\\?\C:\Fixed")==@"C:\Fixed","only exact DOS prefix removed");
+   Check(FixedImagePath.Agree(@"\\?\C:\Fixed",@"c:\fixed"),"prefix and ASCII case agreement");
+   Check(FixedImagePath.Agree("C:\\Привет-漢字-\U0001f642-A","c:\\Привет-漢字-\U0001f642-a"),"unchanged nonASCII with ASCII-only case");
+   foreach(string[] pair in new string[][] {
+    new string[] {@"C:\a/b",@"C:\a\b"},new string[] {@"C:\a\..\b",@"C:\b"},
+    new string[] {"C:\\Straße","C:\\STRASSE"},new string[] {"C:\\é","C:\\e\u0301"},
+    new string[] {@"C:\x",@"C:\y"},new string[] {@"C:\x",@"C:\x "}})
+    Check(!FixedImagePath.Agree(pair[0],pair[1]),"different spelling not normalized");
+   // This managed host's result is not evidence of Windows Framework execution.
+   Check(FixedImagePath.Agree("C:\\é","C:\\É"),"actual managed OrdinalIgnoreCase nonASCII call");
+  }
   public static int RunManaged() {
    var expected=new FixedImageExpectation(1,new string('a',64));
    Check(expected.Length==1 && expected.Sha256==new string('a',64),"exact expectation");
@@ -122,6 +149,7 @@ namespace PortableVBox {
    var owner=FixedFixtureImage.CreateForObservation();Check(owner.Observation.OpenState=="not-entered","sealed owner initially unopened");
    Check(typeof(FixedFixtureImage).GetConstructors().Length==0,"no public native constructor");
    byte[] data=Encoding.ASCII.GetBytes("fixed managed bytes");Check(Digest(data).Length==64,"managed hashing available");
+   PathContracts();
    ProbeContracts();
    for(int mode=0;mode<3;mode++)Console.WriteLine("PROBE_DIAGNOSTIC "+ProbeFaultReport(mode));
    string unicode=UnicodeReport();

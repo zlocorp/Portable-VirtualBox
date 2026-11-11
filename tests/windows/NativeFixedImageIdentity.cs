@@ -32,17 +32,7 @@ namespace PortableVBox {
  internal static class FixedImageCodec {
   internal static void Leaf(uint attributes) { if((attributes & (0x10U|0x400U))!=0)throw new ArgumentException("Unsupported directory/reparse leaf"); }
   internal static string Hex(byte[] bytes) { var s=new StringBuilder(bytes.Length*2);foreach(byte b in bytes)s.Append(b.ToString("x2",CultureInfo.InvariantCulture));return s.ToString(); }
-  internal static string LocalPath(string value) {
-   if(String.IsNullOrEmpty(value) || value.Length>=32768)throw new ArgumentException("Path bound");
-   for(int i=0;i<value.Length;i++) {
-    char c=value[i];if(c=='\0' || Char.IsControl(c))throw new ArgumentException("Path character");
-    if(Char.IsHighSurrogate(c)) { if(i+1>=value.Length || !Char.IsLowSurrogate(value[++i]))throw new ArgumentException("Path UTF16"); }
-    else if(Char.IsLowSurrogate(c))throw new ArgumentException("Path UTF16");
-   }
-   string plain=value.StartsWith(@"\\?\",StringComparison.Ordinal)?value.Substring(4):value;
-   if(plain.Length<3 || !((plain[0]>='A' && plain[0]<='Z') || (plain[0]>='a' && plain[0]<='z')) || plain[1]!=':' || plain[2]!='\\')throw new ArgumentException("Non-local-DOS path");
-   return value;
-  }
+  internal static string LocalPath(string value) { return FixedImagePath.Validate(value); }
   internal static string FinalPath(string value,uint returned) {
    if(returned==0 || returned>=32768 || value==null || returned!=value.Length)throw new ArgumentException("Failed/truncated path return");
    return LocalPath(value);

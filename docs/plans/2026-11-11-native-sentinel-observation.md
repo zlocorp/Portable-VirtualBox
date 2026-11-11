@@ -1,8 +1,10 @@
 # Exact Sentinel Observation Implementation Plan
 
-> Proposal only. Independent preflight review is required before implementation.
-> Execute test-first, with independent review between the pure and native stages.
-> This document grants no publication, primary-host execution, merge or release.
+> Implemented and independently reviewed; changed-source hosted observations are
+> accepted at the verification checkpoint below. The original test-first checklist
+> is retained as the implementation requirements, not a current pending-work list.
+> This document grants no further publication, primary-host execution, merge or
+> release authority.
 
 **Goal:** Replace the fixed child's mutating numeric probe with exact-object-aware,
 query-only exclusion while preserving existing capture and environment contracts.
@@ -322,6 +324,8 @@ fields are introduced by these internal test boundaries.
 
 ## Verification checkpoint
 
+### Historical local checks before the final fixture correction
+
 Preflight review and the independent pure Task 1 source/interface review are
 complete. Pure Task 1 is commit `f94362fc4a5d54909a620cac29cd6ca00cce6b23`;
 its component and behavioral test source remain unchanged in Task 2.
@@ -344,8 +348,40 @@ PVC2 composition are implemented locally. On the Task 2 worktree based on
   PVC2 stdout hashes match the stated constants; Empty and stderr hashes remain
   unchanged. The two JSONL schemas and all 9+3+4 case purposes are preserved.
 
-Independent Task 2 source review and authorized changed-source Windows observation
-remain pending. Local managed passes and compilation are not native evidence.
-The original b2229c5 PR failure and same-source push success remain distinct;
-neither they nor the published 33447ae checkpoint verify this new PVC2 behavior.
-This task does not publish source, update PR #7, merge, release or run on a user host.
+At that local checkpoint, independent Task 2 source review and changed-source
+Windows observation were still pending. Local managed passes and compilation were
+not native evidence. The original b2229c5 PR failure and same-source push success
+remain distinct; neither they nor the published 33447ae checkpoint verify PVC2.
+
+### Reviewed final source and actual hosted acceptance
+
+Independent Task 2 and final integration reviews completed with no blocking
+finding. One minor fixture-fidelity issue was corrected afterward in the managed
+Binary-owner test only: complete 4,105-byte stdout and 257-byte stderr replaced
+the short fixture, with count/hash assertions and legal receive chunks. A failing
+behavioral assertion was demonstrated before correction; afterward all 32 focused
+tests and the expanded managed host passed. A scoped re-review accepted the fix.
+Runtime code was unchanged. The earlier local 403-test run above predates this
+one-file correction; it is not reported as a full local rerun afterward.
+
+Published source `519056432b4d9bd045140d2ba2bbe924e5c135e9`, tree
+`45d21240a2b93e79f69b7a0c415d34ed7acdd31f`, then passed all 11 naturally triggered
+workflows on attempt 1, without rerun, cancellation or manual dispatch. Both Linux
+logs show actual pinned net48 provisioning and **403 tests, six existing platform
+skips**, covering the final published source/tree.
+
+Native PUSH `43101335942` checked out the exact source. Native PR `43101344284`
+checked out synthetic merge `9f34ce5dd52ad9cb83002b7d23cc51f9e15745f2`, whose Git
+tree equals the source tree. Independent full-ZIP digest/size checks, unchanged
+strict validators and actual-log comparisons accepted all nine capture, three
+Unicode environment and four file-only image cases on each run. Exact PVC2/body
+hashes, Empty's zero streams, exit 23/259, both EOFs, checked release and sticky
+fault UNKNOWN were preserved. See the [complete execution record](../EXECUTION-2026-11-11-native-sentinel-observation.md)
+for the run inventory, artifact identities and observations.
+
+Normalized headers do not establish which exclusion branch ran or native coverage
+of error 1656. Managed models/raw-call fakes cover those decisions; no native
+collision/race experiment is claimed. File-only image acceptance remains separate
+from unimplemented process composition. Production lifetime gaps, system-effect
+retry, user-host acceptance, merge and release gates remain open. All earlier
+failed outcomes remain in their original execution records.

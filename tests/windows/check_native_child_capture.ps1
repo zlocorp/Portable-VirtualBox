@@ -3,51 +3,48 @@
 param([switch]$ManagedOnly,[string]$EvidenceDirectory='')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'NativeFixedFixtureBuild.ps1')
 function Invoke-ManagedContracts {
     $managedNames=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
         'NativeChildCapture.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
         'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs',
-        'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs')
-    Add-Type -Path @($managedNames | ForEach-Object { Join-Path $PSScriptRoot $_ })
+        'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs','NativeFixedImageIdentity.cs')
+    Add-Type -Path @(Get-FixedFixtureConsumerSources $build $managedNames)
     if ([PortableVBox.NativeChildCaptureTests]::RunManaged() -ne 0) { throw 'Managed child capture contracts failed' }
     if ([PortableVBox.NativeSentinelObservationNativeTests]::RunManaged() -ne 0) { throw 'Managed sentinel native adapter contracts failed' }
 }
-if ($ManagedOnly) {
-    Invoke-ManagedContracts
-    return
-}
-if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+if (-not $ManagedOnly -and [Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     Write-Output 'SKIP native child capture: Windows required'
     return
 }
-Invoke-ManagedContracts
 $out=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-child-capture-build-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $out | Out-Null
+$build=New-FixedFixtureBuild $out
+if ($ManagedOnly) {
+    try { Invoke-ManagedContracts } finally { Write-Warning ('Generated child-capture managed build retained at '+$out) }
+    return
+}
+Invoke-ManagedContracts
 $writer=$null
 $log=Join-Path $out 'native-child-capture.jsonl'
 $validator=Join-Path (Split-Path $PSScriptRoot -Parent) 'test_native_child_capture_contract.py'
 $nativeExit=1
 $valid=$false
 try {
-    $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-    $child=Join-Path $out 'NativeCaptureFixtureChild.exe'
-    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ ('/out:'+$child) (Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs') (Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs') (Join-Path $PSScriptRoot 'NativeSentinelObservation.cs') (Join-Path $PSScriptRoot 'NativeSentinelObservationNative.cs')
-    if ($LASTEXITCODE -ne 0) { throw 'Fixed harmless capture child compilation failed' }
     $exe=Join-Path $out 'NativeChildCaptureTests.exe'
     $sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
         'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs',
-        'NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
-    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ /main:PortableVBox.NativeChildCaptureNativeTests ('/out:'+$exe) @sources
-    if ($LASTEXITCODE -ne 0) { throw 'Native child capture contracts compilation failed' }
-    foreach ($program in @($child,$exe)) {
-        [IO.File]::WriteAllText(($program+'.config'),'<configuration><startup><supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" /></startup></configuration>')
-    }
+        'NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs')
+    $sources=@(Get-FixedFixtureConsumerSources $build $sources)
+    Compile-FixedFixtureSources $sources $exe 'PortableVBox.NativeChildCaptureNativeTests'
+    Copy-FixedFixtureSibling $build $exe
     $encoder=New-Object Text.UTF8Encoding($false,$true)
     $writer=New-Object IO.FileStream($log,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
     $total=0
     $records=0
     # Fixed harness only; no caller-supplied executable, command or evidence input.
     # Stream bounded records rather than accumulating the entire harness output.
+    Assert-FixedFixtureSibling $build $exe
     & $exe | ForEach-Object {
         $line=[string]$_
         if ($line.Length -gt 4095 -or $records -ge 10) { throw 'Native child evidence record bound exceeded' }

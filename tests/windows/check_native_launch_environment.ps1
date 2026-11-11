@@ -3,49 +3,45 @@
 param([switch]$ManagedOnly,[string]$EvidenceDirectory='')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'NativeFixedFixtureBuild.ps1')
 $sourceNames=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
     'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
     'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentTests.cs','NativeLaunchEnvironmentNative.cs',
     'NativeLaunchEnvironmentPolicyTests.cs','NativeLaunchEnvironmentObservation.cs',
-    'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs')
-$sources=@($sourceNames | ForEach-Object { Join-Path $PSScriptRoot $_ })
+    'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs','NativeFixedImageIdentity.cs')
 function Invoke-ManagedContracts {
-    Add-Type -Path $sources
+    Add-Type -Path @(Get-FixedFixtureConsumerSources $build $sourceNames)
     if ([PortableVBox.NativeLaunchEnvironmentNativeTests]::RunManaged() -ne 0) { throw 'Managed environment contracts failed' }
 }
-if ($ManagedOnly) {
-    Invoke-ManagedContracts
-    return
-}
-if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+if (-not $ManagedOnly -and [Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     Write-Output 'SKIP native launch environment: Windows required'
     return
 }
-Invoke-ManagedContracts
 $out=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-environment-build-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $out | Out-Null
+$build=New-FixedFixtureBuild $out
+if ($ManagedOnly) {
+    try { Invoke-ManagedContracts } finally { Write-Warning ('Generated environment managed build retained at '+$out) }
+    return
+}
+Invoke-ManagedContracts
 $writer=$null
 $log=Join-Path $out 'native-launch-environment.jsonl'
 $validator=Join-Path (Split-Path $PSScriptRoot -Parent) 'test_native_launch_environment_contract.py'
 $nativeExit=1
 $valid=$false
 try {
-    $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-    $child=Join-Path $out 'NativeCaptureFixtureChild.exe'
-    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ ('/out:'+$child) (Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs') (Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs') (Join-Path $PSScriptRoot 'NativeSentinelObservation.cs') (Join-Path $PSScriptRoot 'NativeSentinelObservationNative.cs')
-    if ($LASTEXITCODE -ne 0) { throw 'Fixed harmless capture child compilation failed' }
     $exe=Join-Path $out 'NativeLaunchEnvironmentTests.exe'
-    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ /main:PortableVBox.NativeLaunchEnvironmentNativeTests ('/out:'+$exe) @sources
-    if ($LASTEXITCODE -ne 0) { throw 'Native environment capture contracts compilation failed' }
-    foreach ($program in @($child,$exe)) {
-        [IO.File]::WriteAllText(($program+'.config'),'<configuration><startup><supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" /></startup></configuration>')
-    }
+    $sources=@(Get-FixedFixtureConsumerSources $build $sourceNames)
+    Compile-FixedFixtureSources $sources $exe 'PortableVBox.NativeLaunchEnvironmentNativeTests'
+    Copy-FixedFixtureSibling $build $exe
     $encoder=New-Object Text.UTF8Encoding($false,$true)
     $writer=New-Object IO.FileStream($log,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
     $total=0
     $records=0
     # Fixed harness only; no caller-supplied executable, command or evidence input.
     # Stream bounded records rather than accumulating the entire harness output.
+    Assert-FixedFixtureSibling $build $exe
     & $exe | ForEach-Object {
         $line=[string]$_
         if ($line.Length -gt 4095 -or $records -ge 4) { throw 'Native environment evidence record bound exceeded' }
