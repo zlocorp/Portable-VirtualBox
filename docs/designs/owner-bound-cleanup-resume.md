@@ -69,7 +69,10 @@ Deletion is requested through that verified handle, the handle is closed, and
 explicit native NOT_FOUND must be observed before DONE. Access denied, sharing
 violations or delete-pending are unknown, not absence. Expected empty-directory
 deletion follows the same rule. Only the target lease is released; session/store/
-root ancestry remains locked continuously. Current system quiescence
+root ancestry remains locked continuously. These leases request actual read/list
+access, not metadata-only access, so Windows enforces the no-delete sharing
+contract. Evidence leases permit the retained journal writer but not rename.
+Current system quiescence
 and controller liveness are checked again during progress and at completion.
 
 A new journal may be created from an intact authenticated checkpoint only while
@@ -78,6 +81,16 @@ journal creation, not missing history after partial removal. The final existing
 payload-removed marker is written only after journal COMPLETE and verified absence;
 its boolean content alone is not authority. Fully completed attempts remain
 non-replayable. Arbitrary power-loss recovery is not promised.
+
+Payload file ACL checks use the native descriptor obtained from the retained
+handle: Administrators owner, protected DACL, exactly the inactive inherit-only
+OWNER RIGHTS read-control ACE followed by explicit SYSTEM/Administrators full
+access and caller read/execute. The managed FileSecurity projection filters the
+inactive leaf ACE and must not define or restore this native contract. No
+alternative three-ACE descriptor is accepted.
+
+The exact `b9db2b0` hosted Windows evidence, failures and limits are recorded in
+[the execution report](../EXECUTION-2026-11-11-payload-cleanup.md).
 
 ## Subsequent system-effect increment
 

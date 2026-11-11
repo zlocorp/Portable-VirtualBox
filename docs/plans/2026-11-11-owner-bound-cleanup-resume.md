@@ -10,8 +10,9 @@ Design: [owner-bound cleanup continuation](../designs/owner-bound-cleanup-resume
 - [x] Integrate checkpoint creation and payload continuation without re-entering system workers.
 - [x] Add disposable Windows interruption tests and preserve VM/acquisition evidence.
 - [x] Obtain independent review; fix findings with regressions.
-- [ ] Publish and verify full affected CI; report exact limits.
-- [ ] Evaluate the next system-effect increment against durable-generation and child-lifetime limits.
+- [x] Publish and verify full affected CI; report exact limits.
+- [x] Evaluate the next system-effect increment against durable-generation and child-lifetime limits.
+- [ ] Specify and test a separate system-effect protocol before granting any new retry authority.
 
 Files owned by the first increment:
 - source/privilege/PayloadCleanupJournal.cs: bounded durable step state.
@@ -24,6 +25,8 @@ Files owned by the first increment:
 Existing DurableJournal, existing replay guards for system effects, and the
 read-only reconciliation observer remain non-authoritative for Windows effects.
 
-Local verification: journal 3,308 real-file assertions; plan 854 checks; Python 295 tests, six platform skips with portable PowerShell available. Full helper and owner-gate test entrypoint compile with C# 5 against Microsoft .NET Framework 4.8 references. Native Windows execution and candidate CI are still pending.
+Local verification: journal 3,308 real-file assertions; plan 854 checks; Python 295 tests, six platform skips with portable PowerShell available. Full helper and owner-gate test entrypoint compile with C# 5 against Microsoft .NET Framework 4.8 references.
 
-Independent static review permits disposable Windows CI, not release acceptance. Full-helper observe/owner tests now include nonempty-directory refusal, preserved BEGIN/child bytes and retained session locks. Native ACL/share/delete-pending behavior awaits the exact published commit.
+Exact published code checkpoint `b9db2b0ba3cfeecef915e107d3648104da551024`: all 12 triggered workflows succeeded. Native Windows: 33 AutoIt harnesses, CLI 44, journal 3,310, plan 854, native-object 25 and integrated-owner 141 assertions. Payload continuation, orphan recovery, interrupted preparation including both tamper cases, and both full-helper frontends passed. The main-launcher fixture booted Alpine and verified guest VDI write/readback, snapshots and two clean cycles. [Execution record](../EXECUTION-2026-11-11-payload-cleanup.md).
+
+Independent review accepted this narrow hosted-tested increment. It does not close general system-effect retry, the worker-success-before-checkpoint gap, interactive UAC or Windows 10/11 acceptance. The next protocol must distinguish a committed effect from an outstanding uncertain intent, and must not transfer authority to a same-name replacement resource.
