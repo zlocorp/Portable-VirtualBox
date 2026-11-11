@@ -47,7 +47,8 @@ jobs:
   windows-payload-cleanup-recovery:
     if: github.repository == 'zlocorp/Portable-VirtualBox'
     runs-on: windows-2022
-    timeout-minutes: 18
+    # Nine complete driver/payload cases; native child wait bounds are unchanged.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

@@ -1,4 +1,4 @@
-name: Main launcher Manager GUI runtime (disposable Windows only)
+name: Main launcher Russian Oracle and Alpine acceptance (disposable Windows)
 
 on:
   push:
@@ -15,6 +15,10 @@ on:
       - source/LauncherSettings.au3
       - source/PortableApp.au3
       - scripts/prepare_app64.py
+      - scripts/inspect_oracle.ps1
+      - scripts/oracle_extract.py
+      - scripts/msi_staging.py
+      - scripts/windows_payload.py
       - source/HostPreflight.au3
       - source/WindowsObservation.au3
       - source/WindowsServiceProbe.au3

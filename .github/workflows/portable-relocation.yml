@@ -9,6 +9,11 @@ on:
       - tests/test_relocation_contract.py
       - scripts/vbox_vhd_volume.ps1
       - tests/test_vhd_volume_contract.py
+      - scripts/inspect_oracle.ps1
+      - scripts/prepare_app64.py
+      - scripts/oracle_extract.py
+      - scripts/msi_staging.py
+      - scripts/windows_payload.py
   workflow_dispatch:
 
 permissions:

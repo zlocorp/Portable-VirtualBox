@@ -262,17 +262,30 @@ namespace PortableVBox {
                     // The non-admin GUI remains responsive while this waits.
                     bool withinDeadline=process.WaitForExit(150000);
                     if(!withinDeadline) process.WaitForExit();
-                    journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,within_deadline=withinDeadline}));
-                    WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(stdout.GetAwaiter().GetResult()));
-                    WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(stderr.GetAwaiter().GetResult()));
-                    var helper=TokenFacts.Read(Process.GetCurrentProcess().Id);
-                    WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".json"),Encoding.UTF8.GetBytes(Json.Serialize(new{action=args[0],helper=helper,controller=caller,childExit=process.ExitCode})));
-                    if(!withinDeadline) throw new InvalidOperationException("Fixed effect exceeded deadline (child completed); inspect protected receipts");
-                    if(process.ExitCode!=0) throw new InvalidOperationException("Fixed effect worker rejected operation");
+                    if(prepare) {
+                        journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,within_deadline=withinDeadline}));
+                        WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(stdout.GetAwaiter().GetResult()));
+                        WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(stderr.GetAwaiter().GetResult()));
+                        var helper=TokenFacts.Read(Process.GetCurrentProcess().Id);
+                        WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".json"),Encoding.UTF8.GetBytes(Json.Serialize(new{action=args[0],helper=helper,controller=caller,childExit=process.ExitCode})));
+                        if(!withinDeadline) throw new InvalidOperationException("Fixed effect exceeded deadline (child completed); inspect protected receipts");
+                        if(process.ExitCode!=0) throw new InvalidOperationException("Fixed effect worker rejected operation");
+                    } else {
+                        CompleteCleanupWorker(withinDeadline,process.ExitCode,
+                            ()=>journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,within_deadline=withinDeadline})),
+                            stdout,stderr,
+                            ()=>{if(TokenFacts.WaitForSingleObject(controller,0)!=258) throw new InvalidOperationException("Controller exited during privileged operation");},
+                            ()=>CreatePayloadCheckpoint(session,root,caller,recovery?oldPid:pid,cycle,recovery,helperHash,journalPath,journalBinding),
+                            output=>{PayloadBreak("BeforeStdout");WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(output));},
+                            errors=>{PayloadBreak("BeforeStderr");WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(errors));},
+                            ()=>{
+                                PayloadBreak("BeforeFacts");var helper=TokenFacts.Read(Process.GetCurrentProcess().Id);
+                                WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".json"),Encoding.UTF8.GetBytes(Json.Serialize(new{action=args[0],helper=helper,controller=caller,childExit=process.ExitCode})));
+                            });
+                    }
                 }
                 if(TokenFacts.WaitForSingleObject(controller,0)!=258) throw new InvalidOperationException("Controller exited during privileged operation");
                 if(args[0]=="Finish" || recovery) {
-                    CreatePayloadCheckpoint(session,root,caller,recovery?oldPid:pid,cycle,recovery,helperHash,journalPath,journalBinding);
                     ReleasePayloadLocks(session);
                     ContinuePayloadRemoval(session,root,caller,controller,recovery?oldPid:pid,cycle,recovery,helperHash);
                 }

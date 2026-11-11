@@ -12,7 +12,7 @@ $out=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-payload-contract-'+[guid]::New
 New-Item -ItemType Directory -Path $out | Out-Null
 try {
     $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-    foreach ($target in @('PayloadCleanupJournal','PayloadCleanupPlan','PayloadObject','PayloadOwner')) {
+    foreach ($target in @('PayloadCleanupJournal','PayloadCleanupPlan','PayloadObject','PayloadOwner','CleanupCompletion')) {
         $exe=Join-Path $out ($target+'.exe')
         $sources=@((Join-Path $PSScriptRoot ($target+'Tests.cs')))
         $options=@('/nologo','/target:exe','/platform:x64','/langversion:5',('/main:PortableVBox.'+$target+'Tests'),('/out:'+$exe))
@@ -25,6 +25,8 @@ try {
             foreach ($script in @('privileged_session_worker.ps1','vbox_sup_standalone.ps1','vbox_sup_start_owned.ps1','vbox_sup_cleanup.ps1','vbox_sup_partial_cleanup.ps1','vbox_sup_package_identity.ps1')) {
                 $options+=('/resource:'+(Join-Path $repo ('scripts/'+$script))+','+$script)
             }
+        } elseif ($target -eq 'CleanupCompletion') {
+            $sources+=Join-Path $repo 'source/privilege/SessionHelper.CleanupCompletion.cs'
         } elseif ($target -eq 'PayloadObject') {
             $sources+=Join-Path $repo 'source/privilege/SessionHelper.PayloadObjects.cs'
             $options+='/define:PAYLOAD_OBJECT_TEST_STUBS'

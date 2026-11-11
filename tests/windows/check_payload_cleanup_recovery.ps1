@@ -58,6 +58,23 @@ function Evidence-Hashes([string]$Session) {
     }
     return $hashes
 }
+function Payload-Hashes([string]$Session) {
+    $hashes=@{}
+    foreach($name in @('app64','code')) {
+        foreach($item in @(Get-Item -LiteralPath (Join-Path $Session $name) -ErrorAction Stop)+@(Get-ChildItem -LiteralPath (Join-Path $Session $name) -Recurse -Force -ErrorAction Stop)) {
+            $relative=$item.FullName.Substring($Session.Length+1)
+            $hashes[$relative]=if($item.PSIsContainer){'directory'}else{Hash $item.FullName}
+        }
+    }
+    return $hashes
+}
+function Assert-PayloadIntact([string]$Session,[hashtable]$Before) {
+    $after=Payload-Hashes $Session
+    if ($after.Count -ne $Before.Count) { throw 'Diagnostic failure changed private payload entries' }
+    foreach($name in $Before.Keys) {
+        if (-not $after.ContainsKey($name) -or $after[$name] -cne $Before[$name]) { throw "Diagnostic failure changed payload: $name" }
+    }
+}
 function Assert-Evidence([string]$Session,[hashtable]$Before) {
     $after=Evidence-Hashes $Session
     if ($after.Count -ne $Before.Count) { throw 'Payload-only continuation created or removed system/worker evidence' }
@@ -124,45 +141,79 @@ try {
     [IO.File]::WriteAllText($sentinel,'Original user VM data must survive private payload continuation.')
     $original=Hash $sentinel
     $cycle=40
-    foreach($point in @('AfterFirstDelete','BeforeMarker')) {
+    $cases=@(
+        @{point='AfterFirstDelete';resume='Finish'},@{point='BeforeMarker';resume='Recover'}
+    )
+    foreach($diagnostic in @('BeforeStdout','BeforeStderr','BeforeFacts')) {
+        foreach($mode in @('Finish','Recover')) { $cases+=@{point=$diagnostic;resume=$mode} }
+    }
+    $cases+=@{point='BeforeFacts';resume='Recover';initial='Recover'}
+    foreach($case in $cases) {
+        $point=$case.point
+        $label=$point+'-'+$case.resume
+        $initialRecover=$case.ContainsKey('initial') -and $case.initial -eq 'Recover'
+        if ($initialRecover) { $label+='-InitialRecover' }
+        $beforeDiagnostics=$point -in @('BeforeStdout','BeforeStderr','BeforeFacts')
         $cycle++
         Assert-Clean
-        $old=Start-Controller ('owner-'+$point)
+        $old=Start-Controller ('owner-'+$label)
         $oldPid=$old.Id
-        Helper ('Prepare '+$oldPid+' '+$cycle) 0 ('prepare-'+$point)
+        Helper ('Prepare '+$oldPid+' '+$cycle) 0 ('prepare-'+$label)
         $session=Join-Path $store ('pvbox-manager-'+$oldPid+'-'+$cycle)
         if (-not (Test-Path -LiteralPath (Join-Path $session 'session.json') -PathType Leaf)) { throw 'Missing genuine prepared session' }
+        $initialAction='Finish'
+        $initialArguments='Finish '+$oldPid+' '+$cycle
+        if ($initialRecover) {
+            Close-Controller $old
+            $old.Dispose();$old=$null
+            if (@(Get-CimInstance Win32_Process -Filter "ProcessId=$oldPid").Count -ne 0) { throw 'Former controller PID still present before initial Recover' }
+            $new=Start-Controller ('initial-recovery-'+$label)
+            $initialAction='Recover'
+            $initialArguments='Recover '+$new.Id+' '+$oldPid+' '+$cycle
+        }
+        if ($beforeDiagnostics) { $payloadBefore=Payload-Hashes $session }
         $env:PVBOX_TEST_PAYLOAD_BREAK_AT=$point
-        try { Helper ('Finish '+$oldPid+' '+$cycle) 70 ('interrupt-'+$point) }
+        try { Helper $initialArguments 70 ('interrupt-'+$label) }
         finally { Remove-Item Env:\PVBOX_TEST_PAYLOAD_BREAK_AT -ErrorAction SilentlyContinue }
         Assert-Clean
         $diagnostics=@(Get-ChildItem -LiteralPath $session -File -Filter 'helper-error-*.txt' | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"
         if ($diagnostics -notmatch [regex]::Escape('Controlled private payload interruption: '+$point)) { throw 'Helper failed before requested payload checkpoint' }
-        foreach($relative in @('payload-cleanup.json','payload-cleanup.journal','stage\sup-standalone.json','cleanup\cleanup-results.json')) {
+        foreach($relative in @('payload-cleanup.json','stage\sup-standalone.json','cleanup\cleanup-results.json')) {
             if (-not (Test-Path -LiteralPath (Join-Path $session $relative) -PathType Leaf)) { throw "Missing protected checkpoint: $relative" }
         }
         $cleanup=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw | ConvertFrom-Json
         if (-not $cleanup.cleanup_verified -or -not $cleanup.driver_package_removed) { throw 'System teardown was not verified before interruption' }
         if (Test-Path -LiteralPath (Join-Path $session 'payload-removed.json')) { throw 'Success marker published before continuation' }
-        Assert-Ledger (Join-Path $session 'payload-cleanup.journal') ($point -eq 'BeforeMarker')
+        if ($beforeDiagnostics) {
+            Assert-PayloadIntact $session $payloadBefore
+            if (Test-Path -LiteralPath (Join-Path $session 'payload-cleanup.journal')) { throw 'Payload deletion started before diagnostic failure' }
+            $suffix=switch($point){'BeforeStdout'{'.stdout.txt'} 'BeforeStderr'{'.stderr.txt'} 'BeforeFacts'{'.json'}}
+            if (@(Get-ChildItem -LiteralPath $session -File -Filter ('helper-'+$initialAction+'-*'+$suffix)).Count -ne 0) { throw 'Controlled diagnostic write unexpectedly succeeded' }
+        } else { Assert-Ledger (Join-Path $session 'payload-cleanup.journal') ($point -eq 'BeforeMarker') }
         if ($point -eq 'AfterFirstDelete') {
             if (Test-Path -LiteralPath (Join-Path $session 'app64\.prepared.json')) { throw 'First planned deletion did not occur' }
             if (-not (Test-Path -LiteralPath (Join-Path $session 'app64') -PathType Container)) { throw 'Unexpected full deletion at first pending item' }
-        } else {
+        } elseif ($point -eq 'BeforeMarker') {
             foreach($name in @('app64','code')) { if (Test-Path -LiteralPath (Join-Path $session $name)) { throw 'BeforeMarker retained executable payload' } }
         }
         $before=Evidence-Hashes $session
-        $before | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $out ($point+'-preserved-hashes.json')) -Encoding utf8
-        if ($point -eq 'AfterFirstDelete') {
-            Resume ('Finish '+$oldPid+' '+$cycle) 'resume-same-controller' $session $before
+        $before | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $out ($label+'-preserved-hashes.json')) -Encoding utf8
+        if ($initialRecover) {
+            # The recovery initiator remains alive with the same PID/generation;
+            # original owner is absent. The checkpoint must preserve both bindings.
+            Resume ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) ('resume-same-recovery-'+$label) $session $before
+            Close-Controller $new
+            $new.Dispose();$new=$null
+        } elseif ($case.resume -eq 'Finish') {
+            Resume ('Finish '+$oldPid+' '+$cycle) ('resume-same-'+$label) $session $before
             Close-Controller $old
             $old.Dispose();$old=$null
         } else {
             Close-Controller $old
             $old.Dispose();$old=$null
             if (@(Get-CimInstance Win32_Process -Filter "ProcessId=$oldPid").Count -ne 0) { throw 'Former controller PID still present' }
-            $new=Start-Controller 'recovery-controller'
-            Resume ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 'resume-new-controller' $session $before
+            $new=Start-Controller ('recovery-'+$label)
+            Resume ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) ('resume-new-'+$label) $session $before
             Close-Controller $new
             $new.Dispose();$new=$null
         }
@@ -172,7 +223,7 @@ try {
         $marker=Get-Content -LiteralPath (Join-Path $session 'payload-removed.json') -Raw | ConvertFrom-Json
         if ($marker.protected_payload_removed -ne $true) { throw 'Final success marker missing or false' }
         if ((Hash $sentinel) -cne $original) { throw 'Original VM sentinel altered' }
-        $proof.completed_cases+= $point
+        $proof.completed_cases+= $label
     }
     $proof.original_vm_data_preserved=$true
     $proof.cleanup_evidence_unchanged=$true
