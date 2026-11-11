@@ -65,6 +65,27 @@ namespace PortableVBox {
      using(var writer=new FileStream(file,FileMode.Open,FileAccess.ReadWrite,FileShare.Read)) Check(writer.Length==3,"evidence guard permits journal writer");
      Refuses(()=>File.Move(file,file+".moved"),"evidence guard pins rename");
     }
+    string wrongOwner=NewFile("wrong-owner");
+    string user=WindowsIdentity.GetCurrent().User.Value;
+    if(!SetFileSecurityW(wrongOwner,1U,Descriptor("O:"+user))) throw new Win32Exception(Marshal.GetLastWin32Error());
+    var ownerRaw=new RawSecurityDescriptor(File.GetAccessControl(wrongOwner).GetSecurityDescriptorBinaryForm(),0);
+    Check(ownerRaw.DiscretionaryAcl.Count==3,"wrong-owner fixture retains exact three ACEs");
+    Refuses(()=>Capture(wrongOwner,false),"same three ACEs cannot replace mandatory Administrators owner");
+    Refuses(()=>Call("OpenPayloadEvidenceGuard",wrongOwner,sid),"evidence with wrong owner refused");
+    string extraAcl=NewFile("extra-ace");
+    var additional=File.GetAccessControl(extraAcl);
+    additional.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier("S-1-1-0"),FileSystemRights.Read,AccessControlType.Allow));
+    File.SetAccessControl(extraAcl,additional);
+    Refuses(()=>Capture(extraAcl,false),"additional allow ACE rejected, not optional four-ACE fallback");
+    string changedAcl=NewFile("changed-ace");
+    var changed=new RawSecurityDescriptor(File.GetAccessControl(changedAcl).GetSecurityDescriptorBinaryForm(),0);
+    ((CommonAce)changed.DiscretionaryAcl[2]).AccessMask=0x12019f;
+    var changedBytes=new byte[changed.BinaryLength];changed.GetBinaryForm(changedBytes,0);
+    if(!SetFileSecurityW(changedAcl,4U,changedBytes)) throw new Win32Exception(Marshal.GetLastWin32Error());
+    var reread=new RawSecurityDescriptor(File.GetAccessControl(changedAcl).GetSecurityDescriptorBinaryForm(),0);
+    Check(reread.DiscretionaryAcl.Count==3 && ((CommonAce)reread.DiscretionaryAcl[2]).AccessMask==0x12019f &&
+     ((CommonAce)reread.DiscretionaryAcl[2]).AceFlags==AceFlags.Inherited,"changed-mask fixture is the intended exact three-ACE negative");
+    Refuses(()=>Capture(changedAcl,false),"changed caller mask rejected");
     string badAcl=NewFile("bad-acl");
     if(!SetFileSecurityW(badAcl,0x80000004U,Descriptor("D:P(A;;FA;;;BA)(A;;FR;;;WD)"))) throw new Win32Exception(Marshal.GetLastWin32Error());
     Refuses(()=>Capture(badAcl,false),"unexpected file ACL rejected");

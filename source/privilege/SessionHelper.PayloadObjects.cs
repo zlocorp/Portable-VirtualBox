@@ -56,12 +56,14 @@ namespace PortableVBox {
      var expected=new RawSecurityDescriptor(Security(sid).GetSecurityDescriptorBinaryForm(),0);
      if((actual.ControlFlags&ControlFlags.DiscretionaryAclProtected)==0 || actual.GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access)!=expected.GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access)) throw new InvalidDataException("Untrusted payload directory ACL");
     } else {
-     // Files inherit these four OI ACEs from Security(sid). Inheritance strips
-     // OI/CI on a leaf and sets ID; no explicit ACE, callback/object ACE,
-     // inherit-only flag, protection or extra identity is permitted.
-     if((actual.ControlFlags&ControlFlags.DiscretionaryAclProtected)!=0 || actual.DiscretionaryAcl.Count!=4) throw new InvalidDataException("Untrusted payload file ACL");
-     var identities=new[]{SystemSid,Admins,new SecurityIdentifier(sid),new SecurityIdentifier("S-1-3-4")};
-     var masks=new[]{0x1f01ff,0x1f01ff,0x1200a9,0x20000};
+     // Native Windows removes inherited OWNER_RIGHTS when SetOwner normalizes
+     // the file to Administrators. Require that exact post-normalization ACL,
+     // not an optional 3/4-ACE fallback. The mandatory BA owner check above is
+     // essential: the medium caller must not gain implicit owner WRITE_DAC.
+     // Parent directories retain OWNER_RIGHTS throughout the creation window.
+     if((actual.ControlFlags&ControlFlags.DiscretionaryAclProtected)!=0 || actual.DiscretionaryAcl.Count!=3) throw new InvalidDataException("Untrusted payload file ACL");
+     var identities=new[]{SystemSid,Admins,new SecurityIdentifier(sid)};
+     var masks=new[]{0x1f01ff,0x1f01ff,0x1200a9};
      for(int i=0;i<identities.Length;i++) {
       var ace=actual.DiscretionaryAcl[i] as CommonAce;
       if(ace==null || ace.IsCallback || ace.AceQualifier!=AceQualifier.AccessAllowed || ace.AceFlags!=AceFlags.Inherited || !ace.SecurityIdentifier.Equals(identities[i]) || ace.AccessMask!=masks[i]) throw new InvalidDataException("Unexpected inherited payload ACE");

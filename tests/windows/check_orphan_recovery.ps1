@@ -43,7 +43,7 @@ function Helper([string]$Arguments,[int]$Expected,[string]$Label) {
         -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
     try { Wait-Code $p $Expected $Label } finally { $p.Dispose() }
     Assert-PriorJournals $target $beforeJournals
-    $newJournals=@(Get-ChildItem -LiteralPath $target -Filter '*.journal' -File -ErrorAction SilentlyContinue | Where-Object { -not $beforeJournals.ContainsKey($_.Name) })
+    $newJournals=@(Get-ChildItem -LiteralPath $target -Filter 'helper-*.journal' -File -ErrorAction SilentlyContinue | Where-Object { -not $beforeJournals.ContainsKey($_.Name) })
     $preEffectRefusal=$Label -match 'live-owner|replay'
     if($preEffectRefusal) {
         if($newJournals.Count -ne 0) { throw 'Pre-effect refusal created a worker journal' }

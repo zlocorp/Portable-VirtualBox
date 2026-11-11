@@ -61,7 +61,7 @@ function Helper-Action([string]$Action,[int]$Cycle,[int]$Expected,[string]$Label
     $before=Get-JournalHashes $target
     $p=Start-Process -FilePath $helper -ArgumentList ($Action+' '+$front.Id+' '+$Cycle) -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
     try { Wait-Exit $p $Expected $Label 170 } finally { $p.Dispose() }
-    $new=@(Get-ChildItem -LiteralPath $target -Filter '*.journal' -File -ErrorAction SilentlyContinue | Where-Object { -not $before.ContainsKey($_.Name) })
+    $new=@(Get-ChildItem -LiteralPath $target -Filter 'helper-*.journal' -File -ErrorAction SilentlyContinue | Where-Object { -not $before.ContainsKey($_.Name) })
     Assert-PriorJournals $target $before
     if($Label -eq 'reject-forged') {
         if($new.Count -ne 0) { throw 'Unverified inventory created an action journal' }

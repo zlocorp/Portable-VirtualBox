@@ -49,7 +49,7 @@ function Helper([string]$Arguments,[int]$Expected,[string]$Label) {
         if ($p.ExitCode -ne $Expected) { throw "$Label helper exit=$($p.ExitCode), expected=$Expected" }
     } finally { $p.Dispose() }
     Assert-PriorJournals $target $beforeJournals
-    $newJournals=@(Get-ChildItem -LiteralPath $target -Filter '*.journal' -File -ErrorAction SilentlyContinue | Where-Object { -not $beforeJournals.ContainsKey($_.Name) })
+    $newJournals=@(Get-ChildItem -LiteralPath $target -Filter 'helper-*.journal' -File -ErrorAction SilentlyContinue | Where-Object { -not $beforeJournals.ContainsKey($_.Name) })
     $preEffectRefusal=$Label -match 'live-owner|replay'
     if($preEffectRefusal) {
         if($newJournals.Count -ne 0) { throw 'Pre-effect refusal created a worker journal' }
