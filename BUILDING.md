@@ -23,6 +23,24 @@ pwsh -NoProfile -File .\scripts\test-native.ps1 -AutoItRoot 'C:\Program Files (x
 python -X utf8 scripts/check_active_tree.py
 ```
 
+Linux managed contract tests require PowerShell with its bundled Roslyn compiler
+and the official .NET Framework 4.8 reference metadata. Before running the Python
+suite, prepare the pinned Microsoft reference package in a fresh temporary
+directory and export its verified reference path:
+
+```bash
+references="$(python3 tests/prepare_native_fixed_image_toolchain.py --directory "$(mktemp -d)/net48")"
+export PVBOX_TEST_NET48_REFERENCES="$references"
+python3 -m unittest discover -s tests -v
+```
+
+Preparation downloads only the fixed NuGet reference package version 1.0.3 and
+checks source-pinned package and individual DLL digests. An offline copy can be
+passed with `--package`; it must match the same pins. Nothing is installed or
+executed from that package. Missing references are a test failure, not a skip or
+permission to retarget compilation to the host runtime. These are managed checks,
+not Windows-native execution evidence.
+
 Also compile the standalone Oracle file-only Setup helper before creating the ZIP:
 
 ```powershell

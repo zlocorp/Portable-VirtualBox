@@ -24,6 +24,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+      - name: Prepare pinned net48 references for managed contracts
+        run: |
+          references="$(python3 tests/prepare_native_fixed_image_toolchain.py --directory "$RUNNER_TEMP/pvbox-net48-reference-pack")"
+          printf 'PVBOX_TEST_NET48_REFERENCES=%s\n' "$references" >> "$GITHUB_ENV"
       - name: Unit tests for audit
         run: python3 -m unittest discover -s tests -v
       - name: Check official Oracle manifest (metadata only; no executable download)
