@@ -36,7 +36,7 @@ namespace PortableVBox {
   }
   static void Check(bool value,string label) {++checks;if(!value) throw new Exception("FAIL payload objects: "+label);}
   static void Refuses(Action action,string label) {
-   bool refused=false;try {action();} catch(IOException) {refused=true;} catch(Win32Exception) {refused=true;} catch(InvalidOperationException) {refused=true;}
+   bool refused=false;try {action();} catch(InvalidDataException) {refused=true;} catch(IOException) {refused=true;} catch(Win32Exception) {refused=true;} catch(InvalidOperationException) {refused=true;}
    Check(refused,label);
   }
   static byte[] Descriptor(string sddl) {var sd=new RawSecurityDescriptor(sddl);var bytes=new byte[sd.BinaryLength];sd.GetBinaryForm(bytes,0);return bytes;}

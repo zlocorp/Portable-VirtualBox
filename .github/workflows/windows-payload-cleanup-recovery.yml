@@ -130,6 +130,14 @@ jobs:
               New-Item -ItemType Directory -Path $cleanupDest -Force | Out-Null
               Get-ChildItem -LiteralPath $cleanup -File | Where-Object { $_.Extension -in @('.txt','.json','.journal') -and $_.Length -lt 262144 } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $cleanupDest }
             }
+            # Preserve bounded Oracle registration diagnostics when Prepare refuses.
+            # These are text evidence only, never an authority to retry registration.
+            foreach ($name in @('sds-register.stdout.txt','sds-register.stderr.txt')) {
+              $log=Join-Path $folder.FullName $name
+              if ((Test-Path -LiteralPath $log -PathType Leaf) -and (Get-Item -LiteralPath $log).Length -lt 262144) {
+                Copy-Item -LiteralPath $log -Destination $target
+              }
+            }
             Get-ChildItem -LiteralPath $folder.FullName -File -Filter 'helper-*' | Where-Object { $_.Length -lt 262144 } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target }
           }
       - name: Upload evidence, not runnable experimental distribution
