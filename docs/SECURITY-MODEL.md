@@ -96,3 +96,24 @@ or infer ownership from currently installed driver bytes.
 bytes against the pinned inventory and reports missing files. It does not query
 Windows state or authenticate ownership, and always denies resume authority.
 It adds no runtime action and does **not** close the operational-retry blocker.
+
+## Private-payload continuation versus system outcomes
+
+The payload-only protocol is distinct from the diagnostic helper attempt journal.
+After a newly authenticated durable system-teardown checkpoint, it may continue
+only the original protected app64/code deletion plan. Retained native volume/file
+identities, exact raw ACLs, hashes and no-delete ancestry leases bind each target.
+BEGIN is flushed before deletion; DONE follows close and explicit native absence.
+An absent pending object can complete its own step, but missing future objects or
+same-byte replacements are refused. The original receipts and user VM data remain.
+See the [design](designs/owner-bound-cleanup-resume.md) and
+[exact hosted Windows execution record](EXECUTION-2026-11-11-payload-cleanup.md).
+
+This grants no system-effect replay. The separate
+[system-outcomes reference model](designs/system-cleanup-outcomes.md) is test-only:
+it classifies proposed event sequences and simulated persistence failures without
+calling Windows or authorizing mutation. A current absence observation cannot
+resolve an outstanding effect intent; a completed predecessor cannot establish
+the next service/package generation. Neither the model nor old cleanup JSON may
+reconstruct the payload checkpoint. General system-effect retry and interactive
+Windows 10/11 acceptance remain blocked by the release gates.
