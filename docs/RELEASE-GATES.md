@@ -6,6 +6,7 @@ Reviewed 2026-11-11; exact verification checkpoints are recorded below. **Not re
 
 ## Evidence available, not a workstation sign-off
 
+- **Checkpoint-before-diagnostics commit `175e6a43f31d71a28d218c744dae7d34fd378680`: all 14 triggered runs passed on attempt 1; independent review accepted the narrow hosted increment.** [Nine payload-continuation cases](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/43018813937) now cover stdout/stderr/facts failures after the verified checkpoint, then explicit Finish/Recover without a second worker or system operation. Exact-commit native, fixed-helper, orphan/interrupted recovery, real Russian/English Oracle and Alpine, four relocation cases and build checks also passed. See the [run list, artifact digests and review limits](EXECUTION-2026-11-11-checkpoint-before-diagnostics.md). The real Oracle UI fixture is separate from fixed-helper privilege evidence. Runner-DPI screenshots, noninteractive pending UAC and direct-elevated invokers do not establish Windows 10/11 interactive UAC or 100%/150%/200% scaling acceptance. General system-effect retry remains blocked.
 - **Private-payload continuation checkpoint `b9db2b0ba3cfeecef915e107d3648104da551024`: all 12 triggered workflow runs passed.** [Native Windows gates](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/43013521734), [payload-only continuation](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/43013521630), [full helper with medium-token Alpine disk I/O](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/43013521670), [orphan recovery](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/43013521648), and [interrupted preparation with tamper refusals](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/43013521762) passed on this exact commit. Native assertions cover real raw ACLs and retained directory/evidence leases. See the [execution record and artifact digests](EXECUTION-2026-11-11-payload-cleanup.md). This accepts only the tested hosted increment, not general system-effect retry or workstation UAC.
 - **Read-only observer checkpoint `157a615`: seven triggered workflows passed**, including [Windows file-only preparation/reconciliation](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42982570559) and [native contracts](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42982577245). Windows ran 291 Python tests (2 platform/privilege skips); the genuine 185-file pinned Oracle inventory was inspected as intact, partially removed and absent on disposable copies, with original hashes unchanged. This is observational evidence only, never cleanup/resume authority.
 - **Runnable boundary checkpoint `576da6b`:** [fixed helper with medium-token Alpine disk I/O and exact-owned cleanup](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42981522499), [guarded interrupted preparation](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42981522504) and [noninteractive UAC pending](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42981522496) passed. Later observer fixes changed no privileged/runtime source. These hosted checks do not prove interactive workstation UAC. [Exact-owned orphan recovery](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/42981522492) passed on attempt 2 at that same code checkpoint; attempt 1 stopped before its live-guest/recovery checks with Oracle `VERR_NEM_VM_CREATE_FAILED`. Preserve both outcomes rather than treating the first as accepted.
@@ -66,12 +67,23 @@ PowerShell or repeat a service, driver or package operation. Only the exact
 original files and expected empty directories are eligible; user VM data and
 acquisition/cleanup receipts are preserved. See the [design and limits](designs/owner-bound-cleanup-resume.md).
 
-Native Windows and disposable system-effect CI passed at the exact `b9db2b0`
-checkpoint above. The controlled fixture covers AfterFirstDelete with
-same-controller Finish and BeforeMarker with a new-controller Recover, with
-teardown evidence unchanged and no payload recreation. File-only journal and
-plan tests alone would not establish those Windows results. Neither fixture is
-interactive workstation UAC or physical power-loss acceptance. Missing/torn checkpoint or journal, changed/recreated objects, uncertain
+Native Windows and disposable system-effect CI passed at exact `175e6a4`,
+including nine payload-continuation cases. After observed worker exit, both
+capture tasks and the existing worker/deadline/controller/receipt/system checks,
+the helper now creates the checkpoint before mandatory stdout/stderr/facts writes.
+A write failure still returns 70 and starts no deletion. Six diagnostic cases
+start with Finish and resume through Finish or Recover; a seventh starts with
+Recover after the original owner exits, then resumes with the same live recovery
+initiator, not a third controller. The previous AfterFirstDelete/Finish and
+BeforeMarker/Recover cases also passed. See the [exact evidence and collector
+limits](EXECUTION-2026-11-11-checkpoint-before-diagnostics.md).
+
+These cases preserve teardown evidence and VM sentinel data without payload
+recreation or a second system worker. File-only journal/plan tests alone would
+not establish those Windows results. The separate system-outcome model is
+test-only, always returns `mutation_authorized=false` and grants no SDS/SCM/PnP
+retry authority. Neither hosted fixture is interactive workstation UAC or physical
+power-loss acceptance. Missing/torn checkpoint or journal, changed/recreated objects, uncertain
 observations, an abandoned mutex, and a crash before the checkpoint remain blocked.
 Never remove or reconstruct evidence to force retry. Finish sessions with their
 original paired build before upgrading; protocol/build mismatches deliberately refuse.

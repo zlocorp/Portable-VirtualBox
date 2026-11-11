@@ -124,3 +124,11 @@ outcomes and child lifetime are proved. Isolated Windows 10/11 consent/denial,
 UI scaling, candidate packaging, relocation and final host checks remain in
 [the release gates](RELEASE-GATES.md). Multi-VM mutation, USB and updater behavior
 are outside scope.
+
+## Later checkpoint, recorded separately
+
+The [175e6a4 execution record](EXECUTION-2026-11-11-checkpoint-before-diagnostics.md)
+tracks the later checkpoint-before-diagnostics change and its own exact-commit
+CI/artifacts. That change narrows the diagnostic-write gap described above; it
+does not add general system-effect retry. This b9db2b0 record and its original
+results/limitations remain historical evidence, not a pass for the later source.

@@ -2,12 +2,12 @@
 
 This is an **unverified developer candidate**, not a stable VirtualBox launcher.
 Never run it on the only copy of a useful Windows system or valuable VMs.
-GitHub-hosted Windows Server tests verify refusal, not interactive Windows 11
-driver installation or UAC approval/cancellation. The same compiled main
-launcher has independently booted Alpine Linux x86-64 and verified a real
-guest-written VDI sector after full driver teardown/restart in
-[isolated CI #40407596523](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40407596523);
-that does **not** certify its privileged ALPHA build on a workstation.
+The ALPHA-mode GitHub-hosted Windows Server fixture verifies refusal. Separate
+CI-mode helper and Oracle fixtures verify the driver lifecycle, medium-token
+Manager/guest boundary, Alpine VDI readback and two sessions; see the
+[exact-commit execution record](EXECUTION-2026-11-11-checkpoint-before-diagnostics.md).
+They do not exercise interactive workstation UAC approval/cancellation and do
+**not** certify the privileged ALPHA build on Windows 10/11.
 
 Use only an isolated, disposable Windows 10 22H2 or Windows 11 x64 workstation
 with a recoverable host snapshot, no installed VirtualBox and no foreign VBox

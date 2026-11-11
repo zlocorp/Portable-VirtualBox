@@ -1,9 +1,11 @@
 # Checkpoint before cleanup diagnostics: narrow follow-up
 
-Status: implementation candidate, locally tested; independent review and exact-commit
-Windows CI still required. No release or interactive Windows acceptance is claimed.
+Status: narrow hosted increment accepted after independent actual-diff/artifact
+review and 14 successful workflow runs on exact runtime commit
+`175e6a43f31d71a28d218c744dae7d34fd378680`. See the [execution record](../EXECUTION-2026-11-11-checkpoint-before-diagnostics.md).
+No release or interactive Windows acceptance is claimed.
 
-**Goal:** a failure writing optional helper stdout/stderr/facts must not erase the
+**Goal:** a failure writing mandatory helper stdout/stderr/facts must not erase the
 opportunity to explicitly continue private payload cleanup after verified system
 teardown. Keep failure result 70; do not introduce best-effort success.
 
@@ -39,15 +41,15 @@ callbacks, command names, paths, privileges, or a generalized cleanup engine.
 
 - [x] Worker persistence/capture failure, nonzero exit, missed deadline or departed
   controller never invokes checkpoint creation or payload deletion.
-- [ ] Receipt/system-check/checkpoint write/readback failure never invokes Continue.
-- [ ] Independently fault stdout, stderr and facts writes after a verified checkpoint:
+- [x] Receipt/system-check/checkpoint write/readback failure never invokes Continue.
+- [x] Independently fault stdout, stderr and facts writes after a verified checkpoint:
   result remains 70, checkpoint survives, and private payload is still intact.
 - [x] Failed/unknown worker diagnostics remain available; original cause is retained.
 - [x] Prepare diagnostic failures retain old behavior and never create this checkpoint.
-- [ ] Disposable Windows fixture resumes an intact pre-deletion checkpoint through
+- [x] Disposable Windows fixture resumes an intact pre-deletion checkpoint through
   both same-owner Finish and absent-owner Recover. No second worker/system effect,
   receipt change, payload recreation or VM sentinel change is allowed.
-- [ ] Independent actual-diff review, C# 5 / .NET Framework 4.8 compile, full source
+- [x] Independent actual-diff review, C# 5 / .NET Framework 4.8 compile, full source
   suite and exact-commit native/payload/helper/orphan/interrupted CI all pass.
 
 ## Local evidence and limits
@@ -68,7 +70,10 @@ evidence hash and creation-watcher checks. A seventh diagnostic case starts with
 Recover after the original controller has exited, faults before facts, and explicitly
 resumes Recover with the same live recovery initiator. Its proof label is
 `BeforeFacts-Recover-InitialRecover`; the preceding six diagnostic labels are unchanged.
-All seven diagnostic cases have NOT run locally.
+All seven diagnostic cases passed in hosted Windows run
+[43018813937](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/43018813937),
+together with the two original partial-deletion/marker cases; they were not run
+on a local or primary Windows host.
 The controlled hook throws immediately before the diagnostic write; the managed
 sequencing tests separately exercise failures in each write operation.
 
@@ -76,9 +81,13 @@ Local gates: combined Python suite 313 tests OK, 6 platform-specific skips;
 464 actual sequencing assertions across 52 cases pass, including double faults.
 An in-memory mutation restoring checkpoint-after-diagnostics is rejected. Helper
 and file-only fixtures compile against official .NET Framework 4.8 references in C# 5 mode.
-The compile-only pin produces the existing unreachable-code warning; Windows
-execution, real checkpoint durability and original-owner continuation remain CI
-gates. The tests are not evidence of physical power-loss tolerance.
+The compile-only pin produces the existing unreachable-code warning. Exact-commit
+native CI and the nine-case payload fixture passed, including real checkpoint
+and original-owner continuation checks. Independent review reconciled each
+220-identity/441-event journal and the archived evidence. Four stage/start
+stdout/stderr files in the hash maps were not collected in the archive; equality
+for those files was asserted on the runner, not independently byte-compared
+offline. The tests are not evidence of physical power-loss tolerance.
 
 Capture failures and crashes before the checkpoint still retain the old fail-closed
 limitation. General SDS/SCM/PnP retry, arbitrary power loss, and interactive Windows 10/11 acceptance
