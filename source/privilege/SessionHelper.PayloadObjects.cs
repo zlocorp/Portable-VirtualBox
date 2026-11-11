@@ -56,17 +56,18 @@ namespace PortableVBox {
      var expected=new RawSecurityDescriptor(Security(sid).GetSecurityDescriptorBinaryForm(),0);
      if((actual.ControlFlags&ControlFlags.DiscretionaryAclProtected)==0 || actual.GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access)!=expected.GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access)) throw new InvalidDataException("Untrusted payload directory ACL");
     } else {
-     // Native Windows removes inherited OWNER_RIGHTS when SetOwner normalizes
-     // the file to Administrators. Require that exact post-normalization ACL,
-     // not an optional 3/4-ACE fallback. The mandatory BA owner check above is
-     // essential: the medium caller must not gain implicit owner WRITE_DAC.
-     // Parent directories retain OWNER_RIGHTS throughout the creation window.
-     if((actual.ControlFlags&ControlFlags.DiscretionaryAclProtected)!=0 || actual.DiscretionaryAcl.Count!=3) throw new InvalidDataException("Untrusted payload file ACL: flags="+actual.ControlFlags+"; count="+actual.DiscretionaryAcl.Count+"; "+actual.GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access));
-     var identities=new[]{SystemSid,Admins,new SecurityIdentifier(sid)};
-     var masks=new[]{0x1f01ff,0x1f01ff,0x1200a9};
+     // Verify the raw descriptor returned for the actual protected helper files.
+     // FileSecurity's managed leaf-ACL projection hides InheritOnly ACEs, so it
+     // must not define this contract. Native files have an exact protected DACL:
+     // IO OWNER_RIGHTS RC, then explicit SYSTEM/Administrators FA and caller RX.
+     // IO is ineffective on a file. Mandatory Administrators ownership above
+     // therefore remains essential to deny the medium caller owner WRITE_DAC.
+     if((actual.ControlFlags&ControlFlags.DiscretionaryAclProtected)==0 || actual.DiscretionaryAcl.Count!=4) throw new InvalidDataException("Untrusted payload file ACL: flags="+actual.ControlFlags+"; count="+actual.DiscretionaryAcl.Count+"; "+actual.GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access));
+     var identities=new[]{new SecurityIdentifier("S-1-3-4"),SystemSid,Admins,new SecurityIdentifier(sid)};
+     var masks=new[]{0x20000,0x1f01ff,0x1f01ff,0x1200a9};
      for(int i=0;i<identities.Length;i++) {
       var ace=actual.DiscretionaryAcl[i] as CommonAce;
-      if(ace==null || ace.IsCallback || ace.AceQualifier!=AceQualifier.AccessAllowed || ace.AceFlags!=AceFlags.Inherited || !ace.SecurityIdentifier.Equals(identities[i]) || ace.AccessMask!=masks[i]) throw new InvalidDataException("Unexpected inherited payload ACE");
+      if(ace==null || ace.IsCallback || ace.AceQualifier!=AceQualifier.AccessAllowed || ace.AceFlags!=(i==0?AceFlags.InheritOnly:AceFlags.None) || !ace.SecurityIdentifier.Equals(identities[i]) || ace.AccessMask!=masks[i]) throw new InvalidDataException("Unexpected native payload ACE");
      }
     }
    } finally {if(descriptor!=IntPtr.Zero) LocalFree(descriptor);}

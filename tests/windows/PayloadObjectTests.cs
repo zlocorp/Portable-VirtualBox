@@ -18,6 +18,18 @@ namespace PortableVBox {
   [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool SetFileSecurityW(string path,uint information,byte[] descriptor);
   [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateHardLinkW(string link,string existing,IntPtr attributes);
   [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateSymbolicLinkW(string link,string target,uint flags);
+  [DllImport("advapi32.dll")] static extern uint GetSecurityInfo(SafeFileHandle handle,int type,uint requested,out IntPtr owner,out IntPtr group,out IntPtr dacl,out IntPtr sacl,out IntPtr descriptor);
+  [DllImport("advapi32.dll")] static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
+  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr pointer);
+  static RawSecurityDescriptor RawFile(string path) {
+   using(var handle=(SafeFileHandle)Call("OpenPayloadObject",path,false,false)) {
+    IntPtr owner,group,dacl,sacl,descriptor;
+    uint error=GetSecurityInfo(handle,1,5,out owner,out group,out dacl,out sacl,out descriptor);
+    if(error!=0) throw new Win32Exception((int)error);
+    try {var bytes=new byte[GetSecurityDescriptorLength(descriptor)];Marshal.Copy(descriptor,bytes,0,bytes.Length);return new RawSecurityDescriptor(bytes,0);}
+    finally {LocalFree(descriptor);}
+   }
+  }
   static object Call(string method,params object[] args) {
    try {return typeof(SessionHelper).GetMethod(method,BindingFlags.NonPublic|BindingFlags.Static).Invoke(null,args);}
    catch(TargetInvocationException error) {throw error.InnerException;}
@@ -33,8 +45,8 @@ namespace PortableVBox {
     byte[] bytes=((DirectorySecurity)Call("Security",sid)).GetSecurityDescriptorBinaryForm();
     if(!SetFileSecurityW(path,0x80000005U,bytes)) throw new Win32Exception(Marshal.GetLastWin32Error());
    } else {
-    // Match WriteNew/ValidateAndStage exactly. The legacy SetFileSecurityW
-    // OWNER-only API does not have the same inherited-ACE normalization.
+    // Match WriteNew/ValidateAndStage exactly. Managed FileSecurity can hide
+    // raw InheritOnly ACEs; test fixture assertions below use the native view.
     var security=File.GetAccessControl(path);security.SetOwner(new SecurityIdentifier("S-1-5-32-544"));File.SetAccessControl(path,security);
    }
   }
@@ -58,7 +70,7 @@ namespace PortableVBox {
     SetSecurity(root,true);
     Check(!(bool)Call("PayloadExists",Path.Combine(root,"missing")),"explicit missing is absent");
     string file=NewFile("file");
-    Console.WriteLine("NATIVE_FILE_ACL="+File.GetAccessControl(file).GetSecurityDescriptorSddlForm(AccessControlSections.Owner|AccessControlSections.Access));
+    Console.WriteLine("NATIVE_FILE_ACL="+RawFile(file).GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access));
     string identity=Capture(file,false);
     Check(identity==Capture(file,false),"stable file handle identity");
     File.Move(file,file+".old");NewFile("file");
@@ -75,24 +87,27 @@ namespace PortableVBox {
     }
     string wrongOwner=NewFile("wrong-owner");
     string user=WindowsIdentity.GetCurrent().User.Value;
-    if(!SetFileSecurityW(wrongOwner,1U,Descriptor("O:"+user))) throw new Win32Exception(Marshal.GetLastWin32Error());
-    var ownerRaw=new RawSecurityDescriptor(File.GetAccessControl(wrongOwner).GetSecurityDescriptorBinaryForm(),0);
-    Check(ownerRaw.DiscretionaryAcl.Count==3,"wrong-owner fixture retains exact three ACEs");
-    Refuses(()=>Capture(wrongOwner,false),"same three ACEs cannot replace mandatory Administrators owner");
+    var ownerRaw=RawFile(wrongOwner);ownerRaw.Owner=new SecurityIdentifier(user);
+    var ownerBytes=new byte[ownerRaw.BinaryLength];ownerRaw.GetBinaryForm(ownerBytes,0);
+    if(!SetFileSecurityW(wrongOwner,0x80000005U,ownerBytes)) throw new Win32Exception(Marshal.GetLastWin32Error());
+    ownerRaw=RawFile(wrongOwner);
+    Check(ownerRaw.DiscretionaryAcl.Count==4 && (ownerRaw.ControlFlags&ControlFlags.DiscretionaryAclProtected)!=0,"wrong-owner fixture retains exact protected native four-ACE shape");
+    Refuses(()=>Capture(wrongOwner,false),"same native four ACEs cannot replace mandatory Administrators owner");
     Refuses(()=>Call("OpenPayloadEvidenceGuard",wrongOwner,sid),"evidence with wrong owner refused");
     string extraAcl=NewFile("extra-ace");
     var additional=File.GetAccessControl(extraAcl);
     additional.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier("S-1-1-0"),FileSystemRights.Read,AccessControlType.Allow));
     File.SetAccessControl(extraAcl,additional);
-    Refuses(()=>Capture(extraAcl,false),"additional allow ACE rejected, not optional four-ACE fallback");
+    Refuses(()=>Capture(extraAcl,false),"additional allow ACE rejected, no alternate ACL fallback");
     string changedAcl=NewFile("changed-ace");
-    var changed=new RawSecurityDescriptor(File.GetAccessControl(changedAcl).GetSecurityDescriptorBinaryForm(),0);
-    ((CommonAce)changed.DiscretionaryAcl[2]).AccessMask=0x12019f;
+    var changed=RawFile(changedAcl);
+    ((CommonAce)changed.DiscretionaryAcl[3]).AccessMask=0x12019f;
     var changedBytes=new byte[changed.BinaryLength];changed.GetBinaryForm(changedBytes,0);
     if(!SetFileSecurityW(changedAcl,4U,changedBytes)) throw new Win32Exception(Marshal.GetLastWin32Error());
-    var reread=new RawSecurityDescriptor(File.GetAccessControl(changedAcl).GetSecurityDescriptorBinaryForm(),0);
-    Check(reread.DiscretionaryAcl.Count==3 && ((CommonAce)reread.DiscretionaryAcl[2]).AccessMask==0x12019f &&
-     ((CommonAce)reread.DiscretionaryAcl[2]).AceFlags==AceFlags.Inherited,"changed-mask fixture is the intended exact three-ACE negative");
+    var reread=RawFile(changedAcl);
+    Check(reread.DiscretionaryAcl.Count==4 && (reread.ControlFlags&ControlFlags.DiscretionaryAclProtected)!=0 &&
+     ((CommonAce)reread.DiscretionaryAcl[3]).AccessMask==0x12019f && ((CommonAce)reread.DiscretionaryAcl[3]).AceFlags==AceFlags.None,
+     "changed-mask fixture is the intended exact native four-ACE negative");
     Refuses(()=>Capture(changedAcl,false),"changed caller mask rejected");
     string badAcl=NewFile("bad-acl");
     if(!SetFileSecurityW(badAcl,0x80000004U,Descriptor("D:P(A;;FA;;;BA)(A;;FR;;;WD)"))) throw new Win32Exception(Marshal.GetLastWin32Error());

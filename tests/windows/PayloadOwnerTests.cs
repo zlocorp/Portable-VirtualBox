@@ -5,6 +5,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Security.Cryptography;
@@ -16,6 +18,19 @@ namespace PortableVBox {
   static readonly string Sid="S-1-5-21-111111111-222222222-333333333-1234";
   static string root,session,ownerBinding;static int checks;
   static readonly TokenFacts Caller=new TokenFacts {Pid=12345,Created=123456789,Sid=Sid};
+  [DllImport("advapi32.dll")] static extern uint GetSecurityInfo(SafeFileHandle handle,int type,uint requested,out IntPtr owner,out IntPtr group,out IntPtr dacl,out IntPtr sacl,out IntPtr descriptor);
+  [DllImport("advapi32.dll")] static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
+  [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool SetFileSecurityW(string path,uint information,byte[] descriptor);
+  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr pointer);
+  static RawSecurityDescriptor NativeFileAcl(string path) {
+   using(var handle=(SafeFileHandle)Call("OpenPayloadObject",path,false,false)) {
+    IntPtr owner,group,dacl,sacl,descriptor;
+    uint error=GetSecurityInfo(handle,1,5,out owner,out group,out dacl,out sacl,out descriptor);
+    if(error!=0) throw new System.ComponentModel.Win32Exception((int)error);
+    try {var bytes=new byte[GetSecurityDescriptorLength(descriptor)];Marshal.Copy(descriptor,bytes,0,bytes.Length);return new RawSecurityDescriptor(bytes,0);}
+    finally {LocalFree(descriptor);}
+   }
+  }
   static object Call(string name,params object[] args) {
    try {return typeof(SessionHelper).GetMethod(name,BindingFlags.NonPublic|BindingFlags.Static).Invoke(null,args);}
    catch(TargetInvocationException error) {throw error.InnerException;}
@@ -122,12 +137,17 @@ namespace PortableVBox {
     string savedFuture=Path.Combine(session,"saved-future");File.Move(future,savedFuture);
     try {Refuses(()=>plan.ValidatePresence(journal.State,Observe(plan,identities)),"missing future object cannot infer progress");}
     finally {File.Move(savedFuture,future);}
-    byte[] savedAcl=File.GetAccessControl(future).GetSecurityDescriptorBinaryForm();
+    var savedRaw=NativeFileAcl(future);var savedAcl=new byte[savedRaw.BinaryLength];savedRaw.GetBinaryForm(savedAcl,0);
+    string savedSddl=savedRaw.GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access);
     try {
      var wrong=File.GetAccessControl(future);wrong.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier("S-1-1-0"),FileSystemRights.Read,AccessControlType.Allow));
      File.SetAccessControl(future,wrong);Refuses(()=>Observe(plan,identities),"wrong inherited file ACL rejected");
      Check(Digest(File.ReadAllBytes(future))==hash,"ACL rejection preserves original bytes");
-    } finally {var restored=new FileSecurity();restored.SetSecurityDescriptorBinaryForm(savedAcl);File.SetAccessControl(future,restored);}
+    } finally {
+     if(!SetFileSecurityW(future,0x80000005U,savedAcl)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+     Check(NativeFileAcl(future).GetSddlForm(AccessControlSections.Owner|AccessControlSections.Access)==savedSddl,
+      "negative fixture restores exact raw ACL including IO OWNER_RIGHTS");
+    }
     plan.ValidatePresence(journal.State,Observe(plan,identities));Check(true,"fixture restored after negative observations");
     for(int i=0;i<plan.Items.Count;i++) {
      var entry=plan.Items[i];string target=(string)Call("PayloadPath",session,entry.Relative);

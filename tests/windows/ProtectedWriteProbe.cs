@@ -15,7 +15,7 @@ public static class ProtectedWriteProbe {
             try {using(var f=new FileStream(p,FileMode.Open,FileAccess.Write)) {} return 1;} catch(UnauthorizedAccessException) {refused++;}
         }
         try {File.WriteAllText(Path.Combine(root,"code\\injected.ps1"),"unexpected");return 2;} catch(UnauthorizedAccessException) {refused++;}
-        // Owner normalization removes the inherited OWNER_RIGHTS ACE on Windows.
+        // The native leaf OWNER_RIGHTS ACE is InheritOnly, hence not effective.
         // Strict Administrators ownership must still deny medium-token WRITE_DAC
         // for every executable/manifest/control-file class, not just file writes.
         foreach(string relative in new[]{"app64\\VBoxSDS.exe","app64\\.prepared.json","code\\privileged_session_worker.ps1","controller.json"}) {
