@@ -40,9 +40,7 @@ To create the **diagnostic-only** ZIP (not a usable hypervisor release):
 python -X utf8 scripts/package_preview.py --repo . --exe build/Portable-VirtualBox_x64.exe --out build/Portable-VirtualBox-diagnostic-preview.zip
 ```
 
-The ordinary GUI provides nonprivileged diagnostics, portable-folder/data backup and pinned Oracle 7.2.22 file-only setup (official download or a selected local installer). Native VM execution and privileged VBoxSup/VBoxSDS
-experiments are fenced to disposable GitHub Actions Windows hosts and are NOT
-available as a supported normal-user start/stop workflow.
+The ordinary GUI provides nonprivileged diagnostics, portable-folder/data backup and pinned Oracle 7.2.22 file-only setup (official download or a selected local installer). Native VM execution and privileged VBoxSup/VBoxSDS operations are available only in explicit disposable-host CI experiments and the separate opt-in workstation ALPHA described below, not as a supported normal-user start/stop workflow.
 
 Oracle VirtualBox is not shipped in this repository or ZIP. The current
 pinned signed Oracle 7.2.22 preparation and test instructions are in
@@ -92,3 +90,7 @@ The `manager-session.yml` workflow drives actual buttons and Oracle Manager,
 verifies guest preservation/second-controller refusal and two exact-owned
 cleanups. It publishes bounded evidence, not a runnable experimental package.
 See [the execution report](docs/EXECUTION-2026-10-21-manager-session.md).
+
+## Release acceptance
+
+A successful build is not a release approval. Use the [minimal one-VM release gates](docs/RELEASE-GATES.md) and [current security model](docs/SECURITY-MODEL.md). Interactive Windows 10 and Windows 11 acceptance must be recorded separately on disposable isolated hosts, never the primary OS.

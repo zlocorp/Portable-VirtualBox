@@ -12,6 +12,7 @@ on:
       - scripts/vbox_vm_boot_probe.ps1
       - tests/test_vm_boot_standalone_contract.py
       - scripts/vbox_sup_cleanup.ps1
+      - scripts/vbox_sup_package_identity.ps1
       - tests/test_sup_cleanup_contract.py
       - scripts/vbox_vm_reopen_probe.ps1
       - tests/test_vm_reopen_contract.py

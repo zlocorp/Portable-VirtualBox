@@ -26,6 +26,7 @@ on:
       - scripts/vbox_sup_standalone.ps1
       - scripts/vbox_sup_start_owned.ps1
       - scripts/vbox_sup_cleanup.ps1
+      - scripts/vbox_sup_package_identity.ps1
       - scripts/build.ps1
       - tests/test_manager_session_contract.py
       - tests/test_orphan_recovery_contract.py

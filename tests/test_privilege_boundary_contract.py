@@ -214,7 +214,7 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         s=self.text('scripts/vbox_sup_standalone.ps1')
         for fragment in ('System32\\drivers\\VBoxSup.sys',
                          "if (Test-Path -LiteralPath $systemSup)",
-                         "'oem*.inf'", 'Get-ChildItem -LiteralPath $publishedInfRoot',
+                         'Get-PortablePublishedInfFiles', '$publishedInfNamesBefore',
                          "[Text.Encoding]::Unicode.GetString($rawBytes)",
                          "IndexOf('VBoxSup'",
                          'Pre-existing published VBoxSup OEM INF'):

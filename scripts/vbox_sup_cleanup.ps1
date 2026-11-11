@@ -152,16 +152,10 @@ if ((Get-FileHash -LiteralPath $sys -Algorithm SHA256).Hash.ToLowerInvariant() -
 $sig=Get-AuthenticodeSignature -LiteralPath $sys
 if ($sig.Status -ne 'Valid') { throw 'Installed VBoxSup signature invalid' }
 
-# PnPUtil's human-language output is NOT a stable public parsing API.
-# On this exact English hosted image, accept a single tightly constrained
-# Published Name: oemNN.inf, then prove its on-disk INF has the known SHA.
-# If format or identity differs, refuse all driver-removal operations.
-$pnputilLog=Join-Path (Split-Path $StandaloneReport -Parent) 'pnputil.stdout.txt'
-if (-not (Test-Path -LiteralPath $pnputilLog -PathType Leaf)) { throw 'Missing driver installation transcript' }
-$installText=Get-Content -LiteralPath $pnputilLog -Raw -ErrorAction Stop
-$publishedMatches=[regex]::Matches($installText,'(?im)^\s*Published Name:\s*(oem[0-9]{1,6}\.inf)\s*$')
-if ($publishedMatches.Count -ne 1) { throw 'No unambiguous published OEM INF name from this installation' }
-$published=$publishedMatches[0].Groups[1].Value.ToLowerInvariant()
+# Resolve only the exact new-package identity from the protected stage receipt.
+# PnPUtil output is localized and must never authorize package removal.
+. (Join-Path $PSScriptRoot 'vbox_sup_package_identity.ps1')
+$published=Get-PortableOwnedPublishedInf -InfDirectory (Join-Path $env:SystemRoot 'INF') -Receipt $stage -ExpectedSha256 $pinInf
 $installedInf=Join-Path (Join-Path $env:SystemRoot 'INF') $published
 if (-not (Test-Path -LiteralPath $installedInf -PathType Leaf) -or
     (Get-FileHash -LiteralPath $installedInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf) {

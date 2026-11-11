@@ -12,7 +12,7 @@ class VBoxSupCleanupContract(unittest.TestCase):
         for expected in (
             "RUNNER_ENVIRONMENT", "github-hosted", "GITHUB_ACTIONS",
             "GITHUB_REPOSITORY", "RUNNER_TEMP", "services_before",
-            "pnputil.stdout.txt", "system_driver_matches_package",
+            "Get-PortableOwnedPublishedInf", "system_driver_matches_package",
             "startvm_returned_zero", "poweroff_succeeded", "orphaned_vm_process_count",
             "VBoxSDS.exe", "--unregservice", "VBoxSup.sys", "VBoxSup.inf",
             "Get-FileHash", "Get-AuthenticodeSignature",
@@ -42,8 +42,8 @@ class VBoxSupCleanupContract(unittest.TestCase):
 
     def test_published_inf_name_requires_restrictive_pattern(self):
         text = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("Published Name:", text)
-        self.assertRegex(text, r"oem\[0-9\].*\\\.inf")
+        self.assertNotIn("Published Name:", text)
+        self.assertIn("Get-PortableOwnedPublishedInf", text)
         self.assertIn("existing", text.lower())
 
 if __name__ == "__main__":

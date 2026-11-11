@@ -79,7 +79,9 @@ if (Test-Path -LiteralPath $systemSup) {
     throw 'Pre-existing VBoxSup kernel image; do not adopt or clean its driver package'
 }
 $publishedInfRoot=Join-Path $env:SystemRoot 'INF'
-$publishedInf=@(Get-ChildItem -LiteralPath $publishedInfRoot -Filter 'oem*.inf' -File -ErrorAction Stop)
+. (Join-Path $PSScriptRoot 'vbox_sup_package_identity.ps1')
+$publishedInf=@(Get-PortablePublishedInfFiles -InfDirectory $publishedInfRoot)
+$publishedInfNamesBefore=@($publishedInf | ForEach-Object Name)
 foreach ($infEntry in $publishedInf) {
     $rawBytes=[IO.File]::ReadAllBytes($infEntry.FullName)
     # Windows OEM INF files can be ANSI/UTF-8 or UTF-16LE. Scan both decoded
@@ -144,11 +146,22 @@ $installed = Join-Path $env:SystemRoot 'System32\drivers\VBoxSup.sys'
 $exists = Test-Path -LiteralPath $installed -PathType Leaf
 $installedHash = if ($exists) {(Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash.ToLowerInvariant()} else {''}
 $installedSig = if ($exists) { Get-AuthenticodeSignature -LiteralPath $installed } else {$null}
+# Only a positively completed PnP operation may acquire a new package name.
+# Localized stdout remains diagnostic only; exact bytes and the prior inventory
+# establish the name that this protected attempt may later release.
+$published=''
+if ($status -eq 'EXITED' -and $exitCode -eq 0) {
+    $published=Get-PortableNewPublishedInf -InfDirectory $publishedInfRoot -BeforeNames $publishedInfNamesBefore -ExpectedSha256 $pinned['VBoxSup.inf']
+}
 $report = [ordered]@{
     experiment='standalone-VBoxSup-primitive-INF-pnputil'
     source_commit=$env:GITHUB_SHA
     oracle_version='7.2.22'
     package_verified=$true
+    published_inf_schema=1
+    published_inf=$published
+    published_inf_sha256=$pinned['VBoxSup.inf']
+    published_inf_was_absent=[bool]($published -ne '')
     services_before=$beforeServices
     services_after=$afterServices
     processes_before=$beforeProcesses

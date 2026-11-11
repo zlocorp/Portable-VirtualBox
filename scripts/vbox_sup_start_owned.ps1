@@ -118,3 +118,6 @@ if ($env:GITHUB_STEP_SUMMARY) {
 }
 # Unsupported/failed driver start is diagnostic evidence; do not retry with
 # unscoped operations or change any other service automatically.
+if ($status -ne 'EXITED' -or $exitCode -ne 0 -or -not $driverRunning) {
+    throw 'Owned VBoxSup start unconfirmed; diagnostic receipt retained, preparation denied'
+}

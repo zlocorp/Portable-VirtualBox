@@ -27,6 +27,7 @@ on:
       - scripts/check_manager_session_gui.ps1
       - scripts/snapshot_manager_windows.ps1
       - scripts/vbox_sup_cleanup.ps1
+      - scripts/vbox_sup_package_identity.ps1
       - scripts/build.ps1
       - tests/test_manager_session_contract.py
   workflow_dispatch:

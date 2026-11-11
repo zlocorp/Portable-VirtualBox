@@ -2,6 +2,8 @@
 
 Updated **2026-11-07**. The comparison baseline is upstream `vboxme/Portable-VirtualBox` at `5b58dbbe701c3e2eb348942a9059708063b0cb96`, not every community fork. This branch is still a **diagnostic development preview**, not a replacement for an existing working launcher.
 
+The [minimal Russian one-VM release checklist](docs/RELEASE-GATES.md) separates existing CI evidence from missing workstation acceptance. See the [current security model](docs/SECURITY-MODEL.md); multi-VM mutation, USB and updater work are not release prerequisites for this scope.
+
 | Capability | Current status | What that means / evidence |
 | --- | --- | --- |
 | File/driver ownership error-boundary hardening | Windows CI verified; workstation UAC pending | Ambiguous elevated-helper processes are retained; five file probes preserve native missing-vs-unknown evidence across GUI callbacks. The native stress run completed 5,000 file queries with no failures. No expanded cleanup authority. |

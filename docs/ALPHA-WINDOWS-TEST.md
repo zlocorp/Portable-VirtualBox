@@ -44,6 +44,14 @@ closes the whole controller and preserves receipts for manual inspection or
 later one-shot recovery. Canceling the warning keeps the controller running;
 never interpret FAILED as proof that cleanup completed.
 
+**Do not replace the build during an active or incomplete session.** Finish or
+recover it with its original paired frontend/helper before updating. The new
+locale-independent driver package receipt and embedded script inventory are not
+compatible with earlier unfinished sessions. Missing ownership fields or scripts
+must cause refusal, never be reconstructed by guessing from installed drivers or
+translated PnPUtil output. Keep the original build and protected evidence; if its
+safe cleanup cannot be established, restore the disposable host snapshot.
+
 Protected alpha receipts live in `%ProgramData%/PortableVirtualBox.Alpha`,
 separate from CI experiments. Do not edit those receipts. The package includes
 no Oracle binaries, guest OS disks or running VMs. It is **not a release**:

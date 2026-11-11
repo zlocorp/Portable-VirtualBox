@@ -8,6 +8,14 @@ on:
       - tests/windows/check_portable_cli.ps1
       - tests/windows/check_durable_journal.ps1
       - tests/windows/DurableJournalTests.cs
+      - scripts/vbox_sup_package_identity.ps1
+      - tests/windows/check_driver_package_identity.ps1
+      - tests/windows/check_driver_start_gate.ps1
+      - tests/windows/check_failed_start_recovery.ps1
+      - scripts/vbox_sup_partial_cleanup.ps1
+      - scripts/vbox_sup_start_owned.ps1
+      - scripts/privileged_session_worker.ps1
+      - scripts/manager_session_worker.ps1
       - scripts/test-native.ps1
       - .github/workflows/native-tests.yml
   pull_request:
@@ -44,3 +52,15 @@ jobs:
       - name: Execute durable journal storage and interruption contracts
         shell: pwsh
         run: ./tests/windows/check_durable_journal.ps1
+      - name: Execute locale-independent OEM INF identity contracts (no system effects)
+        shell: powershell
+        run: ./tests/windows/check_driver_package_identity.ps1
+      - name: Execute failed driver-start gate contracts (no system effects)
+        shell: powershell
+        run: |
+          foreach ($target in @('Start','Privileged','Manager')) {
+            ./tests/windows/check_driver_start_gate.ps1 -Repository $env:GITHUB_WORKSPACE -Target $target
+          }
+      - name: Execute exact-owned failed-stopped recovery contracts (no system effects)
+        shell: powershell
+        run: ./tests/windows/check_failed_start_recovery.ps1 -Repository $env:GITHUB_WORKSPACE

@@ -25,7 +25,7 @@ class InterruptedPreparation(unittest.TestCase):
 
     def test_recovery_requires_exclusive_stage_and_optional_strict_receipts(self):
         s = source('scripts/vbox_sup_partial_cleanup.ps1')
-        for value in ('pnputil.stdout.txt', 'Published Name:', 'oem[0-9]',
+        for value in ('Get-PortableOwnedPublishedInf', 'vbox_sup_package_identity.ps1',
                       'sup-standalone.json', 'sup-start-results.json',
                       'sds-registered.json', 'VBoxSup.sys', 'VBoxSup.inf',
                       'Get-AuthenticodeSignature', 'VBoxSDS.exe',

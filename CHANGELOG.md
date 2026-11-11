@@ -4,6 +4,14 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed · single-VM driver safety and Russian hosts (2026-11-11)
+
+- Driver cleanup no longer parses the English PnPUtil `Published Name` label. Staging identifies exactly one pinned published INF that was absent from the pre-install name inventory and records its name/hash in the protected receipt. Full and partial cleanup revalidate that identity. Ambiguous, changed, reparse or legacy evidence is refused.
+- A failed, late or unverified VBoxSup start now preserves its diagnostic receipt and fails Prepare before SDS registration or a prepared-session receipt. Both workers independently validate the successful start evidence.
+- Explicit interrupted-session recovery can release an exactly owned package after a positively completed nonzero SCM start result only when its protected receipt and repeated current SCM/WMI observations prove the driver stopped, no SDS effect occurred and all original ownership/hash checks pass. It does not issue a stop. Unknown, timeout, missing or contradictory evidence remains blocked.
+- Added real file-only PowerShell identity tests and execution of the actual start/Prepare/recovery code with synthetic Windows-effect boundaries. Windows 5.1, actual-driver integration and interactive workstation consent are separate gates, not implied by these tests. [Release gates](docs/RELEASE-GATES.md) now distinguish them and retain the operational-cleanup retry blocker.
+- Finish/recover active or incomplete sessions with their original paired build **before** replacing it. New receipt fields and embedded scripts intentionally do not adopt older unfinished sessions.
+
 ### Added · durable fixed-helper attempt evidence (2026-11-11)
 
 - Existing protected `Prepare`, `Finish` and `Recover` helper attempts now flush an owner/build-bound intent before starting their fixed worker, flush its confirmed exit separately, and record helper completion only after the existing checks and cleanup finish. Each attempt uses a new file and retains its writer handle. Exceptions preserve incomplete evidence.

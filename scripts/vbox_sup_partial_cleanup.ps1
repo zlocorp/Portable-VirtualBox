@@ -101,12 +101,10 @@ if ((Get-FileHash -LiteralPath $sys -Algorithm SHA256).Hash.ToLowerInvariant() -
 }
 $sig=Get-AuthenticodeSignature -LiteralPath $sys
 if ($sig.Status -ne 'Valid') { throw 'Installed VBoxSup not properly signed' }
-$pnputilLog=Join-Path $session 'stage\pnputil.stdout.txt'
-if (-not (Test-Path -LiteralPath $pnputilLog -PathType Leaf)) { throw 'Missing original driver installation transcript' }
-$installText=Get-Content -LiteralPath $pnputilLog -Raw -ErrorAction Stop
-$publishedMatches=[regex]::Matches($installText,'(?im)^\s*Published Name:\s*(oem[0-9]{1,6}\.inf)\s*$')
-if ($publishedMatches.Count -ne 1) { throw 'Ambiguous published OEM INF name' }
-$published=$publishedMatches[0].Groups[1].Value.ToLowerInvariant()
+# Resolve only the exact new-package identity from the protected stage receipt.
+# PnPUtil output is localized and must never authorize package removal.
+. (Join-Path $PSScriptRoot 'vbox_sup_package_identity.ps1')
+$published=Get-PortableOwnedPublishedInf -InfDirectory (Join-Path $env:SystemRoot 'INF') -Receipt $stage -ExpectedSha256 $pinInf
 $installedInf=Join-Path (Join-Path $env:SystemRoot 'INF') $published
 if ((Get-FileHash -LiteralPath $installedInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf) {
     throw 'Published INF identity differs from this signed package'
@@ -123,13 +121,23 @@ if ((Test-Path -LiteralPath (Join-Path $session 'start')) -and -not $startExists
 $phase='Stage'
 if ($startExists) {
     $started=Get-Content -LiteralPath $startPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($started.experiment -ne 'owned-standalone-VBoxSup-start' -or
-        $started.start_exit_code -ne 0 -or $started.start_status -ne 'EXITED' -or
-        -not $started.driver_running -or $started.initial_status -ne 'Stopped' -or
-        $started.service_status_after -ne 'Running') {
-        throw 'Unverified driver activation receipt'
-    }
-    $phase='Start'
+    $startSucceeded=($started.experiment -eq 'owned-standalone-VBoxSup-start' -and
+        $started.start_exit_code -eq 0 -and $started.start_status -eq 'EXITED' -and
+        $started.driver_running -is [bool] -and $started.driver_running -eq $true -and
+        $started.initial_status -eq 'Stopped' -and $started.service_status_after -eq 'Running')
+    # A completed, explicit SCM failure with two stopped observations is the
+    # only failed-start receipt eligible for rollback. Timeout, launch failure,
+    # absent proof and mixed states remain unknown and retain resources.
+    $startFailedStopped=($started.experiment -eq 'owned-standalone-VBoxSup-start' -and
+        $started.start_status -eq 'EXITED' -and
+        ($started.start_exit_code -is [int] -or $started.start_exit_code -is [long]) -and
+        $started.start_exit_code -gt 0 -and $started.start_exit_code -le [int]::MaxValue -and
+        $started.driver_running -is [bool] -and $started.driver_running -eq $false -and
+        $started.initial_status -eq 'Stopped' -and $started.service_status_after -eq 'Stopped' -and
+        $started.wmi_driver_state -eq 'Stopped' -and
+        $started.no_other_vbox_services_before -is [bool] -and $started.no_other_vbox_services_before -eq $true)
+    if (-not $startSucceeded -and -not $startFailedStopped) { throw 'Unverified driver activation receipt' }
+    $phase=if ($startFailedStopped) { 'StartFailedStopped' } else { 'Start' }
 }
 $names=@(Get-VBoxNames)
 $sdsExists=Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS'
@@ -140,7 +148,7 @@ if (-not $markerExists -and ((Test-Path -LiteralPath (Join-Path $session 'sds-re
     throw 'SDS may have registered without a durable marker'
 }
 if ($markerExists) {
-    if (-not $startExists) { throw 'SDS registered before proven driver start' }
+    if ($phase -ne 'Start') { throw 'SDS registered before proven driver start' }
     $marker=Get-Content -LiteralPath $sdsMarkerPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $sdsExe=Join-Path $app 'VBoxSDS.exe'
     if ($marker.schema -ne 1 -or -not $marker.registered -or
@@ -166,9 +174,18 @@ if ($markerExists) {
     throw 'Unexpected VBox service in interrupted stage/start phase'
 }
 $driverStatus=(Get-Service -Name 'VBoxSup' -ErrorAction Stop).Status
-if ($driverStatus -ne $(if ($startExists) {'Running'} else {'Stopped'})) {
+if ($driverStatus -ne $(if ($phase -in @('Start','Sds')) {'Running'} else {'Stopped'})) {
     throw 'Driver service does not match last durable start checkpoint'
 }
+function Assert-FailedStartStopped {
+    if ($phase -ne 'StartFailedStopped') { return }
+    $observed=Get-CimInstance Win32_SystemDriver -Filter "Name='VBoxSup'" -ErrorAction Stop
+    if ($null -eq $observed -or $observed.State -ne 'Stopped' -or
+        (Get-Service -Name 'VBoxSup' -ErrorAction Stop).Status -ne 'Stopped') {
+        throw 'Failed-start driver state changed or is unknown; package retained'
+    }
+}
+Assert-FailedStartStopped
 Require-Quiescent
 # All observations above must pass before the FIRST destructive operation.
 $out=(New-Item -Path $outPath -ItemType Directory -ErrorAction Stop).FullName
@@ -205,7 +222,7 @@ try {
     }
     Require-Quiescent
     $sc=Join-Path $env:SystemRoot 'System32\sc.exe'
-    if ($startExists) {
+    if ($phase -in @('Start','Sds')) {
         $status=Run-Bounded $sc 'stop VBoxSup' 'sup-stop'
         $report.service_stop="EXIT_$status"
         if ($status -ne 0) { throw 'Owned driver stop failed' }
@@ -223,6 +240,7 @@ try {
     # Only the exact published OEM INF created on an initially clean host.
     # No /force and never a blanket service/driver-name wildcard.
     $pnputil=Join-Path $env:SystemRoot 'System32\pnputil.exe'
+    Assert-FailedStartStopped
     $status=Run-Bounded $pnputil "/delete-driver $published /uninstall" 'sup-package-remove'
     $report.driver_package_removal="EXIT_$status"
     if ($status -ne 0) { throw 'PnPUtil refused exact owned package deletion' }

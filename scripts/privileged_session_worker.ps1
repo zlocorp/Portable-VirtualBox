@@ -98,6 +98,17 @@ try {
         & (Join-Path $PSScriptRoot 'vbox_sup_standalone.ps1') -AppDir $app -OutputDirectory (Join-Path $session 'stage')
         if ($TestBreakAfter -eq 'Stage') { throw 'CI_TEST_BREAK_AFTER_STAGE: protected installation report committed' }
         & (Join-Path $PSScriptRoot 'vbox_sup_start_owned.ps1') -StandaloneReport (Join-Path $session 'stage\sup-standalone.json') -OutputDirectory (Join-Path $session 'start')
+        # Independently require the durable activation proof before SDS,
+        # user-profile operations or any prepared-session receipt.
+        $started=Get-Content -LiteralPath (Join-Path $session 'start\sup-start-results.json') -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
+        if ($started.experiment -ne 'owned-standalone-VBoxSup-start' -or
+            $started.start_status -ne 'EXITED' -or $started.start_exit_code -ne 0 -or
+            $started.driver_running -isnot [bool] -or $started.driver_running -ne $true -or
+            $started.initial_status -ne 'Stopped' -or $started.service_status_after -ne 'Running' -or
+            $started.wmi_driver_state -ne 'Running' -or
+            $started.no_other_vbox_services_before -isnot [bool] -or $started.no_other_vbox_services_before -ne $true) {
+            throw 'Driver activation proof unconfirmed; preparation denied'
+        }
         if ($TestBreakAfter -eq 'Start') { throw 'CI_TEST_BREAK_AFTER_START: protected driver start report committed' }
         if (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS') { throw 'SDS appeared before our explicit registration' }
         Run-Sds '--regservice' 'sds-register'
