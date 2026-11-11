@@ -38,6 +38,11 @@ on:
       - tests/windows/NativeLaunchEnvironmentNativeTests.cs
       - tests/windows/check_native_launch_environment.ps1
       - tests/test_native_launch_environment_contract.py
+      - tests/windows/NativeFixedImageIdentity.cs
+      - tests/windows/NativeFixedImageIdentityTests.cs
+      - tests/windows/NativeFixedImageIdentityNativeTests.cs
+      - tests/windows/check_native_fixed_image_observation.ps1
+      - tests/test_native_fixed_image_observation_contract.py
       - scripts/vbox_sup_package_identity.ps1
       - tests/windows/check_driver_package_identity.ps1
       - tests/windows/check_driver_start_gate.ps1
@@ -170,5 +175,17 @@ jobs:
         with:
           name: native-launch-environment-text-only
           path: ${{ runner.temp }}/pvbox-native-environment-evidence/native-launch-environment.jsonl
+          if-no-files-found: error
+          retention-days: 7
+      - name: Observe fixed harmless image bytes (file-only, no fixture child launch)
+        id: native_fixed_image_observation
+        shell: powershell
+        run: ./tests/windows/check_native_fixed_image_observation.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-fixed-image-evidence')
+      - name: Store bounded fixed image observations (text only)
+        if: always() && steps.native_fixed_image_observation.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-fixed-image-observation-text-only
+          path: ${{ runner.temp }}/pvbox-native-fixed-image-evidence/native-fixed-image-observation.jsonl
           if-no-files-found: error
           retention-days: 7
