@@ -21,7 +21,18 @@ public static class ProtectedWriteProbe {
             File.SetAccessControl(p,sd);return 3;
         } catch(UnauthorizedAccessException) {refused++;}
         try {Directory.Move(root,root+"-hijack");return 4;} catch(UnauthorizedAccessException) {refused++;} catch(IOException) {refused++;}
+        string[] journals=Directory.GetFiles(root,"*.journal",SearchOption.TopDirectoryOnly);
+        if(journals.Length!=1) return 6; // exactly the completed Prepare attempt
+        foreach(string journal in journals) {
+            try {using(var f=new FileStream(journal,FileMode.Open,FileAccess.Write)) {} return 7;} catch(UnauthorizedAccessException) {refused++;}
+            try {
+                var sd=File.GetAccessControl(journal);
+                if(!sd.GetOwner(typeof(SecurityIdentifier)).Equals(new SecurityIdentifier("S-1-5-32-544"))) return 8;
+                sd.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User,FileSystemRights.FullControl,AccessControlType.Allow));
+                File.SetAccessControl(journal,sd);return 9;
+            } catch(UnauthorizedAccessException) {refused++;}
+        }
         Console.WriteLine("PROTECTED_CACHE_DENIALS="+refused);
-        return refused==7?0:5;
+        return refused==9?0:5;
     }
 }

@@ -55,9 +55,56 @@ function Wait-Exit([Diagnostics.Process]$P,[int]$Expected,[string]$Label,[int]$S
         throw "$Label exit=$($P.ExitCode), expected=$Expected; $detail"
     }
 }
+function Assert-HelperJournal([string]$Path,[string]$Action,[int]$Cycle,[bool]$Complete) {
+    # Independent decoder: do not trust the writer's own Inspect implementation.
+    $bytes=[IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 1 -or $bytes.Length -gt 65536) { throw 'Journal size mismatch' }
+    $utf8=New-Object Text.UTF8Encoding($false,$true)
+    $text=$utf8.GetString($bytes)
+    $lines=$text.Split([char]10)
+    $count=if($Complete){3}else{2}
+    if ($lines.Count -ne $count+2 -or $lines[-1] -ne '' -or $lines[0] -notmatch '^PVBJ1\t([^\t]+)$') { throw 'Journal framing mismatch' }
+    $binding=$utf8.GetString([Convert]::FromBase64String($Matches[1])) | ConvertFrom-Json
+    $facts=[PortableVBox.TokenFacts]::Read($front.Id)
+    if ($binding.schema -ne 1 -or $binding.action -cne $Action -or $binding.mode -cne 'CI' -or
+        $binding.controller_pid -ne $front.Id -or $binding.controller_created_filetime -cne ([string]$facts.Created) -or
+        $binding.sid -cne $facts.Sid -or $binding.desktop_session -ne $facts.Session -or
+        $binding.cycle -ne $Cycle -or $binding.portable_root -cne $root -or
+        $binding.protected_session -cne (Split-Path $Path -Parent) -or
+        $binding.frontend_sha256 -cne (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -or
+        $binding.original_controller_pid -ne 0 -or $binding.original_controller_created_filetime -cne '0') { throw 'Journal owner/build binding mismatch' }
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try {
+        $previous=[BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($lines[0]+"`n"))).Replace('-','').ToLowerInvariant()
+        $kinds=@('INTENT','WORKER_EXIT','HELPER_COMPLETE')
+        for($i=0;$i -lt $count;$i++) {
+            $fields=$lines[$i+1].Split([char]9)
+            if($fields.Count -ne 5 -or $fields[0] -cne ([string]$i) -or $fields[1] -cne $kinds[$i] -or $fields[3] -cne $previous) { throw 'Journal event order mismatch' }
+            $prefix=$fields[0..3] -join "`t"
+            $previous=[BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($prefix))).Replace('-','').ToLowerInvariant()
+            if($fields[4] -cne $previous) { throw 'Journal event hash mismatch' }
+            $payload=$utf8.GetString([Convert]::FromBase64String($fields[2]))
+            if($i -eq 0 -and $payload -cne $Action) { throw 'Journal action mismatch' }
+            if($i -eq 1) {
+                $exit=$payload | ConvertFrom-Json
+                if(-not $exit.within_deadline -or ($Complete -and $exit.child_exit -ne 0) -or (-not $Complete -and $exit.child_exit -eq 0)) { throw 'Journal child result mismatch' }
+            }
+            if($i -eq 2 -and -not ($payload | ConvertFrom-Json).helper_checks_completed) { throw 'Missing final helper checks' }
+        }
+    } finally { $sha.Dispose() }
+}
 function Helper-Action([string]$Action,[int]$Cycle,[int]$Expected,[string]$Label) {
+    $target=Join-Path $store ('pvbox-manager-'+$front.Id+'-'+$Cycle)
+    $before=@(Get-ChildItem -LiteralPath $target -Filter '*.journal' -File -ErrorAction SilentlyContinue | ForEach-Object Name)
     $p=Start-Process -FilePath $helper -ArgumentList ($Action+' '+$front.Id+' '+$Cycle) -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
     try { Wait-Exit $p $Expected $Label 170 } finally { $p.Dispose() }
+    $new=@(Get-ChildItem -LiteralPath $target -Filter '*.journal' -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin $before })
+    if($Label -eq 'reject-forged') {
+        if($new.Count -ne 0) { throw 'Unverified inventory created an action journal' }
+    } else {
+        if($new.Count -ne 1) { throw 'Expected one durable helper action journal' }
+        Assert-HelperJournal $new[0].FullName $Action $Cycle ($Expected -eq 0)
+    }
 }
 function Oracle([string]$Arguments,[string]$Label) {
     # Intentionally poison the inherited profile. The actual adapter must use
@@ -117,7 +164,7 @@ function Await-GuestLog([Diagnostics.Process]$Process) {
     }
     throw 'Fresh guest log never reached RUNNING'
 }
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';frontend=$(if($MainLauncher){'main-launcher'}else{'separate-experiment'});gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;guest_disk_write_checked=$false;guest_disk_survived_teardown=$false;guest_snapshot_preserved=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true;portable_cli_verified=$false;portable_cli_no_session_refused=$false;portable_cli_cleanup_refused=$false;portable_cli_fixture_gate='test-only-native-gate-host'}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';frontend=$(if($MainLauncher){'main-launcher'}else{'separate-experiment'});gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;guest_disk_write_checked=$false;guest_disk_survived_teardown=$false;guest_snapshot_preserved=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true;portable_cli_verified=$false;durable_journal_verified=$false;portable_cli_no_session_refused=$false;portable_cli_cleanup_refused=$false;portable_cli_fixture_gate='test-only-native-gate-host'}
 $front=$null;$manager=$null;$guest=$null
 try {
     Clean-System
@@ -287,7 +334,7 @@ try {
         if (-not $receipt.cleanup_verified -or -not $receipt.driver_package_removed -or $receipt.cleanup_basis -ne 'PrivilegedSession') { throw 'Cleanup not verified' }
         if ((Test-Path (Join-Path $session 'app64')) -or (Test-Path (Join-Path $session 'code')) -or -not (Test-Path (Join-Path $session 'payload-removed.json'))) { throw 'Protected payload not removed' }
     }
-    $proof.uuid=$uuid;$proof.two_cycles_clean=$true;$proof.portable_cli_verified=$true
+    $proof.durable_journal_verified=$true;$proof.uuid=$uuid;$proof.two_cycles_clean=$true;$proof.portable_cli_verified=$true
     if (-not $front.CloseMainWindow()) { throw 'Idle frontend could not close' }
     Wait-Exit $front $(if($MainLauncher){2}else{0}) 'frontend close' 10
     Write-Host ('PASS: main/medium helper + protected Oracle guest + two clean sessions; Linux VDI write/readback=' + $proof.guest_disk_survived_teardown + '; UAC NOT VERIFIED')
