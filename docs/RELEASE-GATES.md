@@ -45,3 +45,10 @@ For **each** host, retain before/after service/process/driver observations, prot
 ## Explicitly outside this release
 
 Multi-VM mutation/transaction recovery, USB passthrough, bridged-network driver installation, automatic updater/rollback, saved-state migration and physical cross-host portability are not acceptance targets for this minimal release. Existing multi-VM inspection/backup results grant no repair authority. Do not simulate batch repair by repeating the one-VM action. Arbitrary power-loss recovery and a guarantee of safety on a primary OS are not claimed.
+
+## Read-only partial-cleanup inspection
+
+[Developer reconciliation](CLEANUP-RECONCILIATION.md) compares surviving app64/code
+bytes against the pinned inventory and reports missing files. It does not query
+Windows state or authenticate ownership, and always denies resume authority.
+It adds no runtime action and does **not** close the operational-retry blocker.

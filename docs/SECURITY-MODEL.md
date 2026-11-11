@@ -89,3 +89,10 @@ published-INF receipt fields and new embedded identity script intentionally do
 not adopt old sessions that lack them. Retain the original build and protected
 evidence; a refusal is not permission to reconstruct receipts, delete markers,
 or infer ownership from currently installed driver bytes.
+
+## Read-only partial-cleanup inspection
+
+[Developer reconciliation](CLEANUP-RECONCILIATION.md) compares surviving app64/code
+bytes against the pinned inventory and reports missing files. It does not query
+Windows state or authenticate ownership, and always denies resume authority.
+It adds no runtime action and does **not** close the operational-retry blocker.

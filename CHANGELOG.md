@@ -4,6 +4,11 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · read-only partial-cleanup inspection (2026-11-11)
+
+- A developer-only Python observer compares remaining protected payload files with the independently pinned Oracle inventory and current fixed scripts, including after the protected manifest was removed. Changed, unexpected, linked or unreadable inputs are blocked; receipt completion fields remain explicitly unauthenticated claims.
+- Reports always deny resume authority and leave ownership/system state unverified. No privileged helper verb, retry, deletion, packaging entry or VM-data operation is added. The partial-cleanup recovery blocker remains open. See [diagnostic boundaries](docs/CLEANUP-RECONCILIATION.md).
+
 ### Fixed · single-VM driver safety and Russian hosts (2026-11-11)
 
 - Driver cleanup no longer parses the English PnPUtil `Published Name` label. Staging identifies exactly one pinned published INF that was absent from the pre-install name inventory and records its name/hash in the protected receipt. Full and partial cleanup revalidate that identity. Ambiguous, changed, reparse or legacy evidence is refused.

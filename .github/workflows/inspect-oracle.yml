@@ -7,6 +7,9 @@ on:
       - scripts/inspect_oracle.ps1
       - scripts/prepare_app64.py
       - scripts/oracle_release.py
+      - scripts/reconcile_cleanup.py
+      - tests/test_cleanup_reconcile.py
+      - tests/windows/check_cleanup_reconciliation.ps1
   pull_request:
     branches: [work/upstream-baseline-2026]
     paths:
@@ -85,6 +88,9 @@ jobs:
           $report | Add-Member -NotePropertyName mainExecutableVersion -NotePropertyValue $main.VersionInfo.FileVersion
           $report | ConvertTo-Json -Depth 10 | Set-Content '.reports/app64-inspection.json' -Encoding utf8
           Write-Host "PASS: $($report.file_count) files, $($report.total_bytes) bytes; source hashes and VBox service registry unchanged. No executable run."
+      - name: Reconcile partial cleanup on disposable file-only copies
+        shell: pwsh
+        run: ./tests/windows/check_cleanup_reconciliation.ps1 -AppDir (Join-Path $env:RUNNER_TEMP 'verified-oracle-inspection/portable Тест/app64')
       - name: Retain metadata only, not Oracle payloads
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
