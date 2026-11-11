@@ -22,6 +22,9 @@ on:
       - tests/windows/NativePipeTransportNativeTests.cs
       - tests/windows/check_native_pipe_transport.ps1
       - tests/test_native_pipe_transport_contract.py
+      - tests/windows/NativeSentinelObservation.cs
+      - tests/windows/NativeSentinelObservationNative.cs
+      - tests/windows/NativeSentinelObservationNativeTests.cs
       - tests/windows/NativeCaptureFixtureChild.cs
       - tests/windows/NativeChildCapture.cs
       - tests/windows/NativeChildCaptureTests.cs

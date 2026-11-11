@@ -67,6 +67,18 @@ namespace PortableVBox {
   internal string ExpectedWindowsDirectory { get { return environment==null?null:environment.WindowsDirectory; } }
   internal CreateEntryState CreateState { get { return createState; } }
   internal bool EnvironmentReleased { get { return environment==null || environmentAllocation.Released; } }
+  readonly IFreshSentinelNativeCalls sentinelCalls=new SentinelNativeCalls();
+  readonly string sentinelToken=Guid.NewGuid().ToString("N");
+  bool sentinelPreparationEntered;
+  uint? sentinelCreateError,sentinelFlagError,sentinelCloseError;
+  SentinelCallOutcome sentinelCreateOutcome,sentinelFlagOutcome,sentinelCloseOutcome;
+  internal bool SentinelReady { get; private set; }
+  internal SentinelCallOutcome SentinelCreateOutcome { get { return sentinelCreateOutcome; } }
+  internal SentinelCallOutcome SentinelFlagOutcome { get { return sentinelFlagOutcome; } }
+  internal SentinelCallOutcome SentinelCloseOutcome { get { return sentinelCloseOutcome; } }
+  internal uint? SentinelCreateError { get { return sentinelCreateError; } }
+  internal uint? SentinelFlagError { get { return sentinelFlagError; } }
+  internal uint? SentinelCloseError { get { return sentinelCloseError; } }
   readonly Stopwatch clock=new Stopwatch();
   readonly Exception injected=new IOException("Controlled fixture fault");
   readonly byte[] evidenceBytes=new byte[1];
@@ -80,9 +92,11 @@ namespace PortableVBox {
   internal int AssertionFailedAt;
   internal bool Created { get { return created; } }
   internal bool Unknown { get { return Proof.Unknown || nativeOutcomeUnknown || Channels[0].Capture.Unknown || Channels[1].Capture.Unknown; } }
-  internal ChildCaptureOwner(CaptureCase scenario) {
+  internal ChildCaptureOwner(CaptureCase scenario):this(scenario,new SentinelNativeCalls()) { }
+  internal ChildCaptureOwner(CaptureCase scenario,IFreshSentinelNativeCalls calls) {
    if(scenario<CaptureCase.Empty || scenario>CaptureCase.WithheldEof) throw new ArgumentOutOfRangeException("scenario");
-   Scenario=scenario;
+   if(calls==null) throw new ArgumentNullException("calls");
+   sentinelCalls=calls;Scenario=scenario;
    for(int i=0;i<2;i++) { slots[i*2]=Channels[i].Connect;slots[i*2+1]=Channels[i].Read; }
   }
   internal ChildCaptureOwner(FixedChildEnvironment policy):this(policy,EnvironmentObservationFault.None) { }
@@ -91,6 +105,52 @@ namespace PortableVBox {
    if(fault<EnvironmentObservationFault.None || fault>EnvironmentObservationFault.Evidence) throw new ArgumentOutOfRangeException("fault");
    environment=policy;environmentFault=fault;Scenario=CaptureCase.EnvironmentObservation;
    for(int i=0;i<2;i++) { slots[i*2]=Channels[i].Connect;slots[i*2+1]=Channels[i].Read; }
+  }
+  internal void PrepareFreshSentinel(IntPtr privateDescriptor) {
+   if(sentinelPreparationEntered) throw new InvalidOperationException("Fresh sentinel preparation is one-shot");
+   sentinelPreparationEntered=true;
+   try {
+    nativeOutcomeUnknown=true;sentinelCreateOutcome=SentinelCallOutcome.ReturnUnavailable;
+    string name=SentinelProtocol.ReferenceName(sentinelToken);
+    sentinelCalls.ClearLastError();
+    sentinel=sentinelCalls.CreateEvent(privateDescriptor,true,false,false,name);
+    // Retain the returned handle before immediately capturing Create's freshness error.
+    sentinelCreateError=sentinelCalls.CaptureLastError();
+    sentinelCreateOutcome=sentinel==IntPtr.Zero?SentinelCallOutcome.KnownFailure:SentinelCallOutcome.KnownSuccess;
+    nativeOutcomeUnknown=false;
+    if(sentinel==IntPtr.Zero) throw new InvalidOperationException("Sentinel creation failed");
+    if(sentinelCreateError==183) {
+     CloseSentinel();
+     throw new InvalidOperationException("Fresh sentinel required");
+    }
+    nativeOutcomeUnknown=true;sentinelFlagOutcome=SentinelCallOutcome.ReturnUnavailable;
+    sentinelCalls.ClearLastError();
+    bool inherited=sentinelCalls.SetHandleInformation(sentinel,1,1);
+    if(!inherited) sentinelFlagError=sentinelCalls.CaptureLastError();
+    sentinelFlagOutcome=inherited?SentinelCallOutcome.KnownSuccess:SentinelCallOutcome.KnownFailure;
+    nativeOutcomeUnknown=false;
+    if(!inherited) {
+     CloseSentinel();
+     throw new InvalidOperationException("Sentinel inheritance setup failed");
+    }
+    SentinelReady=true;
+   } catch { MarkUnknown();throw; }
+  }
+  internal void CloseSentinel() {
+   SentinelReady=false;
+   if(sentinel==IntPtr.Zero || sentinelClose.Attempted || nativeOutcomeUnknown) return;
+   sentinelClose.BeforeClose();
+   try {
+    nativeOutcomeUnknown=true;sentinelCloseOutcome=SentinelCallOutcome.ReturnUnavailable;
+    sentinelCalls.ClearLastError();
+    bool closed=sentinelCalls.CloseHandle(sentinel);
+    if(!closed) sentinelCloseError=sentinelCalls.CaptureLastError();
+    sentinelCloseOutcome=closed?SentinelCallOutcome.KnownSuccess:SentinelCallOutcome.KnownFailure;
+    sentinelClose.Returned(closed);
+    nativeOutcomeUnknown=false;
+    if(!closed) throw new InvalidOperationException("Exact sentinel close failed");
+    sentinel=IntPtr.Zero;
+   } catch { MarkUnknown();throw; }
   }
   void MarkUnknown() { Proof.Fault(); }
   void Close(ref IntPtr handle,PipeCloseProof close) {
@@ -153,11 +213,7 @@ namespace PortableVBox {
    nativeOutcomeUnknown=false;
    if(input==PipeNative.Invalid) { input=IntPtr.Zero;throw new InvalidOperationException("Fixed stdin failed"); }
    SetInherit(input);
-   nativeOutcomeUnknown=true;
-   sentinel=PipeNative.CreateEventW(IntPtr.Zero,true,false,null);
-   nativeOutcomeUnknown=false;
-   if(sentinel==IntPtr.Zero) throw new InvalidOperationException("Sentinel creation failed");
-   SetInherit(sentinel);
+   PrepareFreshSentinel(descriptor);
    if(Scenario==CaptureCase.WithheldEof) {
     IntPtr self=PipeNative.GetCurrentProcess();
     nativeOutcomeUnknown=true;
@@ -180,13 +236,14 @@ namespace PortableVBox {
     throw new InvalidOperationException("Three-handle allowlist failed");
   }
   void Launch() {
+   if(!SentinelReady) throw new InvalidOperationException("Fresh sentinel required");
    string root=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
    string image=Path.Combine(root,"NativeCaptureFixtureChild.exe");
    if(image.IndexOf('"')>=0) throw new InvalidOperationException("Unsupported fixed path");
    imageLease=new FileStream(image,FileMode.Open,FileAccess.Read,FileShare.Read);
    if(Scenario==CaptureCase.EvidenceFault) evidence=new FileStream(Path.Combine(root,"child-evidence-fault.bin"),FileMode.CreateNew,FileAccess.Write,FileShare.Read,1,FileOptions.WriteThrough);
    if(environmentFault==EnvironmentObservationFault.Evidence) evidence=new FileStream(Path.Combine(root,"environment-evidence-fault.bin"),FileMode.CreateNew,FileAccess.Write,FileShare.Read,1,FileOptions.WriteThrough);
-   var command=new StringBuilder("\""+image+"\" "+Scenario+" "+sentinel.ToInt64().ToString(CultureInfo.InvariantCulture));
+   var command=new StringBuilder("\""+image+"\" "+Scenario+" "+sentinel.ToInt64().ToString(CultureInfo.InvariantCulture)+" "+sentinelToken);
    var startup=new ChildCaptureApi.ExtendedStartup();
    startup.Startup.Size=112;startup.Startup.Flags=0x100;startup.Startup.Input=input;
    startup.Startup.Output=Channels[0].Writer;startup.Startup.Error=Channels[1].Writer;startup.Attributes=attributes;
@@ -294,7 +351,7 @@ namespace PortableVBox {
     if(environment!=null && !environmentAllocation.TryRelease(createState)) { MarkUnknown();return; }
     CloseParentWriters();Close(ref held,heldClose);
     for(int i=0;i<2;i++) Close(ref Channels[i].Server,Channels[i].ServerClose);
-    Close(ref Original.Thread,threadClose);Close(ref Original.Process,processClose);Close(ref sentinel,sentinelClose);
+    Close(ref Original.Thread,threadClose);Close(ref Original.Process,processClose);CloseSentinel();
     for(int i=0;i<slots.Length;i++) if(!slots[i].Release()) { MarkUnknown();return; }
     if(attributeInitialized) { ChildCaptureApi.DeleteProcThreadAttributeList(attributes);attributeInitialized=false; }
     if(attributes!=IntPtr.Zero) { Marshal.FreeHGlobal(attributes);attributes=IntPtr.Zero; }
@@ -309,11 +366,12 @@ namespace PortableVBox {
     Proof.HandlesClosed=all;Released=all;
    } catch { MarkUnknown(); }
   }
+  internal bool CapturedSentinelExcluded() {
+   return Scenario==CaptureCase.Empty?Proof.ExitObserved && ExitCode==0:
+    SentinelProtocol.IsExcluded(Channels[0].Capture.Retained,Channels[0].Capture.RetainedCount);
+  }
   void InspectSentinel() {
-   byte[] bytes=Channels[0].Capture.Retained;
-   SentinelProbe=Scenario==CaptureCase.Empty?Proof.ExitObserved && ExitCode==0:
-    Channels[0].Capture.RetainedCount>=8 && bytes[0]==80 && bytes[1]==86 && bytes[2]==67 && bytes[3]==49 &&
-    bytes[4]==0 && bytes[5]==6 && bytes[6]==0 && bytes[7]==165;
+   SentinelProbe=CapturedSentinelExcluded();
    SentinelUnsignaled=sentinel!=IntPtr.Zero && ChildCaptureApi.WaitForSingleObject(sentinel,0)==258;
    if(!SentinelProbe || !SentinelUnsignaled) MarkUnknown();
   }

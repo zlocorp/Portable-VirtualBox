@@ -55,7 +55,7 @@ try {
     $pristine=Join-Path $out 'pristine'
     New-Item -ItemType Directory -Path $pristine | Out-Null
     $child=Join-Path $pristine 'NativeCaptureFixtureChild.exe'
-    Compile-Fixed @((Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs'),(Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs')) $child 'PortableVBox.NativeCaptureFixtureChild'
+    Compile-Fixed @((Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs'),(Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs'),(Join-Path $PSScriptRoot 'NativeSentinelObservation.cs'),(Join-Path $PSScriptRoot 'NativeSentinelObservationNative.cs')) $child 'PortableVBox.NativeCaptureFixtureChild'
     # Hash completed pristine bytes ONCE, before any negative copy is prepared.
     $length=(Get-Item -LiteralPath $child).Length
     if ($length -le 0 -or $length -gt 16777216) { throw 'Pristine image size bound' }

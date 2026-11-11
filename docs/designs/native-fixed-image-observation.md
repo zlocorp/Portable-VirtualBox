@@ -2,13 +2,21 @@
 
 ## Status and boundary
 
-Task 1 file-only implementation is present for independent review. Exact-source
-Windows file-only evidence is pending; Task 2 remains gated and unimplemented.
-At environment source `929c3463d1c717f6bceefabb276e4f3b63f38691`, push and PR
-observations have been independently accepted: all three environment and nine
-baseline cases passed, including the actual 110-byte PVE1 record. All eleven source workflows have completed successfully and been accepted,
-each on attempt 1: eight push and three PR runs. These results do not verify this
-proposed increment.
+Task 1 is accepted as a test-only file-observation stage at source
+`33447ae2ff048230675c05c72509857d252fceee`. Independent review verified actual
+native PR observations at synthetic merge
+`7f66505650b282efcff8fb08841619c03ec9211b`, whose tree equals the published tree
+`b88bc27ebaf4693571e3f3505c6d3404962d7ab3`: all four image cases, nine baseline
+cases and three environment cases passed. Both Linux jobs also passed real
+pinned-reference provisioning and 392 tests with six unchanged platform skips.
+All five naturally triggered workflows passed on attempt 1; there is no native
+PUSH run for this source. See the [successor execution record](../EXECUTION-2026-11-11-net48-reference-provisioning.md).
+
+The earlier `b2229c5` [partial checkpoint](../EXECUTION-2026-11-11-native-fixed-image-file-only.md)
+retains its eight successes and three failures. Task 2 remains unimplemented and
+requires separate composition review after hardening the known numeric sentinel
+diagnostic limitation. Meeting the exact-source file-only prerequisite does not
+authorize composition or establish whole-product readiness.
 
 This is fixed-fixture observation and preflight, not privileged image admission.
 Use only owned temporary files and the existing harmless sibling child. No

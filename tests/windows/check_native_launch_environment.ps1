@@ -4,7 +4,7 @@ param([switch]$ManagedOnly,[string]$EvidenceDirectory='')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $sourceNames=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
-    'NativeChildCapture.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
+    'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
     'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentTests.cs','NativeLaunchEnvironmentNative.cs',
     'NativeLaunchEnvironmentPolicyTests.cs','NativeLaunchEnvironmentObservation.cs',
     'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs')
@@ -32,7 +32,7 @@ $valid=$false
 try {
     $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
     $child=Join-Path $out 'NativeCaptureFixtureChild.exe'
-    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ ('/out:'+$child) (Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs') (Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs')
+    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ ('/out:'+$child) (Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs') (Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs') (Join-Path $PSScriptRoot 'NativeSentinelObservation.cs') (Join-Path $PSScriptRoot 'NativeSentinelObservationNative.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Fixed harmless capture child compilation failed' }
     $exe=Join-Path $out 'NativeLaunchEnvironmentTests.exe'
     & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ /main:PortableVBox.NativeLaunchEnvironmentNativeTests ('/out:'+$exe) @sources

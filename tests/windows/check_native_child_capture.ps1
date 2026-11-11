@@ -4,10 +4,13 @@ param([switch]$ManagedOnly,[string]$EvidenceDirectory='')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Invoke-ManagedContracts {
-    Add-Type -Path @((Join-Path $PSScriptRoot 'NativePipeTransport.cs'),
-        (Join-Path $PSScriptRoot 'NativeChildCapture.cs'),
-        (Join-Path $PSScriptRoot 'NativeChildCaptureTests.cs'))
+    $managedNames=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
+        'NativeChildCapture.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
+        'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs',
+        'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs')
+    Add-Type -Path @($managedNames | ForEach-Object { Join-Path $PSScriptRoot $_ })
     if ([PortableVBox.NativeChildCaptureTests]::RunManaged() -ne 0) { throw 'Managed child capture contracts failed' }
+    if ([PortableVBox.NativeSentinelObservationNativeTests]::RunManaged() -ne 0) { throw 'Managed sentinel native adapter contracts failed' }
 }
 if ($ManagedOnly) {
     Invoke-ManagedContracts
@@ -28,11 +31,11 @@ $valid=$false
 try {
     $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
     $child=Join-Path $out 'NativeCaptureFixtureChild.exe'
-    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ ('/out:'+$child) (Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs') (Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs')
+    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ ('/out:'+$child) (Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs') (Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs') (Join-Path $PSScriptRoot 'NativeSentinelObservation.cs') (Join-Path $PSScriptRoot 'NativeSentinelObservationNative.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Fixed harmless capture child compilation failed' }
     $exe=Join-Path $out 'NativeChildCaptureTests.exe'
     $sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
-        'NativeChildCapture.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs',
+        'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs',
         'NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
     & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ /main:PortableVBox.NativeChildCaptureNativeTests ('/out:'+$exe) @sources
     if ($LASTEXITCODE -ne 0) { throw 'Native child capture contracts compilation failed' }

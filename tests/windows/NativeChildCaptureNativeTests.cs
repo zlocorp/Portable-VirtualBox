@@ -7,7 +7,7 @@ namespace PortableVBox {
   static void Check(bool value) { ++assertion;if(!value) throw new InvalidOperationException("Native fixed-child assertion failed"); }
   static ulong Expected(int length,int seed,bool header) {
    ulong hash=14695981039346656037UL;
-   if(header) foreach(byte value in new byte[]{80,86,67,49,0,6,0,165}) hash=unchecked((hash^value)*1099511628211UL);
+   if(header) foreach(byte value in new byte[]{80,86,67,50,1,0,0,165}) hash=unchecked((hash^value)*1099511628211UL);
    for(int i=0;i<length;i++) hash=unchecked((hash^(byte)((i*31+seed)&255))*1099511628211UL);
    return hash;
   }

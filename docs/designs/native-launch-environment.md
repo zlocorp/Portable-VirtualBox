@@ -141,7 +141,13 @@ pointer, never a scan cursor, in finally with FreeEnvironmentStringsW and check 
 Boolean result. Free failure invalidates the observation and forbids a retry of
 that free. Do not serialize unrelated environment contents.
 
-The child keeps the existing eight-byte handle diagnostic, then emits one environment
+The child keeps the eight-byte prefix length and now uses the query-only PVC2
+sentinel result described in the [exact sentinel design](native-sentinel-observation.md).
+Only EXCLUDED passes; the parent still separately observes its original event as
+unsignaled. Local adapter/composition and managed tests are implemented; independent
+Task 2 review and new Windows observations are pending. This does not reclassify
+historical execution evidence. The test-only comparison API requires Windows 10 /
+Server 2016 and does not change production support. The child then emits one environment
 record of at most 16,384 bytes: ASCII magic `PVE1`, little-endian UInt16 version 1,
 UInt16 presence flags, UInt32 total record bytes (including header), followed by five
 fields in order sentinel, text, empty, SystemRoot, WINDIR. Each field is UInt32 byte

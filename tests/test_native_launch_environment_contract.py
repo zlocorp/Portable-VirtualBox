@@ -22,7 +22,7 @@ class EnvironmentManagedContract(unittest.TestCase):
         script = r'''
 $ErrorActionPreference='Stop'
 $root='__ROOT__'
-$sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs','NativeChildCapture.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') | ForEach-Object { Join-Path $root $_ }
+$sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs','NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') | ForEach-Object { Join-Path $root $_ }
 Add-Type -Path $sources
 $a=[PortableVBox.NativePipeTransportTests].Assembly
 $t=$a.GetType('PortableVBox.ChildCaptureOwner',$true)
@@ -412,7 +412,7 @@ class EnvironmentRunnerContract(unittest.TestCase):
 $ErrorActionPreference='Stop'
 $root='__ROOT__'
 $sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
- 'NativeChildCapture.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
+ 'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
  'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeLaunchEnvironmentObservation.cs',
  'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs','NativeLaunchEnvironmentTests.cs','NativeLaunchEnvironmentPolicyTests.cs') | ForEach-Object { Join-Path $root $_ }
 Add-Type -Path $sources

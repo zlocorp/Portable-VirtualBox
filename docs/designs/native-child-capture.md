@@ -3,8 +3,8 @@
 This increment composes exact original process/thread ownership with the earlier
 unchanged overlapped read slots. It launches only the compiled sibling
 NativeCaptureFixtureChild.exe with fixed case names and a diagnostic sentinel
-handle number. No user executable, argument, environment, report or recovery input
-is accepted. No VBox, elevation, services, drivers, network or descendants exist
+handle number and generated fixed-name token. No user executable, argument,
+environment, report or recovery input is accepted. No VBox, elevation, services, drivers, network or descendants exist
 in the fixture. This is not production launch or environment/descendant safety.
 
 ## Approach
@@ -14,10 +14,18 @@ writers, and overlapped noninheritable parent readers. Anonymous pipes cannot
 provide this asynchronous parent API; blocking reader threads add another lifetime.
 Reuse PipeCapture, PipeOperationProof, PipeCloseProof and PipeNativeSlot without
 editing their existing files. STARTUPINFOEX's handle list contains exactly stdin
-NUL and the two writers. An unrelated inheritable event is excluded: the child
-reports its attempted SetEvent result in a fixed binary preamble, and the parent
-checks the actual sentinel is unsignaled. Numeric handle probes are diagnostic,
-not a production inheritance census (handle reuse can cause conservative failure).
+NUL and the two writers. An unrelated inheritable event is excluded from the list.
+The parent creates it fresh in the fixed token-derived namespace with the existing private DACL, refuses
+an existing object before inheritance changes, and retains its original handle.
+The child opens a noninheritable SYNCHRONIZE-only reference and uses query-only
+handle identity observation, then confirms closing only that owned reference.
+Its PVC2 semantic preamble reports EXCLUDED, SAME_OBJECT or UNKNOWN. Only exact
+EXCLUDED passes. The parent independently checks its original sentinel is
+unsignaled. This is an instant query/allocation observation, not a historical
+inheritance census or production safety claim. See the
+[exact sentinel design](native-sentinel-observation.md) for ownership, error 1656,
+allocation-at-candidate inference and unresolved-close limits. The test-only
+comparison API requires Windows 10 / Server 2016; production support is unchanged.
 
 All owner objects and operation buffers are rooted before CreateProcessW. Native
 PROCESS_INFORMATION is written directly into the owner's field; original handles
@@ -33,10 +41,10 @@ faults make UNKNOWN sticky but draining continues. A retained duplicate stdout
 writer demonstrates child exit without stdout EOF, then closes and permits EOF.
 Cases are Empty, Binary, Large, Nonzero, Exit259, PostCreateFault, CaptureFault,
 EvidenceFault and WithheldEof. Empty writes zero bytes to both streams: its fixed
-child returns 0 only after SetEvent is FALSE with ERROR_INVALID_HANDLE, otherwise
-94. The parent infers that probe outcome from this exact observed exit code and
+child returns 0 only after completed EXCLUDED with confirmed owned-reference close,
+otherwise 94. The parent infers that result from this exact observed exit code and
 separately checks its sentinel remains unsignaled. Other cases carry a fixed
-8-byte inheritance diagnostic preamble on stdout. This fixed-fixture exit inference
+8-byte PVC2 semantic preamble on stdout. This fixed-fixture exit inference
 is not production child identity or general inheritance proof. Each case has a two-second pump budget
 and bounded cancellation recovery; healthy total native run target is under 20 s.
 
@@ -67,6 +75,17 @@ Native submission-unknown, persistent wait failure, arbitrary allocation failure
 malicious children, loader/environment interference and descendant containment
 are not claimed as exercised OS cases. Managed decisions and fail-closed source
 paths cover the first limitations; this fixture cannot establish production safety.
+
+## Current sentinel composition
+
+The pure sentinel contract passed independent source/interface review. The native
+adapter, fresh-parent owner composition and fixed-child PVC2 output are implemented
+locally with managed behavioral tests. Independent Task 2 review and changed-source
+Windows observation are pending. These local tests are not native evidence and do
+not reclassify the preserved b2229c5 PR failure or the historical checkpoint below.
+Both JSONL field sets, all nine case purposes and all exit/EOF/release assertions
+remain unchanged. `sentinel_probe` now means exact PVC2 EXCLUDED or Empty's dedicated
+exit inference; a failed probe cannot claim explicit child-reference close.
 
 ## Observed checkpoint
 

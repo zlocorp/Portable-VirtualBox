@@ -213,6 +213,67 @@ def sample_records():
     return records
 
 
+def expected_hash(length, seed=0, header=False):
+    value = 14695981039346656037
+    data = (bytes((80, 86, 67, 50, 1, 0, 0, 165)) if header else b'')
+    data += bytes((offset * 31 + seed) & 255 for offset in range(length))
+    for item in data:
+        value = ((value ^ item) * 1099511628211) & ((1 << 64) - 1)
+    return format(value, '016x')
+
+
+class SentinelByteContract(unittest.TestCase):
+    def test_independent_pvc2_hashes_keep_exact_body_sizes_and_stderr(self):
+        for size, expected in ((17, 'e6a7f5deb30873c0'), (4097, '031381f5c4fbe740'),
+                               (196731, 'c1f1accadf2339e9')):
+            with self.subTest(size=size):
+                self.assertEqual(expected_hash(size, header=True), expected)
+        self.assertEqual(expected_hash(0), 'cbf29ce484222325')
+        self.assertEqual(expected_hash(257, 71), 'c98455caf71ceb86')
+        self.assertEqual(expected_hash(204829, 71), '8b07499bc23a9f3e')
+
+
+class SentinelSourceWiringContract(unittest.TestCase):
+    def test_all_three_child_builds_use_only_runtime_sentinel_dependencies(self):
+        expected = {'NativeCaptureFixtureChild.cs', 'NativeLaunchEnvironmentObservation.cs',
+                    'NativeSentinelObservation.cs', 'NativeSentinelObservationNative.cs'}
+        for runner in ('check_native_child_capture.ps1', 'check_native_launch_environment.ps1',
+                       'check_native_fixed_image_observation.ps1'):
+            text = (ROOT / 'tests/windows' / runner).read_text(encoding='utf-8')
+            line = next(line for line in text.splitlines()
+                        if ('& $csc' in line or 'Compile-Fixed @' in line) and '$child' in line)
+            names = re.findall(r"'([A-Za-z]+\.cs)'", line)
+            with self.subTest(runner=runner):
+                self.assertEqual(set(names), expected)
+                self.assertEqual(len(names), len(expected))
+        workflow = (ROOT / '.github/workflows/native-tests.yml').read_text(encoding='utf-8')
+        for name in ('NativeSentinelObservation.cs', 'NativeSentinelObservationNative.cs',
+                     'NativeSentinelObservationNativeTests.cs'):
+            self.assertIn('      - tests/windows/' + name, workflow)
+
+    def test_child_main_roots_owner_before_observation_and_never_retries_cleanup(self):
+        # A structural lifetime check supplements the real output/exception tests.
+        text = (ROOT / 'tests/windows/NativeCaptureFixtureChild.cs').read_text(encoding='utf-8')
+        main = text.split('  static int Main(string[] args) {', 1)[1]
+        self.assertLess(main.index('observerRoot=new SentinelObserver(arguments);'),
+                        main.index('observerRoot.ObserveOnce(new NativeSentinelQueryApi())'))
+        self.assertEqual(main.count('observerRoot='), 1)
+        self.assertIn('finally { GC.KeepAlive(observerRoot); }', main)
+        for forbidden in ('CloseReference', 'CloseHandle', 'Dispose', 'SetEvent', 'TryParse(args[1]'):
+            self.assertNotIn(forbidden, text)
+
+    def test_expanded_managed_host_keeps_real_parent_and_native_tests(self):
+        text = RUNNER.read_text(encoding='utf-8')
+        managed = text.split('function Invoke-ManagedContracts {', 1)[1].split('\n}', 1)[0]
+        expected = {'NativePipeTransport.cs', 'NativePipeTransportTests.cs', 'NativePipeTransportNative.cs',
+                    'NativeChildCapture.cs', 'NativeChildCaptureTests.cs', 'NativeChildCaptureNative.cs',
+                    'NativeChildCaptureNativeTests.cs', 'NativeLaunchEnvironment.cs', 'NativeLaunchEnvironmentNative.cs',
+                    'NativeSentinelObservation.cs', 'NativeSentinelObservationNative.cs', 'NativeSentinelObservationNativeTests.cs'}
+        names = re.findall(r"'([A-Za-z]+\.cs)'", managed)
+        self.assertEqual(set(names), expected)
+        self.assertEqual(len(names), len(expected))
+
+
 class NativeChildEvidenceContract(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='pvbox-child-json-')
@@ -488,7 +549,140 @@ class NativeChildRunnerContract(unittest.TestCase):
         result = self.run_runner('-ManagedOnly')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('managed fixed-child contracts PASS', result.stdout)
+        self.assertIn('managed sentinel native adapter PASS', result.stdout)
+        for contract in ('arguments', 'protocol', 'observer'):
+            self.assertIn('managed sentinel ' + contract + ' PASS', result.stdout)
+        self.assertNotIn('native_child_summary', result.stdout)
         self.assertNotIn('native_child_case', result.stdout)
+
+    def run_sentinel_contract(self, method, marker):
+        # Compile the actual shared pure component and exercise each behavior group
+        # separately so a parser failure cannot mask protocol/ownership failures.
+        script = r'''
+        $ErrorActionPreference='Stop'
+        $root='__ROOT__'
+        Add-Type -Path @('NativePipeTransport.cs','NativeChildCapture.cs',
+            'NativeSentinelObservation.cs','NativeChildCaptureTests.cs' | ForEach-Object { Join-Path $root $_ })
+        if ([PortableVBox.NativeChildCaptureTests]::__METHOD__() -ne 0) { throw 'Sentinel contract failed' }
+        '''.replace('__ROOT__', str(ROOT / 'tests/windows').replace("'", "''")).replace('__METHOD__', method)
+        result = subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-Command', script],
+                                text=True, capture_output=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(marker, result.stdout)
+        self.assertNotIn('native_child_case', result.stdout)
+        self.assertNotIn('native_child_summary', result.stdout)
+
+    def test_actual_sentinel_arguments_are_pure_and_strict(self):
+        self.run_sentinel_contract('RunSentinelArguments', 'managed sentinel arguments PASS')
+
+    def test_actual_sentinel_protocol_validates_only_captured_prefix(self):
+        self.run_sentinel_contract('RunSentinelProtocol', 'managed sentinel protocol PASS')
+
+    def test_actual_sentinel_owner_uses_fake_queries_and_exact_owned_close(self):
+        self.run_sentinel_contract('RunSentinelObserver', 'managed sentinel observer PASS')
+
+    def run_native_sentinel_contract(self, method, marker):
+        script = r'''
+        $ErrorActionPreference='Stop'
+        $root='__ROOT__'
+        Add-Type -Path @('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
+            'NativeChildCapture.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
+            'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs',
+            'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs' |
+            ForEach-Object { Join-Path $root $_ })
+        if ([PortableVBox.NativeSentinelObservationNativeTests]::__METHOD__() -ne 0) { throw 'Actual native-boundary contract failed' }
+        '''.replace('__ROOT__', str(ROOT / 'tests/windows').replace("'", "''")).replace('__METHOD__', method)
+        result = subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-Command', script],
+                                text=True, capture_output=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(marker, result.stdout)
+        self.assertNotIn('native_child_case', result.stdout)
+        self.assertNotIn('native_child_summary', result.stdout)
+
+    def test_actual_native_sentinel_adapter_captures_order_and_unavailable_returns(self):
+        self.run_native_sentinel_contract('RunQueryAdapter', 'managed sentinel query adapter PASS')
+
+    def test_actual_parent_fresh_sentinel_and_refused_launch_without_native_calls(self):
+        self.run_native_sentinel_contract('RunFreshParent', 'managed sentinel fresh parent PASS')
+
+    def test_actual_parent_rejects_nonexcluded_capture_and_expected_helper_is_independent(self):
+        self.run_native_sentinel_contract('RunCapturedSentinel', 'managed sentinel capture composition PASS')
+
+    def test_actual_child_output_is_empty_or_exact_pvc2_and_keeps_observer_root(self):
+        # Compile and call the real fixed child in a managed host, replacing only
+        # its bounded output sink. No native observation or EXE execution occurs.
+        harness = r'''
+        using System;
+        using System.Reflection;
+        namespace PortableVBox {
+         public static class ChildOutputContracts {
+          const string Token="0123456789abcdef0123456789abcdef";
+          public static void Run() {
+           var rootField=typeof(NativeCaptureFixtureChild).GetField("observerRoot",BindingFlags.Static|BindingFlags.NonPublic);
+           if(rootField==null) throw new Exception("actual child must retain a static observerRoot");
+           foreach(string mode in new[]{"Empty","Binary","Large","Nonzero","Exit259","PostCreateFault","CaptureFault","EvidenceFault","WithheldEof"})
+           foreach(SentinelResult result in new[]{SentinelResult.Unknown,SentinelResult.Excluded,SentinelResult.SameObject}) {
+            SentinelArguments parsed;int rejection;
+            if(!SentinelArguments.TryParse(new[]{mode,"17",Token},out parsed,out rejection)) throw new Exception("parse");
+            var root=new SentinelObserver(parsed);rootField.SetValue(null,root);
+            int writes=0,a=0,b=0;ulong ah=14695981039346656037UL,bh=ah;
+            int code=NativeCaptureFixtureChild.EmitObserved(parsed,result,delegate(bool err,byte[] bytes,int count) {
+             ++writes;if(count<1 || count>bytes.Length) throw new Exception("bounded write");
+             if(err) { b+=count;for(int i=0;i<count;i++) bh=unchecked((bh^bytes[i])*1099511628211UL); }
+             else { a+=count;for(int i=0;i<count;i++) ah=unchecked((ah^bytes[i])*1099511628211UL); }
+            });
+            if(!Object.ReferenceEquals(root,rootField.GetValue(null))) throw new Exception("observer root changed after output");
+            Console.WriteLine(mode+","+(int)result+","+code+","+writes+","+a+","+b+","+ah.ToString("x16")+","+bh.ToString("x16"));
+            if(mode=="Empty" && writes!=0) throw new Exception("Empty made writes");
+            if(mode!="Empty") {
+             int failed=NativeCaptureFixtureChild.EmitObserved(parsed,result,delegate { throw new Exception("controlled write fault"); });
+             if(failed!=93 || !Object.ReferenceEquals(root,rootField.GetValue(null))) throw new Exception("exception return/root");
+            }
+           }
+           var main=typeof(NativeCaptureFixtureChild).GetMethod("Main",BindingFlags.Static|BindingFlags.NonPublic);
+           if((int)main.Invoke(null,new object[]{new string[0]})!=90) throw new Exception("actual child uses parser shape rejection");
+           if((int)main.Invoke(null,new object[]{new[]{"Other","17",Token}})!=91) throw new Exception("actual child parser case rejection");
+           if((int)main.Invoke(null,new object[]{new[]{"Empty","01",Token}})!=92) throw new Exception("actual child canonical candidate rejection");
+          }
+         }
+        }
+        '''
+        with tempfile.TemporaryDirectory(prefix='pvbox-child-output-') as directory:
+            source = Path(directory) / 'ChildOutputContracts.cs'
+            source.write_text(harness, encoding='utf-8')
+            script = r'''
+            $ErrorActionPreference='Stop'
+            $root='__ROOT__'
+            $sources=@('NativeCaptureFixtureChild.cs','NativeLaunchEnvironmentObservation.cs',
+                'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs' | ForEach-Object { Join-Path $root $_ })
+            Add-Type -Path @($sources + '__HARNESS__')
+            [PortableVBox.ChildOutputContracts]::Run()
+            '''.replace('__ROOT__', str(ROOT / 'tests/windows').replace("'", "''")).replace('__HARNESS__', str(source).replace("'", "''"))
+            result = subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-Command', script],
+                                    text=True, capture_output=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 27, result.stdout)
+        for line in lines:
+            mode, semantic, exit_code, writes, stdout_size, stderr_size, stdout_hash, stderr_hash = line.split(',')
+            semantic, exit_code, writes = int(semantic), int(exit_code), int(writes)
+            if mode == 'Empty':
+                self.assertEqual((exit_code, writes, int(stdout_size), int(stderr_size)),
+                                 (0 if semantic == 1 else 94, 0, 0, 0))
+                self.assertEqual(stdout_hash, 'cbf29ce484222325')
+                self.assertEqual(stderr_hash, 'cbf29ce484222325')
+                continue
+            body = 196731 if mode in ('Large', 'CaptureFault', 'EvidenceFault') else 4097 if mode == 'Binary' else 17
+            stderr_body = 204829 if mode in ('Large', 'CaptureFault', 'EvidenceFault') else 257
+            self.assertEqual(exit_code, 259 if mode == 'Exit259' else 23 if mode == 'Nonzero' else 0)
+            self.assertGreater(writes, 0)
+            self.assertEqual((int(stdout_size), int(stderr_size)), (body + 8, stderr_body))
+            data = bytes((80, 86, 67, 50, semantic, 0, 0, 165)) + bytes((i * 31) & 255 for i in range(body))
+            value = 14695981039346656037
+            for byte in data:
+                value = ((value ^ byte) * 1099511628211) & ((1 << 64) - 1)
+            self.assertEqual(stdout_hash, format(value, '016x'))
+            self.assertEqual(stderr_hash, expected_hash(stderr_body, 71))
 
     def test_native_report_serializer_matches_schema_without_native_calls(self):
         # Exercise the actual C# serializer on a never-run owner. This is only a
@@ -497,7 +691,7 @@ class NativeChildRunnerContract(unittest.TestCase):
         $ErrorActionPreference='Stop'
         $root='__ROOT__'
         $sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
-            'NativeChildCapture.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') |
+            'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') |
             ForEach-Object { Join-Path $root $_ }
         Add-Type -Path $sources
         $assembly=[PortableVBox.NativePipeTransportTests].Assembly
