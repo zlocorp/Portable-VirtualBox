@@ -15,8 +15,10 @@ genuine exit; that does not solve an exception between launch and that boundary.
 [Pinned Microsoft reference source](https://github.com/microsoft/referencesource/blob/3b1eaf5203992df69de44c783a3eda37d3d4cd10/System/services/monitoring/system/diagnosticts/Process.cs)
 calls CreateProcess before constructing streams and associating the process
 handle. It is 4.7.2-family evidence, not an attestation of the exact serviced 4.8
-binary and not an observed hosted-CI failure. A managed Start exception cannot
-certify that nothing launched; disposing a Process closes handles, not execution.
+binary and not an observed hosted-CI failure. The later exact-commit loaded-method
+inspection below strengthens this premise without reproducing that failure. A
+managed Start exception cannot certify that nothing launched; disposing a Process
+closes handles, not execution.
 
 ## Approaches and chosen limits
 
@@ -109,10 +111,31 @@ failure; OOM is never induced. The local Linux run explicitly skips native APIs.
 Official net48 references establish compilation compatibility, not Windows
 runtime behavior. Hosted Windows execution is a separately reported result.
 
-Local verification: 317 Python tests passed with 6 platform skips; four focused
+Local verification: 317 Python tests ran, OK with 6 platform skips; four focused
 Python observation tests passed; both test executables compiled as C#5/x64 against
-official net48 reference assemblies with warnings-as-errors. These are not native
-Windows observations; the committed hosted step is ready to produce those.
+official net48 reference assemblies with warnings-as-errors. Those checks are
+separate from the later native Windows observations below.
+
+## Accepted hosted observations
+
+At exact `f9bff11790b5f8324218a4c3d67be171b8526627`, both native workflows passed
+on attempt 1 and independent artifact review accepted the test-only observations.
+The [execution record](../EXECUTION-2026-11-11-native-launch-observation.md) binds
+the two text files to the source SHA and archive digest. Its 16 attempts include
+one observed native FALSE/error 2 and ten created children, each drained through
+its retained handle before close. Timeout and injected faults remain UNKNOWN
+after genuine exit; controlled WAIT_FAILED is not a reproduced persistent native
+wait failure. The 232 total checks include 64 managed checks.
+
+For the actual loaded private method, full raw IL, call/token decoding and all
+five exception regions survived the bounded verbose-output truncation. Independent
+control-flow review established successful native creation before redirected
+stream construction and process association, with no local exception region
+protecting that later construction. This is stronger than reference-family theory,
+but does not attest the full outer Start/Dispose/finalizer/JIT chain, loaded bytes
+from the disk hash, all serviced builds or an observed allocation failure. The
+production lifetime gap remains open. A native two-pipe capture prototype is
+future work, not a result of this observer.
 
 No primary Windows run, production repair, merge, release or promotion gate is
 claimed by this prototype.
