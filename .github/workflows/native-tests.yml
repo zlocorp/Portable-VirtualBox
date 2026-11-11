@@ -64,3 +64,6 @@ jobs:
       - name: Execute exact-owned failed-stopped recovery contracts (no system effects)
         shell: powershell
         run: ./tests/windows/check_failed_start_recovery.ps1 -Repository $env:GITHUB_WORKSPACE
+      - name: Execute owner-bound private payload file-only contracts
+        shell: powershell
+        run: ./tests/windows/check_payload_cleanup_contracts.ps1

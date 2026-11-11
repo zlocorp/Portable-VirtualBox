@@ -23,6 +23,25 @@ namespace PortableVBox {
         static readonly SecurityIdentifier Admins=new SecurityIdentifier("S-1-5-32-544"),SystemSid=new SecurityIdentifier("S-1-5-18");
         static readonly JavaScriptSerializer Json=new JavaScriptSerializer { MaxJsonLength=262144 };
         static readonly List<IDisposable> Locks=new List<IDisposable>();
+        static readonly Dictionary<IDisposable,string> LockPaths=new Dictionary<IDisposable,string>();
+        static void HoldLock(IDisposable item,string path) { Locks.Add(item);LockPaths.Add(item,Path.GetFullPath(path)); }
+        static void ReleasePayloadLock(string path) {
+            path=Path.GetFullPath(path);
+            for(int i=Locks.Count-1;i>=0;i--) {
+                string heldPath;
+                if(LockPaths.TryGetValue(Locks[i],out heldPath) && String.Equals(heldPath,path,StringComparison.OrdinalIgnoreCase)) {
+                    Locks[i].Dispose();LockPaths.Remove(Locks[i]);Locks.RemoveAt(i);
+                }
+            }
+            LockedDirs.Remove(path);
+        }
+        static void ReleasePayloadLocks(string session) {
+            string app=Path.Combine(session,"app64"),code=Path.Combine(session,"code");
+            var paths=new List<string>(LockPaths.Values);
+            foreach(string path in paths) if(String.Equals(path,app,StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(path,code,StringComparison.OrdinalIgnoreCase) || Under(path,app) || Under(path,code)) ReleasePayloadLock(path);
+            // Session, store, portable root and every higher namespace lease remain held.
+        }
         static readonly HashSet<string> LockedDirs=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         [StructLayout(LayoutKind.Sequential)] struct SA { public int Size; public IntPtr Descriptor; public int Inherit; }
         [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateDirectoryW(string p,ref SA sa);
@@ -50,7 +69,7 @@ namespace PortableVBox {
             if((a&FileAttributes.ReparsePoint)!=0 || (a&FileAttributes.Directory)==0) throw new InvalidOperationException("Unsafe directory");
             var h=CreateFileW(path,0x80,3,IntPtr.Zero,3,0x02200000,IntPtr.Zero); // no FILE_SHARE_DELETE
             if(h.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
-            Locks.Add(h);
+            HoldLock(h,path);
             var final=new StringBuilder(32768);
             uint n=GetFinalPathNameByHandle(h,final,(uint)final.Capacity,0);
             if(n==0 || n>=final.Capacity || !String.Equals(final.ToString().Replace("\\\\?\\",""),path,StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Directory identity changed");
@@ -109,7 +128,7 @@ namespace PortableVBox {
             foreach(string name in Scripts) {
                 string p=Path.Combine(code,name);byte[] bytes=Resource(name);
                 if(prepare) WriteNew(p,bytes);
-                var f=OpenLocked(p);Locks.Add(f);
+                var f=OpenLocked(p);HoldLock(f,p);
                 if(Hash(f)!=Hash(bytes)) throw new InvalidOperationException("Modified embedded worker");
             }
         }
@@ -121,6 +140,9 @@ namespace PortableVBox {
                 if(f.Length<1 || f.Length>131072) throw new InvalidOperationException("Invalid inventory size");
                 using(var r=new StreamReader(f,Encoding.UTF8)) manifest=Json.Deserialize<Dictionary<string,object>>(r.ReadToEnd());
             }
+            return ValidateManifest(manifest);
+        }
+        static Dictionary<string,object> ValidateManifest(Dictionary<string,object> manifest) {
             var rows=new List<string>();long bytes=0;
             foreach(Dictionary<string,object> row in (System.Collections.IEnumerable)manifest["files"]) {
                 string file=(string)row["path"],hash=(string)row["sha256"];
@@ -153,34 +175,13 @@ namespace PortableVBox {
                     }
                 }
                 // Keep elevated executable/DLL inputs immutable for the whole action.
-                var locked=OpenLocked(target);Locks.Add(locked);
+                var locked=OpenLocked(target);HoldLock(locked,target);
                 if(Hash(locked)!=(string)row["sha256"]) throw new InvalidOperationException("Protected copy differs");
                 ++count;
             }
             if(count!=185) throw new InvalidOperationException("Incomplete compiled inventory");
             if(prepare) WriteNew(report,Encoding.UTF8.GetBytes(Json.Serialize(manifest)));
-            var reportLock=OpenLocked(report);Locks.Add(reportLock);
-        }
-        static void RemoveVerifiedPayload(string session) {
-            // Only after verified system teardown. The protected parent denies
-            // low-user creation, rename, write and ownership/ACL changes.
-            string app=Path.Combine(session,"app64");
-            var manifest=Json.Deserialize<Dictionary<string,object>>(File.ReadAllText(Path.Combine(app,".prepared.json"),Encoding.UTF8));
-            var directories=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach(Dictionary<string,object> row in (System.Collections.IEnumerable)manifest["files"]) {
-                string file=Full(Path.Combine(app,((string)row["path"]).Replace('/','\\')));
-                if(!Under(file,app) || (File.GetAttributes(file)&FileAttributes.ReparsePoint)!=0) throw new InvalidOperationException("Unexpected protected cleanup path");
-                File.Delete(file);
-                string dir=Path.GetDirectoryName(file);
-                while(!String.Equals(dir,app,StringComparison.OrdinalIgnoreCase)) {directories.Add(dir);dir=Path.GetDirectoryName(dir);}
-            }
-            File.Delete(Path.Combine(app,".prepared.json"));
-            var ordered=new List<string>(directories);ordered.Sort((a,b)=>b.Length.CompareTo(a.Length));
-            foreach(string dir in ordered) Directory.Delete(dir,false);
-            Directory.Delete(app,false);
-            foreach(string name in Scripts) File.Delete(Path.Combine(session,"code",name));
-            Directory.Delete(Path.Combine(session,"code"),false);
-            WriteNew(Path.Combine(session,"payload-removed.json"),Encoding.UTF8.GetBytes("{\"protected_payload_removed\":true}"));
+            var reportLock=OpenLocked(report);HoldLock(reportLock,report);
         }
     }
 }

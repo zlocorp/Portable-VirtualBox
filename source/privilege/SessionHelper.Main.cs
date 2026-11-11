@@ -168,10 +168,16 @@ namespace PortableVBox {
                 LockParents(Path.GetDirectoryName(store));CreateProtectedDirectory(store,caller.Sid,true);
                 session=Path.Combine(store,"pvbox-manager-"+(recovery?oldPid:pid)+"-"+cycle);
                 bool prepare=args[0]=="Prepare";
-                if(recovery && (!Directory.Exists(session) || !Directory.Exists(Path.Combine(session,"app64")) ||
-                                !Directory.Exists(Path.Combine(session,"code"))))
+                if(recovery && !PayloadExists(session))
                     throw new InvalidOperationException("Untrusted or ambiguous recovery target");
                 CreateProtectedDirectory(session,caller.Sid,!prepare);safeSession=session;
+                string helperHash;
+                using(var executable=OpenLocked(Assembly.GetExecutingAssembly().Location)) helperHash=Hash(executable);
+                if(!prepare && PayloadExists(Path.Combine(session,"payload-cleanup.json"))) {
+                    ContinuePayloadRemoval(session,root,caller,controller,recovery?oldPid:pid,cycle,recovery,helperHash);
+                    return 0;
+                }
+                if(!prepare) VerifyPayloadOwner(session,root,caller,recovery?oldPid:pid,cycle,recovery,helperHash);
                 string app=Path.Combine(session,"app64"),code=Path.Combine(session,"code");
                 CreateProtectedDirectory(app,caller.Sid,!prepare);CreateProtectedDirectory(code,caller.Sid,!prepare);
                 InstallScripts(session,prepare);
@@ -199,7 +205,7 @@ namespace PortableVBox {
                         schema=1,phase="pre-system-effects",controller_pid=pid,
                         controller_created_filetime=caller.Created.ToString(CultureInfo.InvariantCulture),
                         cycle=cycle,sid=caller.Sid,portable_root=root,protected_app=app,
-                        frontend_sha256=PinnedBuild.FrontendSha256
+                        frontend_sha256=PinnedBuild.FrontendSha256,payload_protocol=1,helper_sha256=helperHash
                     })));
                 }
                 // Windows 10/11 ship 64-bit Windows PowerShell 5.1. Requiring
@@ -266,8 +272,9 @@ namespace PortableVBox {
                 }
                 if(TokenFacts.WaitForSingleObject(controller,0)!=258) throw new InvalidOperationException("Controller exited during privileged operation");
                 if(args[0]=="Finish" || recovery) {
-                    foreach(var item in Locks) item.Dispose();Locks.Clear();LockedDirs.Clear();
-                    RemoveVerifiedPayload(session);
+                    CreatePayloadCheckpoint(session,root,caller,recovery?oldPid:pid,cycle,recovery,helperHash,journalPath,journalBinding);
+                    ReleasePayloadLocks(session);
+                    ContinuePayloadRemoval(session,root,caller,controller,recovery?oldPid:pid,cycle,recovery,helperHash);
                 }
                 journal.Complete(Json.Serialize(new {helper_checks_completed=true,action=args[0]}));
                 journal.Dispose();journal=null;

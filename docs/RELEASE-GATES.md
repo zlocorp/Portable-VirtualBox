@@ -18,7 +18,7 @@ The linked historical runs establish only their own tested checkpoints. Re-run a
 
 ## Known blocking findings
 
-- **Cleanup/recovery is not generally retryable after operational failure.** One-shot proof/cleanup directories can block a second attempt even after a refusal before deletion. Partial protected-payload removal can leave the next invocation unable to satisfy its full-inventory check. A transient error may therefore leave retained resources without supported retry completion. Fail-closed retention is not successful rollback. This remains an everyday-release blocker until separately fixed and tested; do not remove receipts/directories or broaden cleanup to bypass it. UAC denial before helper execution is a separate, retryable consent case.
+- **Cleanup/recovery is not generally retryable after operational failure.** One-shot proof/cleanup directories can block a second attempt even after a refusal before deletion. The new payload-only continuation below addresses a narrower case after a durable teardown checkpoint; it does not make system-effect cleanup generally retryable. A transient error may therefore leave retained resources without supported retry completion. Fail-closed retention is not successful rollback. This remains an everyday-release blocker until separately fixed and tested; do not remove receipts/directories or broaden cleanup to bypass it. UAC denial before helper execution is a separate, retryable consent case.
 - The locale-dependent published-INF parser and continuation after failed/unknown driver start have source fixes and file-only behavioral regressions. A narrow `StartFailedStopped` recovery path retains all original ownership checks and rechecks stopped SCM/WMI state before removing the exact package. **These are not workstation sign-off:** require final-candidate Windows PowerShell 5.1, real driver lifecycle and isolated workstation results. Timeout/unknown start results remain blocked rather than granted cleanup authority.
 
 ## Gates before promoting a runnable candidate
@@ -54,3 +54,23 @@ Multi-VM mutation/transaction recovery, USB passthrough, bridged-network driver 
 bytes against the pinned inventory and reports missing files. It does not query
 Windows state or authenticate ownership, and always denies resume authority.
 It adds no runtime action and does **not** close the operational-retry blocker.
+
+## Owner-bound private-payload continuation (candidate)
+
+The fixed helper now has a separate continuation branch for deletion of its
+original protected app64/code files, after a new durable system-teardown checkpoint.
+It uses the same paired helper/frontend, original owner generation, retained
+Windows object identities and a flushed BEGIN/DONE journal. It cannot call
+PowerShell or repeat a service, driver or package operation. Only the exact
+original files and expected empty directories are eligible; user VM data and
+acquisition/cleanup receipts are preserved. See the [design and limits](designs/owner-bound-cleanup-resume.md).
+
+Source gates are implemented; exact-candidate native Windows and disposable
+system-effect CI must pass before this increment is accepted. File-only journal
+and plan tests do not substitute for those Windows checks. The controlled fixture
+covers AfterFirstDelete with same-controller Finish and BeforeMarker with a new
+controller Recover. Neither is interactive workstation UAC or physical power-loss
+acceptance. Missing/torn checkpoint or journal, changed/recreated objects, uncertain
+observations, an abandoned mutex, and a crash before the checkpoint remain blocked.
+Never remove or reconstruct evidence to force retry. Finish sessions with their
+original paired build before upgrading; protocol/build mismatches deliberately refuse.
