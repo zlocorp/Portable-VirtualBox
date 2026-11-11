@@ -89,6 +89,22 @@ uploaded. Reports use fixed field names and bounded numeric values; the runner
 streams them, checks bounds before UTF-8 allocation, and validates strict JSON
 including failure records before artifact copying.
 
+## Observed source checkpoint
+
+Source `c42ce9791925c40dce5c9b6e987a125515eaa3aa` passed the Windows
+native push job on attempt 1. The PR native job also passed on attempt 1, but
+checked out synthetic merge `5a1e6f2f4d94a318e05c45e1214a7626b8560f2a`,
+not the source commit directly. Independent final review accepted 85
+managed checks, 14 native cases and 573 separate native/harness checks, with
+actual backpressure on both pipes, bounded capture/discard, fair draining,
+sticky UNKNOWN and explicit fixture release. Both cancellation-race runs
+observed completion winning (1168/0); the abort-winning race branch remains
+unobserved, although separate pending-read cancellations returned 995.
+
+Unknown submission, uncertain close, stale generation, error 232 and
+partial-setup decisions remain managed negative tests, not induced native
+faults. See the [execution record, digests and limits](../EXECUTION-2026-11-11-pipe-transport-and-messages.md).
+
 ## Still blocked
 
 This does not prove synchronous inherited child writers, repair

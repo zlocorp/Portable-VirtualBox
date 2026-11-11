@@ -55,8 +55,8 @@ Interfaces: `PipeFixture` owns all preallocated `PipeNativeSlot` objects;
 - [x] Write native scenario assertions before native implementation.
 - [x] Compile C# 5 against existing official net48 references; Linux explicitly skips native execution.
 - [x] Implement owned pairs and bounded fair loop, keeping storage on unknown.
-- [ ] Exercise immediate/pending/binary/large/fair/fault/cancel/EOF/error cases.
-- [x] Run managed regression and full suite; Windows native result remains pending CI.
+- [x] Exercise immediate/pending/binary/large/fair/fault/cancel/EOF cases on Windows; retain managed-only error limits.
+- [x] Run managed regression and full suite; source-associated push and PR Windows native jobs passed; checkout distinction is recorded below.
 
 ## Task 3: Evidence and integration
 
@@ -65,8 +65,8 @@ Files: runner, Python contracts, this plan and design,
 
 - [x] Bound JSONL generation, strict UTF-8 validation and artifact copy before allocation.
 - [x] Add one file/IPC-only native step and explicitly text-only artifact/path filters.
-- [ ] Run full suite, source audit and independent review; report limitations.
-- [ ] Obtain independent review before committing or publishing.
+- [x] Run full suite, source audit and independent review; report limitations.
+- [x] Obtain independent review of the implementation and exact-commit native evidence.
 
 ## Execution ledger
 
@@ -86,21 +86,49 @@ Files: runner, Python contracts, this plan and design,
   expiry lacked sticky UNKNOWN (check 25). All three then passed.
 - Strict-evidence REDs rejected permissive mutation authority, oversized lines
   and total artifacts, empty files and non-object records after implementation.
-- Current local verification: 85 managed checks; four focused Python contracts;
+- Local verification at the source checkpoint: 85 managed checks; four focused Python contracts;
   full repository suite 324 tests total, OK, 6 platform skips; C# 5/x64/net48 compilation
   with warnings as errors; active-tree and whitespace checks passed.
-- Fourteen native cases are written but have NOT executed on Linux. Pending
-  writes, native cancellation races and actual EOF remain Windows CI gates.
+- Linux did not execute the fourteen native cases. Windows push on the exact source head and PR on its synthetic
+  merge subsequently passed them; see the Windows evidence below.
 - Additional close-proof RED at check 22: a second reported success could
   replace a known FALSE close. Return evidence is now consumed once, and the
   rejected replacement keeps the owner unresolved.
 - Final review correction: backpressure needs repeated exact IO_INCOMPLETE
   queries on both current writes, not historical IO_PENDING returns. The bounded
   no-reader observation now lasts at least 10 ms, harvests any completed writes,
-  and fails on unknown query outcomes. Actual execution remains a Windows gate.
+  and fails on unknown query outcomes. Subsequent Windows runs observed both
+  incomplete writes before reads, with 16-ms and 10-ms observation windows.
 - Partial-setup regression RED at check 1: preparation was not consumed before
   allocation. The shared guard now records the first attempt irreversibly and
   rejects re-entry even when setup-complete and run-consumed fields remain false.
 - Cancellation-race assertions skip full byte/hash/EOF checks only for actual
   ERROR_OPERATION_ABORTED. A completed read when cancellation loses must satisfy
   the normal complete-capture assertions.
+
+## Windows evidence and remaining scope
+
+- Tested source `c42ce9791925c40dce5c9b6e987a125515eaa3aa`: native push
+  [43036297288](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/43036297288)
+  and native PR
+  [43036308877](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/43036308877)
+  both passed on attempt 1. Push tested the exact source; PR checked out
+  synthetic merge `5a1e6f2f4d94a318e05c45e1214a7626b8560f2a`.
+  Independent final review accepted this test-only
+  hosted observation.
+- The push artifact contains 16 strict records: 85 managed checks, fourteen
+  native cases and 573 separate native/harness checks. Exact byte/hash,
+  issued/terminal, fairness and release facts were independently checked.
+- Both native race cases observed completion winning (1168/0), not abortion.
+  Separate pending cancellation cases observed 995. Managed negative tests do
+  not establish native unknown submission, uncertain close, stale generation,
+  error 232, partial-setup failure, OOM or persistent WAIT_FAILED.
+- The [execution record](../EXECUTION-2026-11-11-pipe-transport-and-messages.md)
+  retains artifact digests, message/backup evidence and all 17 naturally
+  triggered source-associated workflow runs, each successful on attempt 1 without
+  rerun, cancellation or manual dispatch. These results do not cover later
+  documentation commits. No production capture integration or release approval
+  follows.
+- Production outer-worker and nested VBoxSDS lifetimes, system retry/lineage/
+  admission, isolated Windows 10/11 UAC/DPI/security/final-host checks,
+  power-loss limits and final packaging remain separate release gates.
