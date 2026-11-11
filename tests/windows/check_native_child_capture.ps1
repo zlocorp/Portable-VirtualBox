@@ -28,13 +28,13 @@ $valid=$false
 try {
     $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
     $child=Join-Path $out 'NativeCaptureFixtureChild.exe'
-    & $csc /nologo /target:exe /platform:x64 /langversion:5 /warnaserror+ ('/out:'+$child) (Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs')
+    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ ('/out:'+$child) (Join-Path $PSScriptRoot 'NativeCaptureFixtureChild.cs') (Join-Path $PSScriptRoot 'NativeLaunchEnvironmentObservation.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Fixed harmless capture child compilation failed' }
     $exe=Join-Path $out 'NativeChildCaptureTests.exe'
     $sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
         'NativeChildCapture.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs',
-        'NativeChildCaptureNativeTests.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
-    & $csc /nologo /target:exe /platform:x64 /langversion:5 /warnaserror+ /main:PortableVBox.NativeChildCaptureNativeTests ('/out:'+$exe) @sources
+        'NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
+    & $csc /nologo /codepage:65001 /target:exe /platform:x64 /langversion:5 /warnaserror+ /main:PortableVBox.NativeChildCaptureNativeTests ('/out:'+$exe) @sources
     if ($LASTEXITCODE -ne 0) { throw 'Native child capture contracts compilation failed' }
     foreach ($program in @($child,$exe)) {
         [IO.File]::WriteAllText(($program+'.config'),'<configuration><startup><supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" /></startup></configuration>')

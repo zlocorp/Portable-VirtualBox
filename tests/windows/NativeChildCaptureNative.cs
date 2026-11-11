@@ -8,7 +8,16 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 namespace PortableVBox {
- internal enum CaptureCase { Empty,Binary,Large,Nonzero,Exit259,PostCreateFault,CaptureFault,EvidenceFault,WithheldEof }
+ internal static class EnvironmentEvidenceSink {
+  internal static bool TryWrite(System.IO.Stream sink) { int written;return TryWriteCounted(sink,out written); }
+  internal static bool TryWriteCounted(System.IO.Stream sink,out int written) {
+   written=0;
+   try { sink.WriteByte(0);written=1;sink.Flush();throw new IOException("Controlled environment diagnostic fault"); }
+   catch { return false; }
+  }
+ }
+ internal enum CaptureCase { Empty,Binary,Large,Nonzero,Exit259,PostCreateFault,CaptureFault,EvidenceFault,WithheldEof,EnvironmentObservation }
+ internal enum EnvironmentObservationFault { None,AfterCreate,Evidence }
  internal static class ChildCaptureApi {
   [StructLayout(LayoutKind.Sequential)] internal struct Startup {
    internal int Size;
@@ -51,6 +60,13 @@ namespace PortableVBox {
   readonly PipeNativeSlot[] slots=new PipeNativeSlot[4];
   readonly PipeCloseProof inputClose=new PipeCloseProof(),sentinelClose=new PipeCloseProof(),heldClose=new PipeCloseProof(),
    processClose=new PipeCloseProof(),threadClose=new PipeCloseProof();
+  readonly FixedChildEnvironment environment;
+  readonly EnvironmentAllocation environmentAllocation=new EnvironmentAllocation();
+  readonly EnvironmentObservationFault environmentFault;
+  CreateEntryState createState;
+  internal string ExpectedWindowsDirectory { get { return environment==null?null:environment.WindowsDirectory; } }
+  internal CreateEntryState CreateState { get { return createState; } }
+  internal bool EnvironmentReleased { get { return environment==null || environmentAllocation.Released; } }
   readonly Stopwatch clock=new Stopwatch();
   readonly Exception injected=new IOException("Controlled fixture fault");
   readonly byte[] evidenceBytes=new byte[1];
@@ -58,13 +74,22 @@ namespace PortableVBox {
   bool nativeOutcomeUnknown,attributeInitialized,releaseAttempted,used,created,faultInjected;
   FileStream imageLease,evidence;
   internal bool Released,SentinelProbe,SentinelUnsignaled,HeldWriterBlockedEof,OneShotRefused;
+  internal int EnvironmentFaultAtBytes;
   internal int Rounds,FaultSite,EvidenceBytesWritten,CreateCalls,WaitCalls,ExitCodeReads;
   internal uint ExitCode,CreateError;
   internal int AssertionFailedAt;
   internal bool Created { get { return created; } }
   internal bool Unknown { get { return Proof.Unknown || nativeOutcomeUnknown || Channels[0].Capture.Unknown || Channels[1].Capture.Unknown; } }
   internal ChildCaptureOwner(CaptureCase scenario) {
+   if(scenario<CaptureCase.Empty || scenario>CaptureCase.WithheldEof) throw new ArgumentOutOfRangeException("scenario");
    Scenario=scenario;
+   for(int i=0;i<2;i++) { slots[i*2]=Channels[i].Connect;slots[i*2+1]=Channels[i].Read; }
+  }
+  internal ChildCaptureOwner(FixedChildEnvironment policy):this(policy,EnvironmentObservationFault.None) { }
+  internal ChildCaptureOwner(FixedChildEnvironment policy,EnvironmentObservationFault fault) {
+   if(policy==null) throw new ArgumentNullException("policy");
+   if(fault<EnvironmentObservationFault.None || fault>EnvironmentObservationFault.Evidence) throw new ArgumentOutOfRangeException("fault");
+   environment=policy;environmentFault=fault;Scenario=CaptureCase.EnvironmentObservation;
    for(int i=0;i<2;i++) { slots[i*2]=Channels[i].Connect;slots[i*2+1]=Channels[i].Read; }
   }
   void MarkUnknown() { Proof.Fault(); }
@@ -86,6 +111,7 @@ namespace PortableVBox {
   void Prepare() {
    if(IntPtr.Size!=8 || Marshal.SizeOf(typeof(ChildCaptureApi.ExtendedStartup))!=112 || Marshal.SizeOf(typeof(PipeNative.Overlapped))!=32)
     throw new InvalidOperationException("x64 native layouts required");
+   if(environment!=null) environmentAllocation.Prepare(environment.CopyBytes());
    for(int i=0;i<slots.Length;i++) slots[i].Allocate();
    string sid;
    using(WindowsIdentity identity=WindowsIdentity.GetCurrent()) sid=identity.User.Value;
@@ -159,20 +185,22 @@ namespace PortableVBox {
    if(image.IndexOf('"')>=0) throw new InvalidOperationException("Unsupported fixed path");
    imageLease=new FileStream(image,FileMode.Open,FileAccess.Read,FileShare.Read);
    if(Scenario==CaptureCase.EvidenceFault) evidence=new FileStream(Path.Combine(root,"child-evidence-fault.bin"),FileMode.CreateNew,FileAccess.Write,FileShare.Read,1,FileOptions.WriteThrough);
+   if(environmentFault==EnvironmentObservationFault.Evidence) evidence=new FileStream(Path.Combine(root,"environment-evidence-fault.bin"),FileMode.CreateNew,FileAccess.Write,FileShare.Read,1,FileOptions.WriteThrough);
    var command=new StringBuilder("\""+image+"\" "+Scenario+" "+sentinel.ToInt64().ToString(CultureInfo.InvariantCulture));
    var startup=new ChildCaptureApi.ExtendedStartup();
    startup.Startup.Size=112;startup.Startup.Flags=0x100;startup.Startup.Input=input;
    startup.Startup.Output=Channels[0].Writer;startup.Startup.Error=Channels[1].Writer;startup.Attributes=attributes;
    // All managed owners, native slots, command, image lease and attributes now exist.
-   Proof.BeforeCreate();nativeOutcomeUnknown=true;
+   Proof.BeforeCreate();nativeOutcomeUnknown=true;createState=CreateEntryState.EnteredReturnUnknown;
    ++CreateCalls;
-   bool result=ChildCaptureApi.CreateProcessW(image,command,IntPtr.Zero,IntPtr.Zero,true,0x80000,IntPtr.Zero,root,ref startup,out Original);
+   bool result=ChildCaptureApi.CreateProcessW(image,command,IntPtr.Zero,IntPtr.Zero,true,environment==null?0x80000U:0x00080400U,environment==null?IntPtr.Zero:environmentAllocation.Pointer,root,ref startup,out Original);
+   createState=result?CreateEntryState.ReturnedTrue:CreateEntryState.ReturnedFalse;
    CreateError=result?0:unchecked((uint)Marshal.GetLastWin32Error());
    // Exact originals already in rooted owner; no metadata/logging/callback before this.
    nativeOutcomeUnknown=false;created=result;Proof.CreateReturned(result);
    if(!result) { MarkUnknown();throw new InvalidOperationException("Fixed child rejected"); }
    if(Original.Process==IntPtr.Zero || Original.Thread==IntPtr.Zero) { nativeOutcomeUnknown=true;throw new InvalidOperationException("Missing original handles"); }
-   if(Scenario==CaptureCase.PostCreateFault) { faultInjected=true;FaultSite=1;throw injected; }
+   if(Scenario==CaptureCase.PostCreateFault || environmentFault==EnvironmentObservationFault.AfterCreate) { faultInjected=true;FaultSite=1;throw injected; }
   }
   void CloseParentWriters() {
    // Each close has independent pre-call and returned-result proof. Always attempted
@@ -203,6 +231,13 @@ namespace PortableVBox {
       try {
        Marshal.Copy(channel.Read.Buffer,channel.Read.Bytes,0,(int)count);
        channel.Capture.Receive(channel.Read.Bytes,(int)count);
+       // Diagnostic failure has its own sink: never poison retained observation bytes.
+       if(index==0 && environmentFault==EnvironmentObservationFault.Evidence && !faultInjected && channel.Capture.Total>=8) {
+        faultInjected=true;FaultSite=3;
+        EnvironmentFaultAtBytes=channel.Capture.RetainedCount;
+        int written;
+        if(!EnvironmentEvidenceSink.TryWriteCounted(evidence,out written)) { EvidenceBytesWritten=written;MarkUnknown(); }
+       }
        if(index==0 && !faultInjected && channel.Capture.Total>=8 && (Scenario==CaptureCase.CaptureFault || Scenario==CaptureCase.EvidenceFault)) {
         faultInjected=true;
         if(Scenario==CaptureCase.EvidenceFault) { evidence.Write(evidenceBytes,0,1);EvidenceBytesWritten=1;FaultSite=3; }
@@ -218,7 +253,7 @@ namespace PortableVBox {
     channel.Read.Consume();
    }
    if(channel.Read.Proof.Unknown) MarkUnknown();
-   if(channel.Read.Proof.SafeToRelease && !channel.Capture.Eof && !channel.Stopped) channel.Read.Submit(1,4096);
+   if(channel.Read.Proof.SafeToRelease && !channel.Capture.Eof && !channel.Stopped) channel.Read.Submit(1,environment==null?4096:16);
   }
   void Refresh() { Proof.StdoutEof=Channels[0].Capture.Eof;Proof.StderrEof=Channels[1].Capture.Eof;Proof.IoTerminal=IoTerminal; }
   void Pump() {
@@ -253,9 +288,10 @@ namespace PortableVBox {
   }
   void Release() {
    Refresh();
-   if(releaseAttempted || nativeOutcomeUnknown || CloseUnresolved || !Proof.CanRelease) return;
+   if(releaseAttempted || nativeOutcomeUnknown || CloseUnresolved || environmentAllocation.AllocationUnknown || environmentAllocation.ReleaseUncertain || !Proof.CanRelease) return;
    releaseAttempted=true;
    try {
+    if(environment!=null && !environmentAllocation.TryRelease(createState)) { MarkUnknown();return; }
     CloseParentWriters();Close(ref held,heldClose);
     for(int i=0;i<2;i++) Close(ref Channels[i].Server,Channels[i].ServerClose);
     Close(ref Original.Thread,threadClose);Close(ref Original.Process,processClose);Close(ref sentinel,sentinelClose);
@@ -266,7 +302,7 @@ namespace PortableVBox {
     if(descriptor!=IntPtr.Zero) { if(PipeNative.LocalFree(descriptor)!=IntPtr.Zero) { MarkUnknown();return; } descriptor=IntPtr.Zero; }
     if(imageLease!=null) { imageLease.Dispose();imageLease=null; }
     if(evidence!=null) { evidence.Dispose();evidence=null; }
-    bool all=Original.Process==IntPtr.Zero && Original.Thread==IntPtr.Zero && sentinel==IntPtr.Zero && input==IntPtr.Zero && held==IntPtr.Zero &&
+    bool all=EnvironmentReleased && Original.Process==IntPtr.Zero && Original.Thread==IntPtr.Zero && sentinel==IntPtr.Zero && input==IntPtr.Zero && held==IntPtr.Zero &&
      attributes==IntPtr.Zero && handleList==IntPtr.Zero && descriptor==IntPtr.Zero && imageLease==null && evidence==null && !CloseUnresolved;
     for(int i=0;i<2;i++) all=all && Channels[i].Server==IntPtr.Zero && Channels[i].Writer==IntPtr.Zero;
     for(int i=0;i<slots.Length;i++) all=all && slots[i].Released;

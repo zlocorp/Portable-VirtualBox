@@ -497,7 +497,7 @@ class NativeChildRunnerContract(unittest.TestCase):
         $ErrorActionPreference='Stop'
         $root='__ROOT__'
         $sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
-            'NativeChildCapture.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs') |
+            'NativeChildCapture.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs') |
             ForEach-Object { Join-Path $root $_ }
         Add-Type -Path $sources
         $assembly=[PortableVBox.NativePipeTransportTests].Assembly

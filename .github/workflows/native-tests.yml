@@ -29,6 +29,15 @@ on:
       - tests/windows/NativeChildCaptureNativeTests.cs
       - tests/windows/check_native_child_capture.ps1
       - tests/test_native_child_capture_contract.py
+      - tests/windows/NativeLaunchEnvironment.cs
+      - tests/windows/NativeLaunchEnvironmentTests.cs
+      - tests/windows/NativeLaunchEnvironmentNative.cs
+      - tests/windows/NativeLaunchEnvironmentPolicyTests.cs
+      - tests/windows/NativeLaunchEnvironmentObservation.cs
+      - tests/windows/NativeLaunchEnvironmentObservationTests.cs
+      - tests/windows/NativeLaunchEnvironmentNativeTests.cs
+      - tests/windows/check_native_launch_environment.ps1
+      - tests/test_native_launch_environment_contract.py
       - scripts/vbox_sup_package_identity.ps1
       - tests/windows/check_driver_package_identity.ps1
       - tests/windows/check_driver_start_gate.ps1
@@ -149,5 +158,17 @@ jobs:
         with:
           name: native-child-capture-text-only
           path: ${{ runner.temp }}/pvbox-native-child-evidence/native-child-capture.jsonl
+          if-no-files-found: error
+          retention-days: 7
+      - name: Observe explicit fixed-child Unicode environment (no authority)
+        id: native_launch_environment
+        shell: powershell
+        run: ./tests/windows/check_native_launch_environment.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-environment-evidence')
+      - name: Store bounded environment observations (text only)
+        if: always() && steps.native_launch_environment.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-launch-environment-text-only
+          path: ${{ runner.temp }}/pvbox-native-environment-evidence/native-launch-environment.jsonl
           if-no-files-found: error
           retention-days: 7

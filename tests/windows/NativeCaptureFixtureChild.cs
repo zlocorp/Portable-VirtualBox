@@ -25,7 +25,7 @@ namespace PortableVBox {
      case "Large": case "CaptureFault": case "EvidenceFault": left=196731;right=204829;break;
      case "Nonzero": exit=23;break;
      case "Exit259": exit=259;break;
-     case "PostCreateFault": case "WithheldEof": break;
+     case "PostCreateFault": case "WithheldEof": case "EnvironmentObservation": break;
      default: return 91;
     }
     long sentinel;
@@ -37,6 +37,14 @@ namespace PortableVBox {
     byte[] header={80,86,67,49,(byte)(signaled?1:0),(byte)error,(byte)(error>>8),165};
     IntPtr stdout=GetStdHandle(-11),stderr=GetStdHandle(-12);
     Write(stdout,header,header.Length);
+    if(mode=="EnvironmentObservation") {
+     byte[] record=EnvironmentObservation.ReadCurrent().Encode();
+     // Native reads may coalesce: a separate deterministic managed fragmentation test
+     // proves diagnostic failure cannot discard the final observation fragment.
+     byte[] first=new byte[12];Array.Copy(record,first,first.Length);Write(stdout,first,first.Length);
+     byte[] rest=new byte[record.Length-first.Length];Array.Copy(record,first.Length,rest,0,rest.Length);Write(stdout,rest,rest.Length);
+     return 0;
+    }
     byte[] buffer=new byte[4096];
     int a=0,b=0;
     while(a<left || b<right) {
