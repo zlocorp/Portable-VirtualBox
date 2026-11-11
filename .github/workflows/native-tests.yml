@@ -22,6 +22,13 @@ on:
       - tests/windows/NativePipeTransportNativeTests.cs
       - tests/windows/check_native_pipe_transport.ps1
       - tests/test_native_pipe_transport_contract.py
+      - tests/windows/NativeCaptureFixtureChild.cs
+      - tests/windows/NativeChildCapture.cs
+      - tests/windows/NativeChildCaptureTests.cs
+      - tests/windows/NativeChildCaptureNative.cs
+      - tests/windows/NativeChildCaptureNativeTests.cs
+      - tests/windows/check_native_child_capture.ps1
+      - tests/test_native_child_capture_contract.py
       - scripts/vbox_sup_package_identity.ps1
       - tests/windows/check_driver_package_identity.ps1
       - tests/windows/check_driver_start_gate.ps1
@@ -130,5 +137,17 @@ jobs:
         with:
           name: native-pipe-transport-text-only
           path: ${{ runner.temp }}/pvbox-native-pipe-evidence/native-pipe-transport.jsonl
+          if-no-files-found: error
+          retention-days: 7
+      - name: Capture fixed harmless child output (owned files and pipes, no authority)
+        id: native_child_capture
+        shell: powershell
+        run: ./tests/windows/check_native_child_capture.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-child-evidence')
+      - name: Store bounded native child capture observations (text only)
+        if: always() && steps.native_child_capture.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-child-capture-text-only
+          path: ${{ runner.temp }}/pvbox-native-child-evidence/native-child-capture.jsonl
           if-no-files-found: error
           retention-days: 7

@@ -16,7 +16,7 @@ The active-source pattern audit and bounded literal API contract run in CI. Zero
 
 Protected receipts are under `%ProgramData%/PortableVirtualBox.Alpha` for ALPHA and `PortableVirtualBox.Experiment` for CI. Cleanup requires exact owned resources and current identity evidence, not just a matching service name, path or saved PID. Foreign installations, services, driver collisions, changed receipts and unknown observations block progress. Recovery is a separate explicit one-shot action for a proven departed controller; interrupted preparation needs its corresponding protected acquisition checkpoints. An operation interrupted before a trustworthy receipt cannot be guessed into ownership.
 
-**Known everyday-release blocker:** cleanup/recovery attempts can create one-shot proof/cleanup directories before resource deletion. An operational refusal or transient error can then block another attempt even if nothing was removed. After partial `RemoveVerifiedPayload` cleanup, the next invocation still requires the full inventory and can refuse. Thus retained evidence/resources are fail-closed behavior, **not successful rollback or a supported retry guarantee**. A cancelled UAC request before helper execution is different from a failed helper attempt. General retryable recovery needs a separately reviewed fix and acceptance; until then use only disposable hosts and restore their snapshots if exact cleanup cannot be established.
+**Known everyday-release blocker:** system-effect cleanup/recovery attempts can create one-shot proof/cleanup directories before resource deletion. An operational refusal or transient error can then block another attempt even if nothing was removed. The narrower private-payload continuation described below can resume its original file deletion plan only after a newly authenticated durable system-teardown checkpoint. It cannot repair earlier attempts without that checkpoint or repeat uncertain system effects. Retained evidence/resources outside that supported branch are fail-closed behavior, **not successful rollback or a general retry guarantee**. A cancelled UAC request before helper execution is different from a failed helper attempt. General retryable recovery needs a separately reviewed fix and acceptance; until then use only disposable hosts and restore their snapshots if exact cleanup cannot be established.
 
 There is no force-kill fallback. Managed processes use retained handles and graceful close requests; closing Manager does not prove the guest stopped. A live guest, an active command lease or uncertain identity prevents cleanup. `FAILED`, denied UAC and closing a window are not evidence that drivers/services were removed. See the [isolated ALPHA procedure](ALPHA-WINDOWS-TEST.md) for explicit Finish retry and recovery.
 
@@ -47,7 +47,7 @@ This generic AutoIt policy layer is distinct from the concrete fixed-action help
 
 Known no-effect acquisition failures require confirmed absence. Retryable no-effect release failures require the same identity/ticket still present. Uncertain outcomes or persistence failures freeze the session. Cancellation blocks further acquisition while allowing confirmed-owned cleanup. Reentrant calls are refused. There is no implicit retry, snapshot resume or active-session import.
 
-The callback interface accepts trusted compiled function references only, not names from input. Checked invocation preserves error flags and isolates ByRef request modification. It is not a sandbox, an elevation boundary or a way to preempt a blocking callback. Effect adapters need their own execution/lifetime policy; the implemented fixed helper retains a live child rather than claiming a timeout means termination.
+The callback interface accepts trusted compiled function references only, not names from input. Checked invocation preserves error flags and isolates ByRef request modification. It is not a sandbox, an elevation boundary or a way to preempt a blocking callback. Effect adapters need their own execution/lifetime policy. The fixed helper retains its child on the normal completed-setup timeout path, but exceptional launch/capture/wait paths remain an open lifetime gap as described below. A timeout never means termination.
 
 Snapshots are bounded UTF-8 TSV with a completion footer. Exclusive CREATE_NEW writes refuse existing files and flush data. Sequenced coordinator snapshots do not overwrite earlier evidence. The caller must provide an existing private trusted directory; the writer also rejects a reparse-point directory leaf. These checks do not guarantee resistance to same-account/admin topology changes or power-loss-proof transactions. Loaded snapshots are always diagnostic READONLY, with formerly active rows UNCERTAIN. A saved token never restores cleanup authority.
 
@@ -69,9 +69,18 @@ Native unit harnesses use synthetic effects and query-only observations; those a
 
 These are Windows Server CI observations, not interactive workstation acceptance. The [release gates](RELEASE-GATES.md) separate historical evidence, exact-candidate CI and still-missing Windows 10/11 checks.
 
-## Current system-operation lifetime constraint (2026-10-25)
+## Current system-operation lifetime constraint (2026-11-11)
 
-The CI-bound fixed-action helper no longer requires an optional PowerShell 7 runtime: it invokes the OS-owned x64 Windows PowerShell 5.1 by absolute System32 path. It does not inherit caller PATH or user profiles and still executes only its protected embedded scripts. A script worker that exceeds the expected bound is not abandoned: the helper keeps the process handle and waits for termination before returning an error or releasing its privileged lock; the medium elevation-request worker also waits for the fixed helper to exit rather than treating elapsed time as an exit. This is an **intentional fail-closed wait**, not a claim that Windows operations cannot hang, and a Windows 11 interactive abort/timeout procedure still needs acceptance.
+The CI-bound fixed-action helper no longer requires an optional PowerShell 7 runtime: it invokes the OS-owned x64 Windows PowerShell 5.1 by absolute System32 path. It does not inherit caller PATH or user profiles and still executes only its protected embedded scripts. On the normal path after successful process/capture setup, a script worker that exceeds the expected bound is not abandoned: the helper keeps the process handle and waits for termination before returning an error or releasing its privileged lock; the medium elevation-request worker also waits for the fixed helper to exit rather than treating elapsed time as an exit. This is an **intentional fail-closed wait**, not a claim that Windows operations cannot hang, and a Windows 11 interactive abort/timeout procedure still needs acceptance.
+
+The exceptional paths are not covered by that normal-path guarantee.
+`SessionHelper.Main` starts its worker before managed capture/wait setup finishes,
+and `Run-Sds` in `scripts/privileged_session_worker.ps1` starts VBoxSDS before its
+try/retained-handle boundary. Native launch and pipe fixtures are test-only
+observations and do not repair either production path. Unknown child lifetime
+cannot authorize lock release, cleanup retry or a new effect attempt. See the
+[launch observation](EXECUTION-2026-11-11-native-launch-observation.md) and
+[current release blockers](RELEASE-GATES.md).
 
 ## Remaining release decision
 
