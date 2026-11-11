@@ -33,13 +33,30 @@ function Start-Medium([string]$Image,[string]$Label) {
     if ($p.WaitForExit(500)) { throw "User frontend unexpectedly exited: $Label" }
     return $p
 }
+. (Join-Path $PSScriptRoot 'Assert-HelperJournal.ps1')
 function Helper([string]$Arguments,[int]$Expected,[string]$Label) {
+    $parts=$Arguments.Split(' ')
+    $action=$parts[0];$controller=[PortableVBox.TokenFacts]::Read([int]$parts[1])
+    $originalPid=if($action -eq 'Recover'){[int]$parts[2]}else{0}
+    $generation=if($action -eq 'Recover'){[string]$oldGeneration}else{'0'}
+    $cycle=[int]$parts[-1]
+    $target=Join-Path $store ('pvbox-manager-'+$(if($action -eq 'Recover'){$originalPid}else{$controller.Pid})+'-'+$cycle)
+    $beforeJournals=Get-JournalHashes $target
     $p=Start-Process -FilePath $helper -ArgumentList $Arguments -PassThru -NoNewWindow `
         -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
     try {
         if (-not $p.WaitForExit(150000)) { throw "Helper timeout: $Label" }
         if ($p.ExitCode -ne $Expected) { throw "$Label helper exit=$($p.ExitCode), expected=$Expected" }
     } finally { $p.Dispose() }
+    Assert-PriorJournals $target $beforeJournals
+    $newJournals=@(Get-ChildItem -LiteralPath $target -Filter '*.journal' -File -ErrorAction SilentlyContinue | Where-Object { -not $beforeJournals.ContainsKey($_.Name) })
+    $preEffectRefusal=$Label -match 'live-owner|replay'
+    if($preEffectRefusal) {
+        if($newJournals.Count -ne 0) { throw 'Pre-effect refusal created a worker journal' }
+    } else {
+        if($newJournals.Count -ne 1) { throw 'Expected one durable recovery/preparation attempt' }
+        Assert-HelperJournal $newJournals[0].FullName $action $cycle ($Expected -eq 0) $controller $root $exe $originalPid $generation
+    }
 }
 function Assert-Clean([string]$Label) {
     $services=@(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop | Where-Object PSChildName -match '^VBox')
@@ -79,6 +96,7 @@ try {
         $label=$phase.ToLowerInvariant()
         $old=Start-Medium $exe ('owner-'+$label)
         $oldPid=$old.Id
+        $oldGeneration=([PortableVBox.TokenFacts]::Read($oldPid)).Created
         $env:PVBOX_TEST_BREAK_AT=$phase
         try {
             Helper ('Prepare '+$oldPid+' '+$cycle) 70 ('break-after-'+$label)

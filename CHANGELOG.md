@@ -4,6 +4,12 @@ User-relevant changes to the 2026 modernization. Format inspired by [Keep a Chan
 
 ## [Unreleased]
 
+### Added · durable fixed-helper attempt evidence (2026-11-11)
+
+- Existing protected `Prepare`, `Finish` and `Recover` helper attempts now flush an owner/build-bound intent before starting their fixed worker, flush its confirmed exit separately, and record helper completion only after the existing checks and cleanup finish. Each attempt uses a new file and retains its writer handle. Exceptions preserve incomplete evidence.
+- The bounded, versioned UTF-8 journal checks exact owner binding, canonical frame order and SHA-256 chaining; it refuses damaged, oversized or truncated records. It never overwrites, repairs or reopens old evidence for writing. A complete frame prefix can remain pending; a worker exit alone is not successful completion.
+- Added real Windows filesystem/framing/interruption tests and independent decoding plus medium-token journal write/ACL denial to the existing helper acceptance fixture. This increment is not an owner-bound multi-VM transaction, a backup/VM-step journal, automatic resume or physical power-loss certification. Existing recovery rules and privileged action vocabulary are unchanged.
+
 ### Hardened · cryptographically bound multi-VM recovery step and trace model (2026-11-07)
 
 - `e63ae07` stores canonical UUID order and per-VM destination paths in each offline reconciliation snapshot; validates exact unique UUID sets, state counters, the deterministic next UUID/action and consistent `COMPLETE` status. An `ABSENT` registration must be re-observed as `LOCAL` before any other original VM may be unregistered. Forged counts, misplaced UUIDs, hidden registrations, reordering and path substitution are rejected without executing Oracle.

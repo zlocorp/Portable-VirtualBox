@@ -129,6 +129,7 @@ namespace PortableVBox {
         [STAThread]
         public static int Main(string[] args) {
             string evidenceId=Guid.NewGuid().ToString("N");
+            DurableJournal journal=null;
             string session=null,safeSession=null;IntPtr controller=IntPtr.Zero;int result=70;System.Threading.Mutex effectMutex=null;bool held=false;
             try {
                 int pid,cycle,oldPid=0;
@@ -232,6 +233,21 @@ namespace PortableVBox {
                     foreach(string key in new[]{"GITHUB_ACTIONS","GITHUB_REPOSITORY","RUNNER_ENVIRONMENT","RUNNER_OS","GITHUB_SHA"}) info.EnvironmentVariables[key]=Environment.GetEnvironmentVariable(key)??"";
                 info.EnvironmentVariables["PVBOX_FIXED_HELPER_MODE"]=PinnedBuild.Mode;
                 info.EnvironmentVariables["RUNNER_TEMP"]=store; // verified protected cache, never a low caller input
+                // One protected append-only attempt, bound only to identities
+                // verified above. This is evidence, never a recovery permission.
+                string journalBinding=Json.Serialize(new {
+                    schema=1,attempt=evidenceId,action=args[0],mode=PinnedBuild.Mode,
+                    controller_pid=pid,controller_created_filetime=caller.Created.ToString(CultureInfo.InvariantCulture),
+                    sid=caller.Sid,desktop_session=caller.Session,cycle=cycle,
+                    portable_root=root,protected_session=session,frontend_sha256=PinnedBuild.FrontendSha256,
+                    original_controller_pid=oldPid,original_controller_created_filetime=originalCreated.ToString(CultureInfo.InvariantCulture)
+                });
+                string journalPath=Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".journal");
+                journal=DurableJournal.CreateNew(journalPath,journalBinding,args[0]);
+                // The inherited OWNER RIGHTS rule already denies the medium
+                // owner implicit WRITE_DAC; normalize owner as for other receipts.
+                var journalSecurity=File.GetAccessControl(journalPath);
+                journalSecurity.SetOwner(Admins);File.SetAccessControl(journalPath,journalSecurity);
                 using(var process=new Process {StartInfo=info}) {
                     process.Start();var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
                     // If a system operation outlives the expected deadline,
@@ -240,6 +256,7 @@ namespace PortableVBox {
                     // The non-admin GUI remains responsive while this waits.
                     bool withinDeadline=process.WaitForExit(150000);
                     if(!withinDeadline) process.WaitForExit();
+                    journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,within_deadline=withinDeadline}));
                     WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(stdout.GetAwaiter().GetResult()));
                     WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(stderr.GetAwaiter().GetResult()));
                     var helper=TokenFacts.Read(Process.GetCurrentProcess().Id);
@@ -252,12 +269,19 @@ namespace PortableVBox {
                     foreach(var item in Locks) item.Dispose();Locks.Clear();LockedDirs.Clear();
                     RemoveVerifiedPayload(session);
                 }
+                journal.Complete(Json.Serialize(new {helper_checks_completed=true,action=args[0]}));
+                journal.Dispose();journal=null;
+                // Re-read the exact persisted chain before reporting success.
+                // Still no statement of physical power-loss tolerance or authority.
+                if(!DurableJournal.Inspect(journalPath,journalBinding).Complete)
+                    throw new InvalidOperationException("Incomplete helper journal");
                 result=0;
             } catch(Exception e) {
                 // Only an already validated protected session can hold failure evidence.
                 try { if(safeSession!=null) WriteNew(Path.Combine(safeSession,"helper-error-"+Guid.NewGuid().ToString("N")+".txt"),Encoding.UTF8.GetBytes(e.GetType().Name+": "+e.Message)); } catch { }
                 result=70;
             } finally {
+                if(journal!=null) {try {journal.Dispose();} catch {result=70;}}
                 foreach(var item in Locks) item.Dispose();
                 if(controller!=IntPtr.Zero) TokenFacts.CloseHandle(controller);
                 if(effectMutex!=null) {if(held) effectMutex.ReleaseMutex();effectMutex.Dispose();}

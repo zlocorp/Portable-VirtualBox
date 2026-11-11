@@ -30,10 +30,27 @@ function Wait-Code([Diagnostics.Process]$Process,[int]$Expected,[string]$Label,[
     if (-not $Process.WaitForExit($Seconds*1000)) { throw "Timeout: $Label" }
     if ($Process.ExitCode -ne $Expected) { throw "$Label exit=$($Process.ExitCode), expected $Expected" }
 }
+. (Join-Path $PSScriptRoot 'Assert-HelperJournal.ps1')
 function Helper([string]$Arguments,[int]$Expected,[string]$Label) {
+    $parts=$Arguments.Split(' ')
+    $action=$parts[0];$controller=[PortableVBox.TokenFacts]::Read([int]$parts[1])
+    $originalPid=if($action -eq 'Recover'){[int]$parts[2]}else{0}
+    $generation=if($action -eq 'Recover'){[string]$oldGeneration}else{'0'}
+    $cycle=[int]$parts[-1]
+    $target=Join-Path $store ('pvbox-manager-'+$(if($action -eq 'Recover'){$originalPid}else{$controller.Pid})+'-'+$cycle)
+    $beforeJournals=Get-JournalHashes $target
     $p=Start-Process -FilePath $helper -ArgumentList $Arguments -PassThru -NoNewWindow `
         -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
     try { Wait-Code $p $Expected $Label } finally { $p.Dispose() }
+    Assert-PriorJournals $target $beforeJournals
+    $newJournals=@(Get-ChildItem -LiteralPath $target -Filter '*.journal' -File -ErrorAction SilentlyContinue | Where-Object { -not $beforeJournals.ContainsKey($_.Name) })
+    $preEffectRefusal=$Label -match 'live-owner|replay'
+    if($preEffectRefusal) {
+        if($newJournals.Count -ne 0) { throw 'Pre-effect refusal created a worker journal' }
+    } else {
+        if($newJournals.Count -ne 1) { throw 'Expected one durable recovery/preparation attempt' }
+        Assert-HelperJournal $newJournals[0].FullName $action $cycle ($Expected -eq 0) $controller $root $exe $originalPid $generation
+    }
 }
 function Oracle([string]$Arguments,[string]$Label) {
     $prior=$env:VBOX_USER_HOME
@@ -76,6 +93,7 @@ try {
     $old=Start-Medium $exe '--lang en --separate-privileges' 'old-controller'
     if ($old.WaitForExit(500)) { throw 'Original controller quit before session' }
     $oldPid=$old.Id
+        $oldGeneration=([PortableVBox.TokenFacts]::Read($oldPid)).Created
     $cycle=7
     Helper ('Prepare '+$oldPid+' '+$cycle) 0 'prepare-orphan'
     $session=Join-Path $store ('pvbox-manager-'+$oldPid+'-'+$cycle)
