@@ -7,8 +7,14 @@ using System.Threading;
 namespace PortableVBox {
  public static class FixedEffectWorkerNativeTests {
   static int assertions;
+  const string RawFixtureProgress="$ProgressPreference='SilentlyContinue';";
   static void Assert(bool ok,string message){assertions++;if(!ok)throw new Exception(message);}
   static ProcessStartInfo Fixture(string script) {
+   // Measured baseline/native output both contained identical CLIXML module
+   // preparation progress. This fixture tests raw stdout/stderr, not host
+   // progress serialization. Suppress progress only, before the first cmdlet;
+   // do not filter captured bytes or silence errors.
+   script=RawFixtureProgress+script;
    string image=Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe");
    var info=new ProcessStartInfo(image,"-NoLogo -NoProfile -NonInteractive -EncodedCommand "+Convert.ToBase64String(Encoding.Unicode.GetBytes(script)));
    info.UseShellExecute=false;info.CreateNoWindow=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
@@ -62,7 +68,7 @@ namespace PortableVBox {
    }
    Console.WriteLine("NATIVE normal-CreateProcess-FALSE and subsequent independent owner PASS");
    string gate=Path.Combine(Path.GetTempPath(),"pvbox-eof-gate-"+Guid.NewGuid().ToString("N"));
-   string child=Convert.ToBase64String(Encoding.Unicode.GetBytes(encoding+"while(-not [IO.File]::Exists('"+gate.Replace("'","''")+"')){Start-Sleep -Milliseconds 50};[Console]::Out.Write('descendant-eof');[Console]::Error.Write('descendant-error');exit 0"));
+   string child=Convert.ToBase64String(Encoding.Unicode.GetBytes(RawFixtureProgress+encoding+"while(-not [IO.File]::Exists('"+gate.Replace("'","''")+"')){Start-Sleep -Milliseconds 50};[Console]::Out.Write('descendant-eof');[Console]::Error.Write('descendant-error');exit 0"));
    string parent="$p=Start-Process -FilePath ([IO.Path]::Combine([Environment]::SystemDirectory,'WindowsPowerShell','v1.0','powershell.exe')) -ArgumentList '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand','"+child+"' -NoNewWindow -PassThru;[Console]::Out.Write('parent-exit;');exit 0";
    FixedEffectWorker inherited=null;Thread disposer=null;Exception disposeError=null;
    var disposed=new ManualResetEvent(false);var disposeEntered=new ManualResetEvent(false);
