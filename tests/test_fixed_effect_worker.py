@@ -15,7 +15,7 @@ class FixedEffectWorker(unittest.TestCase):
         result = subprocess.run([PWSH, "-NoProfile", "-File", str(ROOT / "tests/windows/check_fixed_effect_worker_managed.ps1")],
                                 cwd=ROOT, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("FIXED_EFFECT_MANAGED_PASS assertions=93", result.stdout)
+        self.assertIn("FIXED_EFFECT_MANAGED_PASS assertions=94", result.stdout)
 
     @unittest.skipUnless(PWSH and os.environ.get("PVBOX_TEST_NET48_REFERENCES"), "net48 compiler references unavailable")
     def test_exact_native_fixture_compiles_against_net48(self):
@@ -37,6 +37,16 @@ class FixedEffectWorker(unittest.TestCase):
         self.assertIn("return RunCore(info,image,checked((uint)timeoutSeconds*1000),true)", owner)
         self.assertIn("if(!inheritEnvironment)environment=Marshal.StringToHGlobalUni(BuildEnvironment(info))", owner)
         self.assertNotIn("public static FixedEffectWorker", owner)
+
+    def test_parent_binds_both_programdata_variables_to_verified_known_folder(self):
+        main = (ROOT / "source/privilege/SessionHelper.Main.cs").read_text()
+        self.assertIn('info.EnvironmentVariables["ProgramData"]=commonData;', main)
+        self.assertIn('info.EnvironmentVariables["ALLUSERSPROFILE"]=commonData;', main)
+        self.assertIn('string store=Path.Combine(commonData,', main)
+        self.assertLess(main.index("String.IsNullOrEmpty(commonData)"), main.index("string store=Path.Combine(commonData,"))
+        bridge = (ROOT / "source/privilege/SdsBridge.cs").read_text()
+        self.assertLess(bridge.index("String.IsNullOrEmpty(commonFolder)||!Path.IsPathRooted(commonFolder)"), bridge.index("string store=Full(Path.Combine(commonFolder,"))
+        self.assertNotIn('commonFolder=Environment.GetEnvironmentVariable', bridge)
 
     def test_exit_is_persisted_before_capture_and_success_gates(self):
         main = (ROOT / "source/privilege/SessionHelper.Main.cs").read_text()

@@ -164,6 +164,7 @@ namespace PortableVBox {
     if(Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE")!=PinnedBuild.Mode)throw new InvalidOperationException("Fixed SDS build mode mismatch");
     string bridge=Full(typeof(SdsBridge).Assembly.Location),code=Path.GetDirectoryName(bridge),session=Path.GetDirectoryName(code);
     string commonFolder=Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+    if(String.IsNullOrEmpty(commonFolder)||!Path.IsPathRooted(commonFolder))throw new InvalidOperationException("Fixed SDS known-folder resolution unavailable");
     string store=Full(Path.Combine(commonFolder,PinnedBuild.Mode=="ALPHA"?"PortableVirtualBox.Alpha":"PortableVirtualBox.Experiment"));
     string originFailure=OriginFailure(Path.GetFileName(bridge),Path.GetFileName(code),Path.GetDirectoryName(session),Path.GetFileName(session),store,
      PinnedBuild.Mode,Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE"),String.IsNullOrEmpty(commonFolder),Equal(Environment.GetEnvironmentVariable("ProgramData"),commonFolder));

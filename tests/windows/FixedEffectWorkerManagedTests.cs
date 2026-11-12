@@ -56,6 +56,10 @@ namespace PortableVBox {
    var info=new ProcessStartInfo();info.EnvironmentVariables.Clear();info.EnvironmentVariables["WINDIR"]="C:\\Windows";info.EnvironmentVariables["TEMP"]="C:\\Тест";
    var build=Owner.GetMethod("BuildEnvironment",Hidden);string block=(string)build.Invoke(null,new object[]{info});
    Assert(block=="TEMP=C:\\Тест\0WINDIR=C:\\Windows\0\0","Sorted explicit Unicode environment");
+   info.EnvironmentVariables["ALLUSERSPROFILE"]="C:\\ProgramData";
+   string restoredBlock=(string)build.Invoke(null,new object[]{info});
+   Assert(restoredBlock.StartsWith("ALLUSERSPROFILE=C:\\ProgramData\0",StringComparison.Ordinal),"Trusted known-folder expansion variable rejected");
+   info.EnvironmentVariables.Remove("ALLUSERSPROFILE");
    info.EnvironmentVariables["DOTNET_STARTUP_HOOKS"]="untrusted";bool rejected=false;
    try{build.Invoke(null,new object[]{info});}catch(TargetInvocationException e){rejected=e.InnerException is InvalidOperationException;}
    Assert(rejected,"Unapproved environment variable accepted");

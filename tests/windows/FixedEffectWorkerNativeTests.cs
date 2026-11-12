@@ -39,6 +39,27 @@ namespace PortableVBox {
   public static int Main() {
    Assert(Environment.OSVersion.Platform==PlatformID.Win32NT&&IntPtr.Size==8,"Windows x64 required");
    Console.OutputEncoding=new UTF8Encoding(false);
+   string trustedCommon=Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+   Assert(!String.IsNullOrEmpty(trustedCommon)&&Path.IsPathRooted(trustedCommon),"Parent known-folder resolution unavailable");
+   const string knownFolderProbe="$p=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData);[Console]::Out.Write([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($p)));exit 0";
+   var baselineEnvironment=Fixture(knownFolderProbe);baselineEnvironment.EnvironmentVariables["ProgramData"]=trustedCommon;
+   string baselineCommon;
+   using(var probe=FixedEffectWorker.Run(baselineEnvironment)){
+    probe.VerifyImageObservation();Assert(probe.WithinDeadline&&probe.ExitCodeKnown&&probe.ExitCode==0,"Known-folder baseline did not complete");
+    baselineCommon=Encoding.Unicode.GetString(Convert.FromBase64String(probe.StandardOutput.Result));
+    Assert(probe.StandardError.Result=="","Known-folder baseline stderr changed");
+   }
+   Console.WriteLine("KNOWN_FOLDER baseline_empty="+(baselineCommon.Length==0)+" baseline_matches_parent="+String.Equals(baselineCommon,trustedCommon,StringComparison.OrdinalIgnoreCase)+" baseline_length="+baselineCommon.Length);
+   // Omitted-variable baseline is observed, not required to fail on every host.
+   var restoredEnvironment=Fixture(knownFolderProbe);restoredEnvironment.EnvironmentVariables["ProgramData"]=trustedCommon;
+   restoredEnvironment.EnvironmentVariables["ALLUSERSPROFILE"]=trustedCommon;
+   using(var probe=FixedEffectWorker.Run(restoredEnvironment)){
+    probe.VerifyImageObservation();Assert(probe.WithinDeadline&&probe.ExitCodeKnown&&probe.ExitCode==0,"Restored known-folder probe did not complete");
+    string restoredCommon=Encoding.Unicode.GetString(Convert.FromBase64String(probe.StandardOutput.Result));
+    Assert(String.Equals(restoredCommon,trustedCommon,StringComparison.OrdinalIgnoreCase),"Restored known folder differs from trusted parent");
+    Assert(probe.StandardError.Result=="","Restored known-folder stderr changed");
+   }
+   Console.WriteLine("NATIVE trusted ALLUSERSPROFILE known-folder restoration PASS");
    const string encoding="[Console]::OutputEncoding=New-Object Text.UTF8Encoding($false);";
    const string large=encoding+"[Console]::Out.Write(('a'*180000)+'Привет 世界');[Console]::Error.Write(('b'*190000)+'Ошибка 世界');exit 259";
    string expectedOut=new string('a',180000)+"Привет 世界",expectedError=new string('b',190000)+"Ошибка 世界";

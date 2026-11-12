@@ -163,7 +163,10 @@ namespace PortableVBox {
                 bool created;effectMutex=new System.Threading.Mutex(false,"Global\\PortableVirtualBox.PrivilegedEffect",out created,ms);
                 try { held=effectMutex.WaitOne(0); } catch(System.Threading.AbandonedMutexException) { throw new InvalidOperationException("Abandoned privileged effect; manual inspection required"); }
                 if(!held) throw new InvalidOperationException("Another privileged operation is active");
-                string store=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                string commonData=Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                if(String.IsNullOrEmpty(commonData)||!Path.IsPathRooted(commonData)) throw new InvalidOperationException("Common application data location unavailable");
+                commonData=Full(commonData);
+                string store=Path.Combine(commonData,
                     PinnedBuild.Mode=="ALPHA"?"PortableVirtualBox.Alpha":"PortableVirtualBox.Experiment");
                 LockParents(Path.GetDirectoryName(store));CreateProtectedDirectory(store,caller.Sid,true);
                 session=Path.Combine(store,"pvbox-manager-"+(recovery?oldPid:pid)+"-"+cycle);
@@ -232,7 +235,11 @@ namespace PortableVBox {
                 info.EnvironmentVariables["SystemRoot"]=windows;info.EnvironmentVariables["WINDIR"]=windows;
                 info.EnvironmentVariables["PATH"]=Environment.SystemDirectory+";"+Path.GetDirectoryName(powershell);
                 info.EnvironmentVariables["ProgramFiles"]=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-                info.EnvironmentVariables["ProgramData"]=Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                info.EnvironmentVariables["ProgramData"]=commonData;
+                // Windows ProgramData known-folder expansion uses ALLUSERSPROFILE.
+                // Both values come from the same verified parent location, never
+                // the low caller's ambient environment.
+                info.EnvironmentVariables["ALLUSERSPROFILE"]=commonData;
                 info.EnvironmentVariables["TEMP"]=session;info.EnvironmentVariables["TMP"]=session;
                 info.EnvironmentVariables["PSModulePath"]=Path.Combine(Path.GetDirectoryName(powershell),"Modules")+";"+Path.Combine(windows,"System32","WindowsPowerShell","v1.0","Modules");
                 if(PinnedBuild.Mode=="CI")
