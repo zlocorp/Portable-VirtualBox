@@ -26,7 +26,7 @@ $root='__ROOT__'
 $parent=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-direct-owner-build-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $parent | Out-Null
 $build=New-FixedFixtureBuild $parent
-$names=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs','NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs')
+$names=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs','NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs')
 Add-Type -Path @(Get-FixedFixtureConsumerSources $build $names)
 $a=[PortableVBox.NativePipeTransportTests].Assembly
 $t=$a.GetType('PortableVBox.ChildCaptureOwner',$true)
@@ -422,7 +422,7 @@ $build=New-FixedFixtureBuild $parent
 $names=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
  'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
  'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeLaunchEnvironmentObservation.cs',
- 'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs','NativeLaunchEnvironmentTests.cs','NativeLaunchEnvironmentPolicyTests.cs','NativeFixedImageIdentity.cs')
+ 'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs','NativeLaunchEnvironmentTests.cs','NativeLaunchEnvironmentPolicyTests.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs')
 Add-Type -Path @(Get-FixedFixtureConsumerSources $build $names)
 $a=[PortableVBox.NativePipeTransportTests].Assembly
 $t=$a.GetType('PortableVBox.ChildCaptureOwner',$true)

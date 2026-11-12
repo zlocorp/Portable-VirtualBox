@@ -1,4 +1,4 @@
-"""Independent fixed-image file-only diagnostics; never mutation authority."""
+"""Independent stage-pinned fixed-image diagnostics; never mutation authority."""
 import ast
 import base64
 import io
@@ -46,6 +46,9 @@ function Add-Type {
  param([string[]]$Path)
  if (@($Path | Where-Object { [IO.Path]::GetFileName($_) -eq 'NativeChildCaptureNative.cs' }).Count -gt 0) {
   if (@($Path | Where-Object { [IO.Path]::GetFileName($_) -ceq 'NativeFixedImagePath.cs' }).Count -ne 1) { throw 'ASSERT owner Add-Type missing/duplicate shared path source' }
+  foreach ($dependency in @('NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs')) {
+   if (@($Path | Where-Object { [IO.Path]::GetFileName($_) -ceq $dependency }).Count -ne 1) { throw ('ASSERT owner Add-Type missing/duplicate '+$dependency) }
+  }
   Observe-OwnerBuild
  }
  Microsoft.PowerShell.Utility\Add-Type -Path $Path
@@ -56,14 +59,17 @@ $null=Set-PSBreakpoint -Command Compile-FixedFixtureSources -Action {
  if ((Get-PSCallStack)[1].FunctionName -eq 'Compile-FixedFixtureSources' -and
      @($Sources | Where-Object { [IO.Path]::GetFileName($_) -eq 'NativeFixedImageIdentity.cs' }).Count -gt 0) {
   if (@($Sources | Where-Object { [IO.Path]::GetFileName($_) -ceq 'NativeFixedImagePath.cs' }).Count -ne 1) { throw 'ASSERT owner compiler missing/duplicate shared path source' }
+  if (@($Sources | Where-Object { [IO.Path]::GetFileName($_) -ceq 'NativeFixedFixtureCommand.cs' }).Count -ne 1) { throw 'ASSERT image compiler missing/duplicate formatter' }
+  if (@($Sources | Where-Object { [IO.Path]::GetFileName($_) -ceq 'NativeChildCaptureNative.cs' }).Count -gt 0 -and
+      @($Sources | Where-Object { [IO.Path]::GetFileName($_) -ceq 'NativeFixedImageComposition.cs' }).Count -ne 1) { throw 'ASSERT actual owner compiler missing/duplicate composition' }
   Observe-OwnerBuild
  }
 }
 '''
         entries=[]
-        for name in ('child_capture','launch_environment','fixed_image_observation'):
+        for name in ('child_capture','launch_environment','fixed_image_observation','fixed_image_composition'):
             path=str(ROOT/'tests/windows'/('check_native_'+name+'.ps1')).replace("'","''")
-            entries.append((name,"& '"+path+"' -ManagedOnly",4 if name=='fixed_image_observation' else 1))
+            entries.append((name,"& '"+path+"' -ManagedOnly",5 if name=='fixed_image_observation' else 4 if name=='fixed_image_composition' else 1))
         for module,method in (('test_native_child_capture_contract.py','run_native_sentinel_contract'),
                               ('test_native_child_capture_contract.py','test_native_report_serializer_matches_schema_without_native_calls'),
                               ('test_native_launch_environment_contract.py','test_legacy_constructor_rejects_appended_mode_before_native_entry'),
@@ -228,7 +234,7 @@ foreach ($stem in @('child_capture','launch_environment')) {
                 common={'NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
                         'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs',
                         'NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs',
-                        'NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs'}
+                        'NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs'}
                 extra=({'NativeChildCaptureTests.cs','NativeSentinelObservationNativeTests.cs'} if record['runner']=='child_capture'
                        else {'NativeLaunchEnvironmentObservation.cs','NativeLaunchEnvironmentObservationTests.cs',
                              'NativeLaunchEnvironmentNativeTests.cs','NativeLaunchEnvironmentTests.cs','NativeLaunchEnvironmentPolicyTests.cs'})
@@ -250,7 +256,7 @@ foreach ($stem in @('child_capture','launch_environment')) {
         common={'NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
                 'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs',
                 'NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs',
-                'NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs'}
+                'NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs'}
         entries=(('test_native_child_capture_contract.py','run_native_sentinel_contract',
                   common|{'NativeChildCaptureTests.cs','NativeSentinelObservationNativeTests.cs'}),
                  ('test_native_child_capture_contract.py','test_native_report_serializer_matches_schema_without_native_calls',common),
@@ -276,6 +282,33 @@ foreach ($stem in @('child_capture','launch_environment')) {
                 self.assertIn('DIRECT_NET48_PASS',result.stdout)
 
 @unittest.skipUnless(SHELL, 'PowerShell compiler required')
+class FixedImageCompositionContracts(unittest.TestCase):
+    def test_real_composition_owner_contracts_run_with_pristine_bytes(self):
+        result=subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-File',
+            str(ROOT/'tests/windows/check_native_fixed_image_observation.ps1'), '-ManagedOnly'],
+            capture_output=True,text=True,timeout=180)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertEqual(result.stdout.count('PASS fixed image composition owners'),1,result.stdout)
+        self.assertEqual(result.stdout.count('COMPOSITION_RUN_TRACE '),1,result.stdout)
+        self.assertEqual(result.stdout.count('COMPOSITION_BOUNDARY_TRACE '),1,result.stdout)
+
+    def test_composition_uses_one_formatter_and_the_existing_lifecycle(self):
+        native=(ROOT/'tests/windows/NativeChildCaptureNative.cs').read_text()
+        image=(ROOT/'tests/windows/NativeFixedImageIdentity.cs').read_text()
+        composition=(ROOT/'tests/windows/NativeFixedImageComposition.cs').read_text()
+        formatter=(ROOT/'tests/windows/NativeFixedFixtureCommand.cs').read_text()
+        self.assertEqual(native.count('FixedFixtureCommand.Format('),1)
+        self.assertEqual(image.count('FixedFixtureCommand.Format('),1)
+        self.assertEqual(formatter.count('StringBuilder Format('),1)
+        self.assertNotIn('new StringBuilder(',native)
+        for method in ('void Run(', 'void Launch(', 'void Refresh(', 'void Release('):
+            self.assertEqual(native.count(method),1)
+            self.assertNotIn(method,composition)
+        # File-only schemas and child sources stay independent of composition.
+        self.assertNotIn('FixedImageComposition', (ROOT/'tests/windows/NativeFixedFixtureBuild.ps1').read_text())
+
+
+@unittest.skipUnless(SHELL, 'PowerShell compiler required')
 class FixedImageManagedContracts(unittest.TestCase):
     def test_recording_owner_has_no_residual_static_native_boundary(self):
         text=(ROOT/'tests/windows/NativeFixedImageIdentity.cs').read_text()
@@ -287,8 +320,9 @@ class FixedImageManagedContracts(unittest.TestCase):
             self.assertEqual(text.count('return FixedImageNative.'+method+'('), 1)
         self.assertNotIn('Marshal.GetLastWin32Error', owners)
         self.assertEqual(text.count('readonly IFixedImageNativeCalls calls;'), 2)
-        self.assertNotIn('BindBinaryLaunch', text)
-        self.assertNotIn('FixedImageLaunchBinding', text)
+        self.assertEqual(text.count('internal FixedImageLaunchBinding BindBinaryLaunch(long candidate,string token)'),1)
+        self.assertEqual(text.count('internal sealed class FixedImageLaunchBinding'),1)
+        self.assertEqual(text.count('FixedFixtureCommand.Format(Application,"Binary",candidate,token)'),1)
 
     def test_runner_executes_injected_owner_contracts(self):
         result = subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-File',
@@ -358,6 +392,511 @@ class FixedImageManagedContracts(unittest.TestCase):
             self.assertFalse(validate_records([record,summary(1,1,'case-failure')]))
             record['status']='PASS'
             with self.assertRaises(ValueError): validate_records([record,summary(1,0,'case-failure')])
+
+
+@unittest.skipUnless(SHELL, 'PowerShell compiler required')
+class FixedImageComposedContracts(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.result = subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-File',
+            str(ROOT/'tests/windows/check_native_fixed_image_observation.ps1'), '-ManagedOnly'],
+            capture_output=True, text=True, timeout=120)
+        cls.records = {}
+        for line in cls.result.stdout.splitlines():
+            if line.startswith('COMPOSED_DIAGNOSTIC '):
+                label, wire = line.removeprefix('COMPOSED_DIAGNOSTIC ').split(' ', 1)
+                cls.records[label] = strict_json(wire)
+
+    def observed(self):
+        self.assertEqual(self.result.returncode, 0, self.result.stdout+self.result.stderr)
+        self.assertIn('ok', self.records, 'Real recording owner must feed the actual schema-2 serializer')
+        return copy.deepcopy(self.records)
+
+    def diagnostic(self, record):
+        # Matrix diagnostics use the first case label so each is an attempted prefix.
+        record = copy.deepcopy(record);record['case']='matching-image'
+        retained=record['composition']['owner_release_state']=='retained'
+        end=summary(1,1,'unresolved-owner' if retained else 'case-failure',stage='composed')
+        return [record,end]
+
+    def acceptance_fixture(self):
+        # Explicit synthetic acceptance fixture, derived from real managed serializer
+        # output. Native activity is NOT claimed: the rig has zero real pipe visits.
+        rows=self.observed()
+        records=[rows[name] for name in ('ok','digest','size','missing')]
+        for record,name in zip(records,CASES):
+            record['case']=name;record['status']='PASS'
+        c=records[0]['composition']['capture'];c['rounds']=4
+        # Two stdout data completions (4096+9), one stderr data completion
+        # (257), then a separate synchronous FALSE/error109 EOF per channel.
+        # That EOF increments terminal, but neither pending nor immediate.
+        for channel,issued,immediate in zip(c['channels'],(3,2),(2,1)):
+            channel.update(read_issued=issued,read_terminal=issued,read_pending=0,
+                           read_immediate=immediate,read_visits=4,max_read_gap=1)
+        return records+[summary(stage='composed')]
+
+    def reject(self, records, **kwargs):
+        with self.assertRaises(ValueError):
+            validate_records(records,expected_stage='composed',**kwargs)
+
+    def test_composed_native_runner_is_closed_and_preserves_full_binary(self):
+        runner=ROOT/'tests/windows/check_native_fixed_image_composition.ps1'
+        self.assertTrue(runner.is_file(),'Separate composed runner is required; file-only output is not composed proof')
+        result=subprocess.run([SHELL,'-NoProfile','-NonInteractive','-File',str(runner),'-ManagedOnly'],
+                              capture_output=True,text=True,timeout=120)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertIn('PASS fixed image composition owners',result.stdout)
+        self.assertTrue(runner.read_text().isascii())
+        retained=re.search(r'Generated fixed image build/evidence retained at (.+?)\. Process teardown',result.stdout)
+        self.assertIsNotNone(retained)
+        build=Path(retained.group(1));fixture=next(build.glob('fixed-fixture-*'))
+        pristine=fixture/'pristine/NativeCaptureFixtureChild.exe'
+        self.assertTrue(pristine.read_bytes().startswith(b'MZ'))
+        expectation=(fixture/'FixedFixtureBuildExpectation.g.cs').read_bytes()
+        self.assertIn(hashlib.sha256(pristine.read_bytes()).hexdigest().encode(),expectation)
+        for name in CASES:
+            directory=build/'fixed-Ж-漢'/name
+            self.assertTrue((directory/'NativeFixedImageCompositionTests.exe').is_file())
+            self.assertEqual((directory/'FixedFixtureCase.g.cs').read_text(),
+                'namespace PortableVBox { internal static class FixedFixtureCase { internal const string Name = "'+name+'"; } }')
+            self.assertFalse((directory/'NativeCaptureFixtureChild.exe').exists())
+        # The full inherited native assertion body is frozen, visibility only.
+        native=(ROOT/'tests/windows/NativeChildCaptureNativeTests.cs').read_text()
+        assertion=native[native.index('  internal static void AssertCase('):native.index('  public static int Main(')]
+        self.assertEqual(hashlib.sha256(assertion.encode()).hexdigest(),'60af033800586b9f9875c5e86155d18115f0ce0b2e8c8087127584666d6404d6')
+        harness=(ROOT/'tests/windows/NativeFixedImageCompositionNativeTests.cs').read_text()
+        self.assertIn('public static int Main()',harness)
+        self.assertIn('NativeChildCaptureNativeTests.AssertCase(root)',harness)
+        self.assertNotIn('TryRelease(',harness,'Transferred image release belongs solely to real owner gates')
+        for stem,stage in (('observation','file-only'),('composition','composed')):
+            text=(ROOT/'tests/windows'/('check_native_fixed_image_'+stem+'.ps1')).read_text()
+            self.assertEqual(text.count('--expected-stage '+stage),2)
+        workflow=(ROOT/'.github/workflows/native-tests.yml').read_text()
+        for name in ('NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs','NativeFixedImageCompositionTests.cs',
+                     'NativeFixedImageCompositionNativeTests.cs','check_native_fixed_image_composition.ps1'):
+            self.assertIn('      - tests/windows/'+name+'\n',workflow)
+        text=runner.read_text()
+        self.assertLess(text.index('if ($ManagedOnly) { return }'),text.index('Copy-FixedFixtureSibling $build $harnesses[0]'))
+        self.assertLess(text.index('[IO.File]::WriteAllBytes($negative,$bytes)'),text.index('Copy-FixedFixtureSibling $build $harnesses[2]'))
+        self.assertLess(text.index('$append.Dispose()'),text.index('Missing-image case must remain absent'))
+        self.assertIn('timeout-minutes: 6',workflow)
+        self.assertIn('name: native-fixed-image-composition-text-only',workflow)
+        self.assertIn('pvbox-native-fixed-composition-evidence/native-fixed-image-observation.jsonl',workflow)
+
+    def test_composed_stage_rejects_file_only_and_mixed_schema(self):
+        records=self.acceptance_fixture()
+        self.assertTrue(validate_records(records,True,expected_stage='composed'))
+        self.assertTrue(validate_records(samples(),True,expected_stage='file-only'))
+        self.reject(samples())
+        with self.assertRaises(ValueError): validate_records(records)
+        for index in range(5):
+            bad=copy.deepcopy(records);bad[index]['schema']=1;self.reject(bad)
+            bad=copy.deepcopy(records);bad[index]['stage']='file-only';self.reject(bad)
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'evidence'
+            path.write_text(''.join(json.dumps(r)+'\n' for r in records),encoding='utf-8')
+            self.assertTrue(validate_evidence(path,True,expected_stage='composed'))
+            with self.assertRaises(ValueError): validate_evidence(path,True)
+
+    def test_composed_failure_matrix_nullability_and_owner_consistency(self):
+        rows=self.observed()
+        expected={
+            'ok':('ReturnedTrue','valid','released'),
+            'digest':('NotEntered','not-observed','released'),
+            'size':('NotEntered','not-observed','released'),
+            'missing':('NotEntered','not-observed','released'),
+            'probe-error':('NotEntered','not-observed','released'),
+            'probe-success':('NotEntered','not-observed','released'),
+            'probe-write-unavailable':('NotEntered','not-observed','retained'),
+            'probe-delete-unavailable':('NotEntered','not-observed','retained'),
+            'probe-close-false':('NotEntered','not-observed','retained'),
+            'probe-close-unavailable':('NotEntered','not-observed','retained'),
+            'image-open-unavailable':('NotEntered','not-observed','retained'),
+            'image-read-unavailable':('NotEntered','not-observed','retained'),
+            'image-read-false':('NotEntered','not-observed','released'),
+            'create-false':('ReturnedFalse','not-observed','released'),
+            'create-unavailable':('EnteredReturnUnknown','not-observed','retained'),
+            'process-zero':('ReturnedTrue','invalid','retained'),
+            'thread-zero':('ReturnedTrue','invalid','retained'),
+            'process-invalid':('ReturnedTrue','invalid','retained'),
+            'thread-invalid':('ReturnedTrue','invalid','retained'),
+        }
+        for fault in ('query-false','query-unavailable','query-truncated','query-count','malformed','unsupported','nul','empty','different'):
+            expected[fault]=('ReturnedTrue','valid','released')
+        for fault in ('wait-unavailable','wait-timeout','wait-failed','exit-code-unavailable','exit-code-false',
+                      'image-close-false','image-close-unavailable','thread-close-false','thread-close-unavailable',
+                      'process-close-false','process-close-unavailable','stdout-eof-missing','stderr-eof-missing'):
+            expected[fault]=('ReturnedTrue','valid','retained')
+        self.assertEqual(set(rows),set(expected))
+        for fault,want in expected.items():
+            with self.subTest(fault=fault):
+                record=rows[fault];c=record['composition']
+                self.assertEqual((c['create_state'],c['original_handles_state'],c['owner_release_state']),want)
+                self.assertEqual(record['status'],'FAIL','Managed records must never claim native acceptance')
+                self.assertEqual(record['create_calls'],0 if want[0]=='NotEntered' else 1)
+                self.assertEqual(c['image_release_state'],want[2])
+                self.assertEqual(c['capture'] is not None,want[1]=='valid')
+                self.assertEqual(record['process_observation'] is not None,want[1]=='valid')
+                self.assertFalse(validate_records(self.diagnostic(record),expected_stage='composed'))
+                self.reject(self.diagnostic(record),require_pass=True)
+                if fault not in ('ok','digest','size','missing'):
+                    self.assertEqual(c['overall'],'UNKNOWN')
+        self.assertEqual(rows['ok']['composition']['original_handles_state'],'valid','Released handles must not erase the recorded check')
+        self.assertEqual(rows['create-false']['composition']['create_error'],2)
+        self.assertIsNone(rows['create-unavailable']['composition']['create_error'])
+        paths={'query-false':'unavailable','query-unavailable':'unavailable','query-truncated':'truncated',
+               'query-count':'truncated','malformed':'malformed','unsupported':'unsupported','nul':'malformed','empty':'malformed','different':'valid','ok':'valid'}
+        for fault,state in paths.items():
+            q=rows[fault]['process_observation']
+            self.assertEqual(q['path_state'],state)
+            if state in ('unavailable','truncated','malformed'): self.assertIsNone(q['image_path'])
+            if state=='unsupported': self.assertEqual(q['image_path'],r'\\server\share\image')
+            if fault.startswith('query-') and fault in ('query-false','query-unavailable'): self.assertIsNone(q['query_return_chars'])
+        self.assertIsNone(rows['wait-unavailable']['process_observation']['exit_wait_result'])
+        self.assertEqual(rows['wait-timeout']['process_observation']['exit_wait_result'],258)
+        self.assertEqual(rows['wait-failed']['process_observation']['exit_wait_error'],4294967295 & 6)
+        self.assertIsNone(rows['exit-code-false']['process_observation']['exit_code'])
+        # Every new field is required, typed, and has no optional escape hatch.
+        record=rows['ok']
+        for parent in (('composition',),('process_observation',),('composition','capture'),('composition','capture','channels',0)):
+            for key in self.at(record,parent):
+                for replacement in ('delete',None,{},[]):
+                    bad=self.diagnostic(record);target=self.at(bad[0],parent)
+                    if replacement=='delete': del target[key]
+                    else: target[key]=replacement
+                    if replacement is None and self.at(record,parent)[key] is None: continue
+                    with self.subTest(path=parent,key=key,replacement=replacement): self.reject(bad)
+        for fault,path,value in [
+            ('ok',('composition','claim_state'),'unclaimed'),
+            ('ok',('composition','create_error'),0),
+            ('ok',('composition','capture'),None),
+            ('ok',('create_calls',),2),
+            ('create-false',('composition','create_error'),None),
+            ('create-unavailable',('composition','image_release_state'),'released'),
+            ('image-close-false',('composition','owner_release_state'),'released'),
+            ('wait-unavailable',('process_observation','exit_wait_result'),0),
+            ('query-false',('process_observation','query_return_chars'),32768),
+            ('query-false',('process_observation','query_error'),None),
+            ('query-truncated',('process_observation','path_state'),'valid'),
+            ('ok',('process_observation','comparison'),'mismatch'),
+            ('ok',('process_observation','exit_wait_error'),0),
+            ('ok',('process_observation','exit_code_error'),0),
+        ]:
+            bad=self.diagnostic(rows[fault]);self.at(bad[0],path[:-1])[path[-1]]=value
+            with self.subTest(fault=fault,path=path): self.reject(bad)
+        bad=self.diagnostic(rows['missing']);bad[0]['process_observation']=rows['ok']['process_observation'];self.reject(bad)
+
+    @staticmethod
+    def at(value,path):
+        for key in path: value=value[key]
+        return value
+
+    def test_composed_retained_owner_stops_prefix(self):
+        rows=self.observed()
+        for fault,record in rows.items():
+            if record['composition']['owner_release_state']!='retained': continue
+            prefix=self.diagnostic(record)
+            self.assertFalse(validate_records(prefix,expected_stage='composed'))
+            bad=prefix[:-1]+self.acceptance_fixture()[1:-1]+[summary(4,1,'unresolved-owner',stage='composed')]
+            with self.subTest(fault=fault): self.reject(bad)
+            bad=copy.deepcopy(prefix);bad[-1]['stop_reason']='case-failure';self.reject(bad)
+        retained=copy.deepcopy(rows['ok'])
+        retained['composition'].update(owner_release_state='retained',overall='UNKNOWN')
+        self.assertFalse(unresolved_file_owner(retained))
+        self.assertFalse(validate_records(self.diagnostic(retained),expected_stage='composed'))
+        bad=self.diagnostic(retained);bad[-1]['stop_reason']='case-failure';self.reject(bad)
+        # Query diagnosis alone does not require retained ownership or stop later cases.
+        records=self.acceptance_fixture();records[0]=rows['query-false']
+        records[-1]=summary(4,1,'case-failure',stage='composed')
+        self.assertFalse(validate_records(records,expected_stage='composed'))
+
+    def test_composed_image_release_requires_exit_eof_and_slots_with_retained_owner(self):
+        rows=self.observed()
+        for fault in ('wait-unavailable','wait-timeout','wait-failed','exit-code-false',
+                      'exit-code-unavailable','stdout-eof-missing','stderr-eof-missing'):
+            with self.subTest(fault=fault):
+                records=self.diagnostic(rows[fault])
+                self.assertFalse(validate_records(records,expected_stage='composed'))
+                self.assertEqual(records[0]['composition']['owner_release_state'],'retained')
+                records[0]['close_state']='returned-success'
+                records[0]['composition']['image_release_state']='released'
+                self.reject(records)
+        # Image release and whole-owner release remain distinct. Complete exit,
+        # EOF and slot observations permit this isolated retained-owner diagnostic.
+        retained=copy.deepcopy(rows['ok'])
+        retained['composition'].update(owner_release_state='retained',overall='UNKNOWN')
+        self.assertFalse(validate_records(self.diagnostic(retained),expected_stage='composed'))
+        variants=[('io-terminal',('io_terminal',))]
+        variants += [(key+'-'+str(index),('channels',index,key))
+                     for index in (0,1) for key in ('read_released','connect_released')]
+        for label,path in variants:
+            with self.subTest(slot=label):
+                record=copy.deepcopy(retained)
+                record['close_state']='not-entered'
+                record['composition']['image_release_state']='retained'
+                self.at(record['composition']['capture'],path[:-1])[path[-1]]=False
+                records=self.diagnostic(record)
+                self.assertFalse(validate_records(records,expected_stage='composed'))
+                records[0]['close_state']='returned-success'
+                records[0]['composition']['image_release_state']='released'
+                self.reject(records)
+
+    def test_composed_image_close_entry_requires_known_acquisition_and_exit(self):
+        rows=self.observed()
+        faults=('create-unavailable','process-zero','thread-zero','process-invalid','thread-invalid',
+                'wait-unavailable','wait-timeout','wait-failed','exit-code-unavailable','exit-code-false',
+                'stdout-eof-missing','stderr-eof-missing')
+        for fault in faults:
+            self.assertFalse(validate_records(self.diagnostic(rows[fault]),expected_stage='composed'))
+            for close in ('return-unknown','returned-failure','returned-success'):
+                with self.subTest(fault=fault,close=close):
+                    bad=self.diagnostic(rows[fault]);bad[0]['close_state']=close
+                    # Keep the exact image ledger and aggregate consistent, so
+                    # failed/unknown close entries cannot hide behind retention.
+                    bad[0]['composition']['image_release_state']='released' if close=='returned-success' else 'retained'
+                    self.reject(bad)
+
+    def test_composed_image_close_entry_requires_resolved_probes(self):
+        rows=self.observed()
+        for fault in ('probe-write-unavailable','probe-delete-unavailable',
+                      'probe-close-false','probe-close-unavailable'):
+            for close in ('return-unknown','returned-failure','returned-success'):
+                with self.subTest(fault=fault,close=close):
+                    bad=self.diagnostic(rows[fault]);bad[0]['close_state']=close
+                    # Even successful image close leaves this aggregate retained
+                    # because a probe is unresolved. Entry itself is forbidden.
+                    self.assertEqual(bad[0]['composition']['image_release_state'],'retained')
+                    self.reject(bad)
+        for key in ('write_probe','delete_probe'):
+            for probe_open,probe_close in (('not-entered','not-opened'),('returned-success','not-entered'),
+                                           ('returned-success','return-unknown'),('returned-success','returned-failure')):
+                for image_close in ('return-unknown','returned-failure','returned-success'):
+                    with self.subTest(probe=key,probe_open=probe_open,probe_close=probe_close,image_close=image_close):
+                        record=copy.deepcopy(rows['probe-success'])
+                        record[key].update(open_state=probe_open,open_error=None,close_state=probe_close)
+                        record['close_state']='not-entered'
+                        record['composition'].update(image_release_state='retained',owner_release_state='retained',overall='UNKNOWN')
+                        self.assertFalse(validate_records(self.diagnostic(record),expected_stage='composed'))
+                        record['close_state']=image_close
+                        self.reject(self.diagnostic(record))
+
+    def test_composed_image_close_entry_requires_each_terminal_released_slot(self):
+        rows=self.observed()
+        paths=[('io_terminal',)]+[('channels',index,key) for index in (0,1)
+                                for key in ('read_released','connect_released')]
+        for path in paths:
+            record=copy.deepcopy(rows['ok']);record['close_state']='not-entered'
+            record['composition'].update(image_release_state='retained',owner_release_state='retained',overall='UNKNOWN')
+            self.at(record['composition']['capture'],path[:-1])[path[-1]]=False
+            self.assertFalse(validate_records(self.diagnostic(record),expected_stage='composed'))
+            for close in ('return-unknown','returned-failure','returned-success'):
+                with self.subTest(slot=path,close=close):
+                    bad=self.diagnostic(record);bad[0]['close_state']=close
+                    bad[0]['composition']['image_release_state']='released' if close=='returned-success' else 'retained'
+                    self.reject(bad)
+
+    def test_composed_image_close_failure_remains_valid_after_resolved_gates(self):
+        rows=self.observed()
+        # Known precreate refusal, known FALSE create, and completed successful
+        # creation all permit close entry. Query failure alone does not block it.
+        for source in ('digest','size','probe-error','probe-success','image-read-false',
+                       'create-false','ok','query-false','image-close-false','image-close-unavailable'):
+            for close in ('return-unknown','returned-failure'):
+                with self.subTest(source=source,close=close):
+                    record=copy.deepcopy(rows[source]);record['close_state']=close
+                    record['composition'].update(image_release_state='retained',owner_release_state='retained',overall='UNKNOWN')
+                    self.assertFalse(validate_records(self.diagnostic(record),expected_stage='composed'))
+
+    def test_composed_binary_accepts_conservative_native_read_accounting(self):
+        # Synthetic validator inputs only, never relabel the recording rig as
+        # native evidence. Each tuple is issued, pending, immediate per channel.
+        profiles=[
+            ('immediate-data-false-eof',4,((3,0,2),(2,0,1))),
+            ('pending-data-false-eof',4,((3,2,0),(2,1,0))),
+            ('immediate-data-pending-eof',4,((3,1,2),(2,1,1))),
+            ('pending-data-and-eof',4,((3,3,0),(2,2,0))),
+            ('extra-partial-or-zero-results',8,((6,3,2),(4,0,3))),
+        ]
+        for label,rounds,channels in profiles:
+            with self.subTest(profile=label):
+                records=self.acceptance_fixture();capture=records[0]['composition']['capture']
+                capture.update(rounds=rounds,wait_calls=rounds)
+                for channel,(issued,pending,immediate) in zip(capture['channels'],channels):
+                    channel.update(read_issued=issued,read_terminal=issued,read_pending=pending,
+                                   read_immediate=immediate,read_visits=rounds,max_read_gap=1)
+                self.assertTrue(validate_records(records,True,expected_stage='composed'))
+        observed=self.observed()['ok'];capture=observed['composition']['capture']
+        self.assertEqual(capture['rounds'],0)
+        for channel in capture['channels']:
+            self.assertEqual(tuple(channel[key] for key in ('read_issued','read_terminal','read_pending',
+                                                           'read_immediate','read_visits','max_read_gap')),(0,0,0,0,0,0))
+        self.assertFalse(validate_records(self.diagnostic(observed),expected_stage='composed'))
+        records=self.acceptance_fixture();records[0]['composition']['capture']=capture
+        self.reject(records,require_pass=True)
+
+    def test_composed_binary_rejects_impossible_read_byte_eof_round_accounting(self):
+        records=self.acceptance_fixture()
+        for index,data_reads in ((0,2),(1,1)):
+            changes=[
+                ('insufficient-data-capacity',dict(read_pending=0,read_immediate=data_reads-1)),
+                ('missing-separate-eof',dict(read_issued=data_reads,read_terminal=data_reads,
+                                           read_pending=0,read_immediate=data_reads)),
+                ('zero-known-data-submissions',dict(read_pending=0,read_immediate=0)),
+                ('consumed-read-needs-later-visit',dict(read_issued=4,read_terminal=4,
+                                                      read_pending=0,read_immediate=3)),
+                ('missing-first-visit-gap',dict(max_read_gap=0)),
+            ]
+            for label,change in changes:
+                with self.subTest(channel=index,defect=label):
+                    bad=copy.deepcopy(records);bad[0]['composition']['capture']['channels'][index].update(change)
+                    self.reject(bad,require_pass=True)
+        for rounds in (1,2,3):
+            with self.subTest(rounds=rounds):
+                bad=copy.deepcopy(records);capture=bad[0]['composition']['capture'];capture['rounds']=rounds
+                for channel in capture['channels']: channel['read_visits']=rounds
+                self.reject(bad,require_pass=True)
+        # The original one-read/one-round oracle must independently fail.
+        with self.subTest(defect='original-one-read-one-round-oracle'):
+            bad=copy.deepcopy(records);capture=bad[0]['composition']['capture'];capture['rounds']=1
+            for channel in capture['channels']:
+                channel.update(read_issued=1,read_terminal=1,read_immediate=1,read_visits=1)
+            self.reject(bad,require_pass=True)
+        for key,value in (('wait_calls',5),('exit_code_reads',2)):
+            with self.subTest(counter=key):
+                bad=copy.deepcopy(records);bad[0]['composition']['capture'][key]=value
+                self.reject(bad,require_pass=True)
+
+    def test_composed_fail_capture_faults_require_sticky_unknown(self):
+        rows=self.observed()
+        for key,value in (('sentinel_probe',False),('sentinel_unsignaled',False),
+                          ('fault_site',1),('evidence_bytes_written',1),('held_writer_blocked_eof',True)):
+            with self.subTest(fault=key):
+                bad=self.diagnostic(rows['ok']);bad[0]['composition']['capture'][key]=value
+                self.assertEqual(bad[0]['composition']['owner_release_state'],'released')
+                self.assertEqual(bad[0]['composition']['overall'],'OBSERVED')
+                self.reject(bad)
+                bad[0]['composition']['overall']='UNKNOWN'
+                self.assertFalse(validate_records(bad,expected_stage='composed'))
+
+    def test_composed_fail_snapshot_requires_one_shot_refusal(self):
+        rows=self.observed()
+        for source in ('ok','query-false','image-close-false'):
+            with self.subTest(source=source):
+                bad=self.diagnostic(rows[source]);bad[0]['composition']['capture']['one_shot_refused']=False
+                self.reject(bad)
+
+    def test_composed_external_assertion_failure_can_remain_observed(self):
+        # A failed external assertion is not a native owner fault. Neither the
+        # honest recording output nor a plausible FAIL oracle must invent UNKNOWN.
+        rows=self.observed();records=self.diagnostic(rows['ok'])
+        self.assertEqual(records[0]['composition']['overall'],'OBSERVED')
+        self.assertFalse(validate_records(records,expected_stage='composed'))
+        records=self.acceptance_fixture();records[0]['status']='FAIL'
+        records[-1]=summary(4,1,'case-failure',stage='composed')
+        self.assertEqual(records[0]['composition']['overall'],'OBSERVED')
+        self.assertFalse(validate_records(records,expected_stage='composed'))
+        self.reject(records,require_pass=True)
+
+    def test_composed_runner_stops_after_retained_attempt(self):
+        rows=self.observed();record=rows['create-unavailable']
+        # Execute the actual runner loop and bounded writer with managed functions
+        # in place of native executables. Never invoke a child or native harness.
+        runner=ROOT/'tests/windows/check_native_fixed_image_composition.ps1'
+        self.assertTrue(runner.is_file())
+        script=r"""
+$ErrorActionPreference='Stop'
+Set-StrictMode -Version Latest
+$tokens=$null;$errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile('__RUNNER__',[ref]$tokens,[ref]$errors)
+if ($errors.Count -ne 0) { throw 'Runner parse failed' }
+$loop=$ast.Find({param($a) $a -is [Management.Automation.Language.ForEachStatementAst] -and $a.Variable.Extent.Text -ceq '$exe'},$true)
+$function=$ast.Find({param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -ceq 'Write-Record'},$true)
+$writer=New-Object IO.MemoryStream
+$encoder=New-Object Text.UTF8Encoding($false,$true)
+$records=0;$total=0;$failed=0;$stop='none';$invocations=0
+$harnesses=@('First','Second')
+function First { ++$script:invocations;$global:LASTEXITCODE=2;Write-Output '__RECORD__' }
+function Second { throw 'ASSERT later case entered after retained owner' }
+. ([scriptblock]::Create($function.Extent.Text))
+. ([scriptblock]::Create($loop.Extent.Text))
+if ($invocations -ne 1 -or $records -ne 1 -or $failed -ne 1 -or $stop -cne 'unresolved-owner') { throw 'ASSERT retained prefix runner state' }
+Write-Output 'PASS actual composed runner retained prefix'
+""".replace('__RUNNER__',str(runner).replace("'","''")).replace('__RECORD__',json.dumps(record,separators=(',',':')).replace("'","''"))
+        # The real writer's durable Flush(bool) expects a FileStream, not MemoryStream.
+        script=script.replace('$writer=New-Object IO.MemoryStream',"$log=[IO.Path]::GetTempFileName();$writer=[IO.File]::Open($log,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::Read)")
+        script+='\n$writer.Dispose()\n'
+        result=subprocess.run([SHELL,'-NoProfile','-NonInteractive','-Command',script],capture_output=True,text=True,timeout=30)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertIn('PASS actual composed runner retained prefix',result.stdout)
+
+    def test_composed_bounds_keys_return_states_and_cli(self):
+        records=self.acceptance_fixture()
+        for path in ((),('composition',),('process_observation',),('composition','capture'),('composition','capture','channels',1)):
+            bad=copy.deepcopy(records);self.at(bad[0],path)['unknown']=False;self.reject(bad)
+        rows=self.observed()
+        # Real serializer FAIL rows admit only their exact observed nullability.
+        for fault in ('query-unavailable','query-false','query-truncated','query-count','empty','malformed','unsupported',
+                      'create-unavailable','process-invalid','wait-unavailable','wait-failed','wait-timeout','exit-code-unavailable','exit-code-false'):
+            diagnostic=self.diagnostic(rows[fault])
+            for container in ('composition','process_observation'):
+                value=diagnostic[0][container]
+                if value is None: continue
+                for key,actual in value.items():
+                    if actual is None:
+                        bad=copy.deepcopy(diagnostic);bad[0][container][key]=0
+                        with self.subTest(fault=fault,key=key): self.reject(bad)
+            bad=copy.deepcopy(diagnostic);bad[0]['composition']['overall']='OBSERVED';self.reject(bad)
+        for fault in ('process-zero','thread-zero','create-unavailable','create-false','missing'):
+            bad=self.diagnostic(rows[fault]);bad[0]['composition']['original_handles_state']='valid';self.reject(bad)
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'evidence';raw=''.join(json.dumps(r)+'\n' for r in records).encode()
+            path.write_bytes(raw)
+            for args,success in [(['--expected-stage','composed','--require-pass'],True),
+                                 (['--expected-stage','file-only'],False),([],False)]:
+                result=subprocess.run([sys.executable,str(Path(__file__)),'--validate-evidence',str(path)]+args,
+                                      capture_output=True,text=True,timeout=30)
+                self.assertEqual(result.returncode==0,success,result.stdout+result.stderr)
+            for bad in (raw[:-1],raw+b'{}\n',raw.replace(b'"claim_state": "claimed"',b'"claim_state": "claimed","claim_state":"claimed"',1),
+                        b'x'*16384+b'\n',b'\xff\n',b'x'*131073):
+                path.write_bytes(bad)
+                with self.assertRaises(ValueError): validate_evidence(path,expected_stage='composed')
+        bad=copy.deepcopy(records);bad[0]['held_path']='C:\\'+'x'*20000
+        bad[0]['process_observation'].update(image_path=bad[0]['held_path'],query_return_chars=20003)
+        self.reject(bad)
+
+    def test_composed_binary_assertions_are_complete(self):
+        records=self.acceptance_fixture()
+        self.assertTrue(validate_records(records,True,expected_stage='composed'))
+        c=records[0]['composition']['capture']
+        self.assertEqual((c['stdout_bytes'],c['stderr_bytes'],c['stdout_hash'],c['stderr_hash']),
+                         (4105,257,'031381f5c4fbe740','c98455caf71ceb86'))
+        for key,value in [('stdout_bytes',4104),('stderr_bytes',256),('stdout_hash','0'*16),('stderr_hash','0'*16),
+                          ('eof_stdout',False),('eof_stderr',False),('io_terminal',False),('sentinel_probe',False),
+                          ('sentinel_unsignaled',False),('one_shot_refused',False),('rounds',0),('fault_site',1),
+                          ('evidence_bytes_written',1),('held_writer_blocked_eof',True),('wait_calls',0),('exit_code_reads',0)]:
+            bad=copy.deepcopy(records);bad[0]['composition']['capture'][key]=value
+            with self.subTest(field=key): self.reject(bad)
+        for index in (0,1):
+            for key,value in [('retained',0),('discarded',1),('read_terminal',0),('read_visits',0),
+                              ('max_read_gap',2),('read_released',False),('connect_released',False)]:
+                bad=copy.deepcopy(records);bad[0]['composition']['capture']['channels'][index][key]=value
+                with self.subTest(channel=index,field=key): self.reject(bad)
+        for field,value in [('exit_wait_result',258),('exit_code',259)]:
+            bad=copy.deepcopy(records);bad[0]['process_observation'][field]=value;self.reject(bad)
+        def unavailable(_pairs): raise PathComparisonUnavailable('exact Windows comparison unavailable')
+        for require_pass in (False,True):
+            bad=copy.deepcopy(records);bad[0]['held_path']='C:\\é';bad[0]['process_observation'].update(image_path='C:\\É',query_return_chars=4)
+            with self.assertRaisesRegex(ValueError,'Unavailable exact path comparison'):
+                validate_records(bad,require_pass,expected_stage='composed',path_comparer=unavailable)
+            self.assertTrue(validate_records(bad,require_pass,expected_stage='composed',path_comparer=lambda pairs:[True]))
+            self.reject(bad,require_pass=require_pass,path_comparer=lambda pairs:[False])
+        diagnostic=self.diagnostic(self.observed()['ok']);diagnostic[0]['composition']['overall']='UNKNOWN'
+        diagnostic[0]['held_path']='C:\\é';diagnostic[0]['process_observation'].update(image_path='C:\\É',query_return_chars=4)
+        self.assertFalse(validate_records(diagnostic,expected_stage='composed',path_comparer=unavailable))
+        diagnostic[-1]['status']='PASS'
+        with self.assertRaisesRegex(ValueError,'Unavailable exact path comparison'):
+            validate_records(diagnostic,expected_stage='composed',path_comparer=unavailable)
+
 
 class FixedImagePathContracts(unittest.TestCase):
     def test_path_grammar_cc_utf16_and_prefix_parity(self):
@@ -692,7 +1231,7 @@ READ_STATES=('not-entered','return-unknown','returned-failure','known-incomplete
 
 
 def summary(cases=4,failed=0,reason='none',stage='file-only'):
-    return dict(kind='fixed_image_summary',schema=1,stage=stage,status='PASS' if reason=='none' else 'FAIL',
+    return dict(kind='fixed_image_summary',schema=2 if stage=='composed' else 1,stage=stage,status='PASS' if reason=='none' else 'FAIL',
                 cases=cases,failed=failed,stop_reason=reason,mutation_authorized=False)
 
 
@@ -839,7 +1378,7 @@ def paths_agree(held,process,path_comparer=None):
 
 def validate_path_comparison(held,process,comparison,case_status,overall,summary_status,
                              require_pass=False,path_comparer=None):
-    """Reusable status guard; actual composed-schema integration belongs to 2E."""
+    """Exact relation/status guard shared by the composed-schema validator."""
     if comparison not in ('match','mismatch') or case_status not in ('PASS','FAIL') or overall not in ('OBSERVED','UNKNOWN') or summary_status not in ('PASS','FAIL'):
         raise ValueError('Invalid path comparison/status labels')
     try: relation=paths_agree(held,process,path_comparer)
@@ -871,14 +1410,16 @@ def probe(value,access):
     native_open(value)
 
 
-def validate_case(record):
-    if type(record) is not dict or set(record)!=CASE_FIELDS: raise ValueError('Unexpected exact case fields')
+def validate_case(record,expected_stage='file-only'):
+    composed=expected_stage=='composed'
+    fields=CASE_FIELDS|{'composition'} if composed else CASE_FIELDS
+    if type(record) is not dict or set(record)!=fields: raise ValueError('Unexpected exact case fields')
     strings(record)
-    if record['kind']!='fixed_image_case' or type(record['schema']) is not int or record['schema']!=1: raise ValueError('Case version')
-    if record['stage']!='file-only' or record['case'] not in CASES or record['status'] not in ('PASS','FAIL'):
+    if record['kind']!='fixed_image_case' or type(record['schema']) is not int or record['schema']!=(2 if composed else 1): raise ValueError('Case version')
+    if record['stage']!=expected_stage or record['case'] not in CASES or record['status'] not in ('PASS','FAIL'):
         raise ValueError('Case labels')
     if record['mutation_authorized'] is not False: raise ValueError('Observations never authorize mutation')
-    if record['refusal'] not in ('none','digest-mismatch','size-mismatch','missing-image','observation-failure'): raise ValueError('Refusal label')
+    if record['refusal'] not in ('none','digest-mismatch','size-mismatch','missing-image','observation-failure')+(('sharing-failure',) if composed else ()): raise ValueError('Refusal label')
     integer(record['expected_size'],MAX_IMAGE,1);hex_value(record['expected_sha256'],64)
     integer(record['create_calls'],2147483647);integer(record['bytes_hashed'],MAX_IMAGE)
     if record['bytes_hashed']>record['expected_size']: raise ValueError('Hashed bytes exceed expectation')
@@ -917,7 +1458,7 @@ def validate_case(record):
     if record['refusal']=='digest-mismatch' and (record['read_state']!='complete' or record['actual_sha256']==record['expected_sha256']): raise ValueError('Digest refusal requires comparison reached')
     if record['refusal']=='size-mismatch' and (record['actual_size'] is None or record['actual_size']==record['expected_size'] or record['read_state']!='not-entered'): raise ValueError('Size refusal differs from digest refusal')
     if record['refusal']=='missing-image' and (record['open_state']!='returned-failure' or record['open_error']!=2): raise ValueError('Missing sibling requires actual error 2')
-    if record['create_calls']!=0 or record['process_observation'] is not None: raise ValueError('Task 1 has no create/query')
+    if not composed and (record['create_calls']!=0 or record['process_observation'] is not None): raise ValueError('Task 1 has no create/query')
     if record['status']=='PASS':
         name=record['case']
         if record['read_state']=='known-incomplete': raise ValueError('Incomplete never PASS')
@@ -931,7 +1472,7 @@ def validate_case(record):
                 if value is None or value['open_state']!='returned-failure' or value['open_error']!=32 or value['close_state']!='not-opened': raise ValueError('PASS requires actual sharing denial')
 
 
-def unresolved_owner(record):
+def unresolved_file_owner(record):
     unresolved=record['open_state']=='return-unknown' or (record['open_state']=='returned-success' and record['close_state']!='returned-success')
     for key in ('write_probe','delete_probe'):
         value=record[key]
@@ -940,17 +1481,191 @@ def unresolved_owner(record):
     return unresolved
 
 
-def validate_records(records,require_pass=False):
-    if not 1<=len(records)<=5: raise ValueError('At most four cases and summary')
+COMPOSITION_FIELDS=frozenset(('claim_state','create_state','create_error','original_handles_state',
+    'overall','image_release_state','owner_release_state','capture'))
+PROCESS_FIELDS=frozenset(('query_state','query_error','query_return_chars','image_path','path_state','comparison',
+    'exit_wait_state','exit_wait_result','exit_wait_error','exit_code_state','exit_code_error','exit_code'))
+CAPTURE_BOOLS=frozenset(('eof_stdout','eof_stderr','io_terminal','sentinel_probe','sentinel_unsignaled',
+    'one_shot_refused','held_writer_blocked_eof'))
+CAPTURE_COUNTS={'stdout_bytes':300000,'stderr_bytes':300000,'rounds':32768,'fault_site':3,
+    'evidence_bytes_written':1,'wait_calls':32768,'exit_code_reads':32768}
+CAPTURE_FIELDS=CAPTURE_BOOLS|CAPTURE_COUNTS.keys()|{'stdout_hash','stderr_hash','channels'}
+CHANNEL_COUNTS={'retained':65536,'discarded':300000,'read_issued':32768,'read_terminal':32768,
+    'read_pending':32768,'read_immediate':32768,'read_visits':32768,'max_read_gap':1}
+CHANNEL_FIELDS=CHANNEL_COUNTS.keys()|{'read_released','connect_released'}
+
+
+def exact_object(value,fields,label):
+    if type(value) is not dict or set(value)!=fields: raise ValueError('Exact '+label+' fields required')
+
+
+def nullable_uint(value,present):
+    if present: integer(value,4294967295)
+    elif value is not None: raise ValueError('Unavailable return/error must be null')
+
+
+def validate_capture(c):
+    exact_object(c,CAPTURE_FIELDS,'capture')
+    for key in CAPTURE_BOOLS:
+        if type(c[key]) is not bool: raise ValueError('Capture Boolean required')
+    # CompositionSnapshot refuses every snapshot until this assertion, even FAIL.
+    if not c['one_shot_refused']: raise ValueError('Composed snapshot requires one-shot refusal')
+    for key,limit in CAPTURE_COUNTS.items(): integer(c[key],limit)
+    hex_value(c['stdout_hash'],16);hex_value(c['stderr_hash'],16)
+    if type(c['channels']) is not list or len(c['channels'])!=2: raise ValueError('Ordered stdout/stderr channels required')
+    for channel,total in zip(c['channels'],(c['stdout_bytes'],c['stderr_bytes'])):
+        exact_object(channel,CHANNEL_FIELDS,'channel')
+        for key,limit in CHANNEL_COUNTS.items(): integer(channel[key],limit)
+        for key in ('read_released','connect_released'):
+            if type(channel[key]) is not bool: raise ValueError('Channel release Boolean required')
+        if channel['retained']+channel['discarded']!=total: raise ValueError('Channel byte accounting')
+        if channel['read_terminal']>channel['read_issued']: raise ValueError('Terminal count exceeds issued')
+        if channel['read_pending']+channel['read_immediate']>channel['read_issued']: raise ValueError('Known returns exceed issued')
+        if channel['read_visits']!=c['rounds']: raise ValueError('Fair channel visits required')
+        if c['io_terminal'] and channel['read_terminal']!=channel['read_issued']: raise ValueError('Terminal IO contradicts pending reads')
+        if channel['read_released'] and channel['read_terminal']!=channel['read_issued']: raise ValueError('Released read cannot be pending')
+
+
+def validate_process(q,record,end,require_pass,path_comparer):
+    exact_object(q,PROCESS_FIELDS,'process')
+    if q['query_state'] not in OPEN_STATES: raise ValueError('Query return state')
+    nullable_uint(q['query_error'],q['query_state']=='returned-failure')
+    nullable_uint(q['query_return_chars'],q['query_state']=='returned-success')
+    if q['path_state'] not in ('not-observed','unavailable','malformed','truncated','unsupported','valid'): raise ValueError('Path state')
+    if q['comparison'] not in ('not-performed','match','mismatch'): raise ValueError('Comparison label')
+    if q['query_state']!='returned-success':
+        if q['path_state']!=('not-observed' if q['query_state']=='not-entered' else 'unavailable') or q['image_path'] is not None or q['comparison']!='not-performed':
+            raise ValueError('No path without known TRUE query')
+    else:
+        count=q['query_return_chars'];state=q['path_state'];raw=q['image_path']
+        if state not in ('malformed','truncated','unsupported','valid'): raise ValueError('TRUE query path classification required')
+        if state in ('malformed','truncated'):
+            if raw is not None or q['comparison']!='not-performed': raise ValueError('Invalid query cannot publish repaired path/comparison')
+            if count==0 and state!='malformed': raise ValueError('Zero query count is malformed')
+        else:
+            if type(raw) is not str or not 0<count<32768 or count!=len(utf16_units(raw)): raise ValueError('Actual complete query UTF16 count required')
+            if state=='valid':
+                local_path(raw);local_path(record['held_path'])
+                validate_path_comparison(record['held_path'],raw,q['comparison'],record['status'],
+                    record['composition']['overall'],end['status'],require_pass,path_comparer)
+            else:
+                try: local_path(raw)
+                except ValueError: pass
+                else: raise ValueError('Unsupported path was actually supported')
+                if q['comparison']!='not-performed': raise ValueError('Unsupported path cannot compare')
+    if q['exit_wait_state'] not in ('not-entered','return-unknown','returned'): raise ValueError('Wait state')
+    nullable_uint(q['exit_wait_result'],q['exit_wait_state']=='returned')
+    nullable_uint(q['exit_wait_error'],q['exit_wait_state']=='returned' and q['exit_wait_result']==4294967295)
+    if q['exit_code_state'] not in OPEN_STATES: raise ValueError('Exit-code state')
+    nullable_uint(q['exit_code_error'],q['exit_code_state']=='returned-failure')
+    nullable_uint(q['exit_code'],q['exit_code_state']=='returned-success')
+    if q['exit_code_state']!='not-entered' and (q['exit_wait_state']!='returned' or q['exit_wait_result']!=0):
+        raise ValueError('Exit-code call requires actual signaled wait')
+
+
+def validate_composition(record,end,require_pass,path_comparer):
+    c=record['composition'];exact_object(c,COMPOSITION_FIELDS,'composition')
+    if c['claim_state']!='claimed': raise ValueError('Actual transferred claim required')
+    if c['create_state'] not in ('NotEntered','EnteredReturnUnknown','ReturnedFalse','ReturnedTrue'): raise ValueError('Create state')
+    integer(record['create_calls'],1)
+    if record['create_calls']!=(0 if c['create_state']=='NotEntered' else 1): raise ValueError('One create entry count')
+    nullable_uint(c['create_error'],c['create_state']=='ReturnedFalse')
+    if c['original_handles_state'] not in ('not-observed','valid','invalid'): raise ValueError('Original check state')
+    if (c['original_handles_state']!='not-observed')!=(c['create_state']=='ReturnedTrue'): raise ValueError('Original check follows known TRUE create only')
+    if c['overall'] not in ('OBSERVED','UNKNOWN'): raise ValueError('Overall observation state')
+    if c['image_release_state'] not in ('released','retained') or c['owner_release_state'] not in ('released','retained'): raise ValueError('Release state')
+    if (c['image_release_state']=='retained')!=unresolved_file_owner(record): raise ValueError('Image release contradicts exact file/probe ledger')
+    if c['owner_release_state']=='released' and c['image_release_state']!='released': raise ValueError('Owner release requires image/probes released')
+    unknown_acquisition=c['create_state']=='EnteredReturnUnknown' or c['original_handles_state']=='invalid'
+    if unknown_acquisition and (c['image_release_state']!='retained' or c['owner_release_state']!='retained'): raise ValueError('Uncertain acquisition retains image and owner')
+    # Release gates apply before CloseHandle entry, not just a successful return.
+    # Aggregate retention may reflect this close failure or an unresolved probe.
+    image_close_entered=record['close_state'] in ('return-unknown','returned-failure','returned-success')
+    # FixedImageProbeState.Resolved requires known open failure or known close
+    # success. A present but not-yet-entered probe is not resolved either.
+    unresolved_probe=any(value is not None and value['open_state']!='returned-failure' and
+        value['close_state']!='returned-success' for value in (record['write_probe'],record['delete_probe']))
+    if image_close_entered and (unknown_acquisition or unresolved_probe):
+        raise ValueError('Image close entry requires known acquisition and resolved probes')
+    valid=c['create_state']=='ReturnedTrue' and c['original_handles_state']=='valid'
+    if valid:
+        validate_capture(c['capture']);validate_process(record['process_observation'],record,end,require_pass,path_comparer)
+    elif c['capture'] is not None or record['process_observation'] is not None: raise ValueError('No query/capture outside valid original success')
+    denials=all(record[key] is not None and record[key]['open_state']=='returned-failure' and record[key]['open_error']==32 and record[key]['close_state']=='not-opened' for key in ('write_probe','delete_probe'))
+    if record['create_calls'] and (record['refusal']!='none' or not denials or record['read_state']!='complete' or record['actual_sha256']!=record['expected_sha256']):
+        raise ValueError('Create requires completed image and both sharing denials')
+    bad_probe=any(record[key] is not None and (record[key]['open_state']!='returned-failure' or record[key]['open_error']!=32) for key in ('write_probe','delete_probe'))
+    if (record['refusal']=='sharing-failure')!=bad_probe: raise ValueError('Sharing refusal requires actual failed sharing proof')
+    diagnostic=c['create_state']!='ReturnedTrue' or c['original_handles_state']!='valid'
+    if valid:
+        q=record['process_observation'];capture=c['capture']
+        exited=q['exit_wait_state']=='returned' and q['exit_wait_result']==0 and q['exit_code_state']=='returned-success'
+        # These recorded capture faults call MarkUnknown in the real owner.
+        # Successful cleanup or an external assertion result cannot clear it.
+        diagnostic=(q['path_state']!='valid' or q['comparison']!='match' or not exited or
+                    not capture['sentinel_probe'] or not capture['sentinel_unsignaled'] or
+                    capture['fault_site']!=0 or capture['evidence_bytes_written']!=0 or capture['held_writer_blocked_eof'])
+        if (capture['wait_calls']==0)!=(q['exit_wait_state']=='not-entered'): raise ValueError('Wait entry/counter mismatch')
+        # Earlier polls can have read codes; latest attempt's returned ledger stays independent.
+        if q['exit_code_state']!='not-entered' and capture['exit_code_reads']==0: raise ValueError('Exit-code entry/counter mismatch')
+        if image_close_entered and (not exited or not capture['io_terminal'] or not capture['eof_stdout'] or not capture['eof_stderr'] or not all(ch['read_released'] and ch['connect_released'] for ch in capture['channels'])):
+            raise ValueError('Image close entry lacks exit/EOF/terminal released slots')
+    if (diagnostic or c['owner_release_state']=='retained' or bad_probe) and c['overall']!='UNKNOWN': raise ValueError('Failure state cannot be OBSERVED')
+    if record['status']=='PASS':
+        if c['owner_release_state']!='released' or c['image_release_state']!='released': raise ValueError('PASS retains owner')
+        if record['case']!='matching-image':
+            if c['create_state']!='NotEntered': raise ValueError('Expected negative must have zero creation')
+        else:
+            if not valid or c['overall']!='OBSERVED' or q['path_state']!='valid' or q['comparison']!='match' or q['exit_code']!=0 or not exited:
+                raise ValueError('PASS requires observed matching query and actual exit zero')
+            required=('eof_stdout','eof_stderr','io_terminal','sentinel_probe','sentinel_unsignaled','one_shot_refused')
+            if not all(capture[key] for key in required) or capture['rounds']==0 or capture['fault_site']!=0 or capture['evidence_bytes_written']!=0 or capture['held_writer_blocked_eof'] or not 1<=capture['wait_calls']<=capture['rounds'] or capture['exit_code_reads']!=1:
+                raise ValueError('Full Binary independent capture proof required')
+            if (capture['stdout_bytes'],capture['stderr_bytes'],capture['stdout_hash'],capture['stderr_hash'])!=(4105,257,'031381f5c4fbe740','c98455caf71ceb86'):
+                raise ValueError('Exact full Binary bytes/hash including PVC2 exclusion required')
+            for channel,total in zip(capture['channels'],(capture['stdout_bytes'],capture['stderr_bytes'])):
+                if not channel['read_released'] or not channel['connect_released'] or channel['read_issued']==0 or channel['read_issued']!=channel['read_terminal'] or channel['discarded']!=0:
+                    raise ValueError('Binary slots terminal/released with complete retained capture')
+                # ReadStep consumes at most 4096 data bytes, then observes EOF
+                # on a separate terminal error. Data needs TRUE/IO_PENDING;
+                # synchronous FALSE/error109 EOF counts in neither return bin.
+                # Partial/zero-byte reads can increase counts: these are minima.
+                data_reads=(total+4095)//4096
+                if channel['read_pending']+channel['read_immediate']<data_reads or channel['read_terminal']<data_reads+1:
+                    raise ValueError('Binary data and separate EOF require enough completed reads')
+                # Prepare issues no reads. Each ReadStep consumes before issuing,
+                # so even immediate completion needs a later visit. PASS cannot
+                # use recovery polls, which necessarily make the owner UNKNOWN.
+                if channel['read_issued']>=capture['rounds'] or channel['max_read_gap']!=1:
+                    raise ValueError('Binary read consumption requires later fair visits')
+
+
+def unresolved_owner(record):
+    return unresolved_file_owner(record) or (record['stage']=='composed' and record['composition']['owner_release_state']=='retained')
+
+
+def validate_records(records,require_pass=False,expected_stage='file-only',path_comparer=None):
+    if expected_stage not in ('file-only','composed'): raise ValueError('Explicit supported stage required')
+    if type(records) is not list or not 1<=len(records)<=5: raise ValueError('At most four cases and summary')
+    if expected_stage=='composed':
+        # Also bound direct-record callers. File readers independently check exact
+        # input bytes (including whitespace), without truncating observations.
+        total=0
+        for record in records:
+            try: size=len(json.dumps(record,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8',errors='surrogatepass'))+1
+            except (TypeError,ValueError,RecursionError) as error: raise ValueError('Invalid bounded record') from error
+            total+=size
+            if size>16384 or total>131072: raise ValueError('Composed record UTF8 bound')
     cases=records[:-1];end=records[-1]
     if type(end) is not dict or set(end)!=SUMMARY_FIELDS: raise ValueError('Missing exact final summary')
     strings(end)
-    if end['kind']!='fixed_image_summary' or type(end['schema']) is not int or end['schema']!=1 or end['stage']!='file-only' or end['status'] not in ('PASS','FAIL') or end['mutation_authorized'] is not False: raise ValueError('Summary labels/version')
+    if end['kind']!='fixed_image_summary' or type(end['schema']) is not int or end['schema']!=(2 if expected_stage=='composed' else 1) or end['stage']!=expected_stage or end['status'] not in ('PASS','FAIL') or end['mutation_authorized'] is not False: raise ValueError('Summary labels/version')
     integer(end['cases'],4);integer(end['failed'],4)
     if end['stop_reason'] not in ('none','case-failure','unresolved-owner','build-failure','evidence-failure'): raise ValueError('Summary stop reason')
     expected=None
     for index,record in enumerate(cases):
-        validate_case(record)
+        validate_case(record,expected_stage)
+        if expected_stage=='composed': validate_composition(record,end,require_pass,path_comparer)
         if record['case']!=CASES[index] or record['stage']!=end['stage']: raise ValueError('Ordered case prefix/stage')
         value=(record['expected_size'],record['expected_sha256'])
         if expected is not None and value!=expected: raise ValueError('Cases must retain same pristine build expectation')
@@ -983,7 +1698,7 @@ def strict_json(line):
     except (RecursionError,json.JSONDecodeError) as error: raise ValueError('Invalid bounded JSON') from error
 
 
-def validate_evidence(path,require_pass=False):
+def validate_evidence(path,require_pass=False,expected_stage='file-only',path_comparer=None):
     path=Path(path)
     if not 0<path.stat().st_size<=131072: raise ValueError('Artifact total bound')
     records=[];total=0
@@ -996,7 +1711,7 @@ def validate_evidence(path,require_pass=False):
             try: value=strict_json(line.decode('utf-8',errors='strict'))
             except UnicodeDecodeError as error: raise ValueError('Invalid UTF8 evidence') from error
             records.append(value)
-    return validate_records(records,require_pass)
+    return validate_records(records,require_pass,expected_stage,path_comparer)
 
 
 if __name__=='__main__':
@@ -1004,9 +1719,10 @@ if __name__=='__main__':
         import argparse
         parser=argparse.ArgumentParser(description='Validate fixed-image diagnostics only, never resource authority')
         parser.add_argument('--validate-evidence',required=True);parser.add_argument('--require-pass',action='store_true')
+        parser.add_argument('--expected-stage',choices=('file-only','composed'),default='file-only')
         args=parser.parse_args()
         try:
-            passed=validate_evidence(args.validate_evidence,args.require_pass)
+            passed=validate_evidence(args.validate_evidence,args.require_pass,args.expected_stage)
             print('PASS fixed image evidence schema'+(' and all cases' if passed else ' (FAIL diagnostics only)'))
         except (OSError,ValueError) as error:
             print('Invalid fixed image evidence: '+str(error),file=sys.stderr);sys.exit(1)

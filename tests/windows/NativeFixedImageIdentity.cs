@@ -326,7 +326,7 @@ namespace PortableVBox {
    }
   }
   // Only this permanently registered capability can mutate a transferred image.
-  // No path/handle escape, reset, transfer-back or launch binding exists in 2C.
+  // No handle escape, reset or transfer-back; launch binding stays fixed and internal.
   internal sealed class CompositionLease {
    readonly FixedFixtureImage owner;
    internal CompositionLease(FixedFixtureImage owner,object key) {
@@ -334,6 +334,23 @@ namespace PortableVBox {
     this.owner=owner;
    }
    void Validate() { if(!Object.ReferenceEquals(owner.lease,this) || owner.use!=UseState.Claimed)throw new InvalidOperationException("Unregistered image capability"); }
+   internal sealed class FixedImageLaunchBinding {
+    internal readonly string Application,Directory;
+    readonly string command;
+    internal StringBuilder Command { get { return new StringBuilder(command); } }
+    internal FixedImageLaunchBinding(CompositionLease lease,long candidate,string token) {
+     lease.Validate();
+     if(!lease.owner.ReadyCore || lease.owner.writeProbe==null || lease.owner.deleteProbe==null || !lease.owner.writeProbe.Denied || !lease.owner.deleteProbe.Denied)throw new InvalidOperationException("Prepared held image and both known sharing denials required");
+     // Exactly the existing fixed Binary parser's positive Int64 and lowercase token grammar.
+     if(candidate<=0 || token==null || !Regex.IsMatch(token,@"\A[0-9a-f]{32}\z"))throw new ArgumentException("Fixed Binary sentinel arguments required");
+     Application=lease.owner.fixedPath;Directory=Path.GetDirectoryName(Application);
+     if(Application.IndexOf('"')>=0)throw new InvalidOperationException("Unsupported fixed path");
+     command=FixedFixtureCommand.Format(Application,"Binary",candidate,token).ToString();
+    }
+   }
+   internal FixedImageLaunchBinding BindBinaryLaunch(long candidate,string token) {
+    lock(owner.sync) { Validate();return new FixedImageLaunchBinding(this,candidate,token); }
+   }
    internal void PrepareOnce() { lock(owner.sync) { Validate();owner.PrepareCore(); } }
    internal bool ObserveSharing() { lock(owner.sync) { Validate();return owner.ObserveSharingCore(); } }
    internal bool TryRelease() { lock(owner.sync) { Validate();return owner.TryReleaseCore(); } }
@@ -412,8 +429,15 @@ namespace PortableVBox {
   }
  }
  internal static class FixedImageEvidence {
+  internal static string Fields(FixedImageExpectation Expected,FixedImageObservation o,string scenario,bool passed,string write,string delete,string refusal,int createCalls) {
+   return "\"case\":"+FixedImageCodec.Q(scenario)+",\"status\":"+FixedImageCodec.Q(passed?"PASS":"FAIL")+",\"mutation_authorized\":false,\"refusal\":"+FixedImageCodec.Q(refusal)+",\"create_calls\":"+FixedImageCodec.N(createCalls)+",\"expected_size\":"+FixedImageCodec.N(Expected.Length)+",\"expected_sha256\":"+FixedImageCodec.Q(Expected.Sha256)+",\"open_state\":"+FixedImageCodec.Q(o.OpenState)+",\"open_error\":"+FixedImageCodec.N(o.OpenError)+",\"actual_size\":"+FixedImageCodec.N(o.ActualSize)+",\"actual_sha256\":"+FixedImageCodec.Q(o.ActualSha256)+",\"bytes_hashed\":"+FixedImageCodec.N(o.BytesHashed)+",\"read_state\":"+FixedImageCodec.Q(o.ReadState)+",\"read_error\":"+FixedImageCodec.N(o.ReadError)+",\"eof_request_bytes\":"+FixedImageCodec.N(o.EofRequestBytes)+",\"eof_return_bytes\":"+FixedImageCodec.N(o.EofReturnBytes)+",\"volume_serial\":"+FixedImageCodec.Q(o.VolumeSerial)+",\"file_id\":"+FixedImageCodec.Q(o.FileId)+",\"held_path\":"+FixedImageCodec.Q(o.HeldPath)+",\"write_probe\":"+write+",\"delete_probe\":"+delete+",\"close_state\":"+FixedImageCodec.Q(o.CloseState);
+  }
+  internal static string Probe(FixedImageProbeObservation o) {
+   if(o==null)return "null";
+   return "{\"access\":"+FixedImageCodec.Q(o.Access==0x40000000?"GENERIC_WRITE":"DELETE")+",\"share\":"+FixedImageCodec.N(o.Share)+",\"disposition\":"+FixedImageCodec.N(o.Disposition)+",\"open_state\":"+FixedImageCodec.Q(o.OpenState)+",\"open_error\":"+FixedImageCodec.N(o.OpenError)+",\"close_state\":"+FixedImageCodec.Q(o.CloseState)+"}";
+  }
   internal static string Report(FixedImageExpectation Expected,FixedImageObservation o,string scenario,bool passed,string write,string delete) {
-   return "{\"kind\":\"fixed_image_case\",\"schema\":1,\"stage\":\"file-only\",\"case\":"+FixedImageCodec.Q(scenario)+",\"status\":"+FixedImageCodec.Q(passed?"PASS":"FAIL")+",\"mutation_authorized\":false,\"refusal\":"+FixedImageCodec.Q(o.Refusal)+",\"create_calls\":0,\"expected_size\":"+FixedImageCodec.N(Expected.Length)+",\"expected_sha256\":"+FixedImageCodec.Q(Expected.Sha256)+",\"open_state\":"+FixedImageCodec.Q(o.OpenState)+",\"open_error\":"+FixedImageCodec.N(o.OpenError)+",\"actual_size\":"+FixedImageCodec.N(o.ActualSize)+",\"actual_sha256\":"+FixedImageCodec.Q(o.ActualSha256)+",\"bytes_hashed\":"+FixedImageCodec.N(o.BytesHashed)+",\"read_state\":"+FixedImageCodec.Q(o.ReadState)+",\"read_error\":"+FixedImageCodec.N(o.ReadError)+",\"eof_request_bytes\":"+FixedImageCodec.N(o.EofRequestBytes)+",\"eof_return_bytes\":"+FixedImageCodec.N(o.EofReturnBytes)+",\"volume_serial\":"+FixedImageCodec.Q(o.VolumeSerial)+",\"file_id\":"+FixedImageCodec.Q(o.FileId)+",\"held_path\":"+FixedImageCodec.Q(o.HeldPath)+",\"write_probe\":"+write+",\"delete_probe\":"+delete+",\"close_state\":"+FixedImageCodec.Q(o.CloseState)+",\"process_observation\":null}";
+   return "{\"kind\":\"fixed_image_case\",\"schema\":1,\"stage\":\"file-only\","+Fields(Expected,o,scenario,passed,write,delete,o.Refusal,0)+",\"process_observation\":null}";
   }
  }
 }

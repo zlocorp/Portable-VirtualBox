@@ -272,7 +272,7 @@ class SentinelSourceWiringContract(unittest.TestCase):
                     'NativeChildCapture.cs', 'NativeChildCaptureTests.cs', 'NativeChildCaptureNative.cs',
                     'NativeChildCaptureNativeTests.cs', 'NativeLaunchEnvironment.cs', 'NativeLaunchEnvironmentNative.cs',
                     'NativeSentinelObservation.cs', 'NativeSentinelObservationNative.cs', 'NativeSentinelObservationNativeTests.cs',
-                    'NativeFixedImageIdentity.cs'}
+                    'NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs'}
         names = re.findall(r"'([A-Za-z]+\.cs)'", managed)
         self.assertEqual(set(names), expected)
         self.assertEqual(len(names), len(expected))
@@ -596,7 +596,7 @@ class NativeChildRunnerContract(unittest.TestCase):
         $names=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
             'NativeChildCapture.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
             'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs',
-            'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs','NativeFixedImageIdentity.cs')
+            'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs')
         Add-Type -Path @(Get-FixedFixtureConsumerSources $build $names)
         if ([PortableVBox.NativeSentinelObservationNativeTests]::__METHOD__() -ne 0) { throw 'Actual native-boundary contract failed' }
         '''.replace('__ROOT__', str(ROOT / 'tests/windows').replace("'", "''")).replace('__METHOD__', method)
@@ -703,7 +703,7 @@ class NativeChildRunnerContract(unittest.TestCase):
         New-Item -ItemType Directory -Path $parent | Out-Null
         $build=New-FixedFixtureBuild $parent
         $names=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
-            'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs')
+            'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs')
         Add-Type -Path @(Get-FixedFixtureConsumerSources $build $names)
         $assembly=[PortableVBox.NativePipeTransportTests].Assembly
         $ownerType=$assembly.GetType('PortableVBox.ChildCaptureOwner',$true)

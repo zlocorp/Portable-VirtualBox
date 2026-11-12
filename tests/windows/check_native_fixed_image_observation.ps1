@@ -44,7 +44,7 @@ try {
         $caseSource=Join-Path $directory 'FixedFixtureCase.g.cs'
         [IO.File]::WriteAllText($caseSource,('namespace PortableVBox { internal static class FixedFixtureCase { internal const string Name = "'+$name+'"; } }'),$encoder)
         $exe=Join-Path $directory 'NativeFixedImageIdentityTests.exe'
-        $sources=@(Get-FixedFixtureConsumerSources $build @('NativeFixedImageIdentity.cs','NativeFixedImageIdentityTests.cs','NativeFixedImageIdentityNativeTests.cs'))
+        $sources=@(Get-FixedFixtureConsumerSources $build @('NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageIdentityTests.cs','NativeFixedImageIdentityNativeTests.cs'))
         Compile-FixedFixtureSources @($sources+$caseSource) $exe 'PortableVBox.NativeFixedImageIdentityNativeTests'
         $harnesses+=,$exe
     }
@@ -53,6 +53,16 @@ try {
     Assert-FixedFixtureBuild $build
     $pristineBytes=[IO.File]::ReadAllBytes($build.PristineChild)
     if ([PortableVBox.NativeFixedImageIdentityTests]::RunInjectedOwners($pristineBytes) -ne 0) { throw 'Fixed image injected owners failed' }
+    $compositionNames=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs','NativeChildCapture.cs',
+        'NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs',
+        'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs',
+        'NativeFixedImageComposition.cs','NativeFixedImageCompositionTests.cs')
+    $compositionSources=@(Get-FixedFixtureConsumerSources $build $compositionNames)
+    $composition=Join-Path $build.Root 'NativeFixedImageCompositionTests.dll'
+    Compile-FixedFixtureSources $compositionSources $composition ''
+    $compositionAssembly=[Reflection.Assembly]::LoadFile($composition)
+    $compositionType=$compositionAssembly.GetType('PortableVBox.NativeFixedImageCompositionTests',$true)
+    if ($compositionType.GetMethod('RunManaged').Invoke($null,@(,$pristineBytes)) -ne 0) { throw 'Fixed image composition owners failed' }
     for ($i=0;$i -lt 3;++$i) { Write-Output ('SERIALIZER_DIAGNOSTIC '+[PortableVBox.NativeFixedImageIdentityTests]::IncompleteReport($i)) }
     if ($ManagedOnly) { return }
     # Negative setup occurs only after ALL harnesses embed unchanged pristine input.
@@ -98,7 +108,7 @@ try {
             finally { $writer.Dispose();$writer=$null }
         }
         if (Test-Path -LiteralPath $log -PathType Leaf) {
-            & python $validator --validate-evidence $log
+            & python $validator --validate-evidence $log --expected-stage file-only
             $valid=($LASTEXITCODE -eq 0)
             if ($valid -and $EvidenceDirectory) {
                 if (-not (Test-Path -LiteralPath $EvidenceDirectory)) { New-Item -ItemType Directory -Path $EvidenceDirectory | Out-Null }
@@ -122,5 +132,5 @@ try {
     Write-Warning ('Generated fixed image build/evidence retained at '+$out+'. Process teardown is not explicit native release evidence.')
 }
 if (-not $valid) { throw 'Fixed image diagnostics failed strict validation' }
-& python $validator --validate-evidence $log --require-pass
+& python $validator --validate-evidence $log --expected-stage file-only --require-pass
 if ($LASTEXITCODE -ne 0) { throw 'Fixed image file-only cases did not all pass' }

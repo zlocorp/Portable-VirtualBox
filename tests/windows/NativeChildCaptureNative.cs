@@ -51,7 +51,7 @@ namespace PortableVBox {
   internal int Visits,PreviousVisit,MaxGap;
   internal bool Stopped;
  }
- internal sealed class ChildCaptureOwner {
+ internal sealed partial class ChildCaptureOwner {
   internal readonly ChildCaptureProof Proof=new ChildCaptureProof();
   internal readonly ChildCaptureChannel[] Channels={new ChildCaptureChannel(),new ChildCaptureChannel()};
   internal readonly CaptureCase Scenario;
@@ -168,7 +168,7 @@ namespace PortableVBox {
    return true;
   } }
   void SetInherit(IntPtr handle) { if(!ChildCaptureApi.SetHandleInformation(handle,1,1)) throw new InvalidOperationException("Inheritance setup failed"); }
-  void Prepare() {
+  internal void Prepare() {
    if(IntPtr.Size!=8 || Marshal.SizeOf(typeof(ChildCaptureApi.ExtendedStartup))!=112 || Marshal.SizeOf(typeof(PipeNative.Overlapped))!=32)
     throw new InvalidOperationException("x64 native layouts required");
    if(environment!=null) environmentAllocation.Prepare(environment.CopyBytes());
@@ -237,45 +237,66 @@ namespace PortableVBox {
   }
   void Launch() {
    if(!SentinelReady) throw new InvalidOperationException("Fresh sentinel required");
-   string root=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-   string image=Path.Combine(root,"NativeCaptureFixtureChild.exe");
-   if(image.IndexOf('"')>=0) throw new InvalidOperationException("Unsupported fixed path");
-   imageLease=new FileStream(image,FileMode.Open,FileAccess.Read,FileShare.Read);
+   TraceComposition("Launch");
+   string root,image;StringBuilder command;
+   if(fixedImage!=null) {
+    var binding=fixedImage.BindBinaryLaunch(sentinel.ToInt64(),sentinelToken);
+    image=binding.Application;root=binding.Directory;command=binding.Command;
+   } else {
+    root=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+    image=Path.Combine(root,"NativeCaptureFixtureChild.exe");
+    if(image.IndexOf('"')>=0) throw new InvalidOperationException("Unsupported fixed path");
+    imageLease=new FileStream(image,FileMode.Open,FileAccess.Read,FileShare.Read);
+    command=FixedFixtureCommand.Format(image,Scenario.ToString(),sentinel.ToInt64(),sentinelToken);
+   }
    if(Scenario==CaptureCase.EvidenceFault) evidence=new FileStream(Path.Combine(root,"child-evidence-fault.bin"),FileMode.CreateNew,FileAccess.Write,FileShare.Read,1,FileOptions.WriteThrough);
    if(environmentFault==EnvironmentObservationFault.Evidence) evidence=new FileStream(Path.Combine(root,"environment-evidence-fault.bin"),FileMode.CreateNew,FileAccess.Write,FileShare.Read,1,FileOptions.WriteThrough);
-   var command=new StringBuilder("\""+image+"\" "+Scenario+" "+sentinel.ToInt64().ToString(CultureInfo.InvariantCulture)+" "+sentinelToken);
    var startup=new ChildCaptureApi.ExtendedStartup();
    startup.Startup.Size=112;startup.Startup.Flags=0x100;startup.Startup.Input=input;
    startup.Startup.Output=Channels[0].Writer;startup.Startup.Error=Channels[1].Writer;startup.Attributes=attributes;
    // All managed owners, native slots, command, image lease and attributes now exist.
    Proof.BeforeCreate();nativeOutcomeUnknown=true;createState=CreateEntryState.EnteredReturnUnknown;
    ++CreateCalls;
-   bool result=ChildCaptureApi.CreateProcessW(image,command,IntPtr.Zero,IntPtr.Zero,true,environment==null?0x80000U:0x00080400U,environment==null?IntPtr.Zero:environmentAllocation.Pointer,root,ref startup,out Original);
+   bool result=processCalls.CreateProcessW(image,command,IntPtr.Zero,IntPtr.Zero,true,environment==null?0x80000U:0x00080400U,environment==null?IntPtr.Zero:environmentAllocation.Pointer,root,ref startup,out Original);
    createState=result?CreateEntryState.ReturnedTrue:CreateEntryState.ReturnedFalse;
-   CreateError=result?0:unchecked((uint)Marshal.GetLastWin32Error());
+   CreateError=result?0:processCalls.CaptureLastError();
    // Exact originals already in rooted owner; no metadata/logging/callback before this.
    nativeOutcomeUnknown=false;created=result;Proof.CreateReturned(result);
    if(!result) { MarkUnknown();throw new InvalidOperationException("Fixed child rejected"); }
-   if(Original.Process==IntPtr.Zero || Original.Thread==IntPtr.Zero) { nativeOutcomeUnknown=true;throw new InvalidOperationException("Missing original handles"); }
+   bool originalsInvalid=!ValidOriginal(Original.Process) || !ValidOriginal(Original.Thread);
+   originalHandlesInvalid=originalsInvalid;
+   if(originalsInvalid) { nativeOutcomeUnknown=true;throw new InvalidOperationException("Missing original handles"); }
+   ObserveProcessImageOnce();
    if(Scenario==CaptureCase.PostCreateFault || environmentFault==EnvironmentObservationFault.AfterCreate) { faultInjected=true;FaultSite=1;throw injected; }
   }
-  void CloseParentWriters() {
+  internal void CloseParentWriters() {
+   TraceComposition("CloseParentWriters");
    // Each close has independent pre-call and returned-result proof. Always attempted
    // after a known Create return, including the injected post-create exception path.
    Close(ref Channels[0].Writer,Channels[0].WriterClose);
    Close(ref Channels[1].Writer,Channels[1].WriterClose);
    Close(ref input,inputClose);
   }
-  void ObserveExit() {
-   if(!created || Proof.ExitObserved) return;
+  internal void ObserveExit() {
+   if(!created || nativeOutcomeUnknown || !ValidOriginal(Original.Process) || !ValidOriginal(Original.Thread) || Proof.ExitObserved) return;
+   TraceComposition("ObserveExit");
    ++WaitCalls;
-   uint wait=ChildCaptureApi.WaitForSingleObject(Original.Process,0);
-   if(wait==258) return;
-   if(wait!=0) { MarkUnknown();return; }
-   uint code;
-   ++ExitCodeReads;
-   if(!ChildCaptureApi.GetExitCodeProcess(Original.Process,out code)) { MarkUnknown();return; }
-   ExitCode=code;Proof.ExitObserved=true; // 259 has no special meaning after signaled wait.
+   exitObservation=new ChildCaptureExitObservation(true,null,null,false,null,null,null);
+   try {
+    uint wait=processCalls.WaitForSingleObject(Original.Process,0);
+    uint? waitError=wait==0xffffffff?processCalls.CaptureLastError():(uint?)null;
+    exitObservation=new ChildCaptureExitObservation(true,wait,waitError,false,null,null,null);
+    if(wait==258) return;
+    if(wait!=0) { MarkUnknown();return; }
+    uint code;
+    ++ExitCodeReads;
+    exitObservation=new ChildCaptureExitObservation(true,wait,waitError,true,null,null,null);
+    bool returned=processCalls.GetExitCodeProcess(Original.Process,out code);
+    uint? error=returned?(uint?)null:processCalls.CaptureLastError();
+    exitObservation=new ChildCaptureExitObservation(true,wait,waitError,true,returned,error,returned?(uint?)code:null);
+    if(!returned) { MarkUnknown();return; }
+    ExitCode=code;Proof.ExitObserved=true; // 259 has no special meaning after signaled wait.
+   } catch { MarkUnknown(); }
   }
   void ReadStep(ChildCaptureChannel channel,int index) {
    ++channel.Visits;channel.MaxGap=Math.Max(channel.MaxGap,Rounds-channel.PreviousVisit);channel.PreviousVisit=Rounds;
@@ -312,8 +333,8 @@ namespace PortableVBox {
    if(channel.Read.Proof.Unknown) MarkUnknown();
    if(channel.Read.Proof.SafeToRelease && !channel.Capture.Eof && !channel.Stopped) channel.Read.Submit(1,environment==null?4096:16);
   }
-  void Refresh() { Proof.StdoutEof=Channels[0].Capture.Eof;Proof.StderrEof=Channels[1].Capture.Eof;Proof.IoTerminal=IoTerminal; }
-  void Pump() {
+  void Refresh() { TraceComposition("Refresh");Proof.StdoutEof=Channels[0].Capture.Eof;Proof.StderrEof=Channels[1].Capture.Eof;Proof.IoTerminal=IoTerminal; }
+  internal void Pump() {
    clock.Restart();long exitedAt=-1;
    while(clock.ElapsedMilliseconds<2000 && Rounds<32768) {
     ++Rounds;int first=Rounds&1;
@@ -330,7 +351,8 @@ namespace PortableVBox {
    }
    MarkUnknown();
   }
-  void Recover() {
+  internal void Recover() {
+   TraceComposition("Recover");
    // Only known submissions may be cancelled. An unavailable return is retained.
    try {
     for(int i=0;i<slots.Length;i++) if(!slots[i].Proof.SafeToRelease && !slots[i].Proof.SubmissionUnavailable) slots[i].Cancel();
@@ -343,15 +365,16 @@ namespace PortableVBox {
     }
    } catch { MarkUnknown(); }
   }
-  void Release() {
+  internal void Release() {
+   TraceComposition("Release");
    Refresh();
-   if(releaseAttempted || nativeOutcomeUnknown || CloseUnresolved || environmentAllocation.AllocationUnknown || environmentAllocation.ReleaseUncertain || !Proof.CanRelease) return;
+   if(releaseAttempted || nativeOutcomeUnknown || CloseUnresolved || environmentAllocation.AllocationUnknown || environmentAllocation.ReleaseUncertain || !Proof.CanRelease || (fixedImage!=null && created && (!Proof.StdoutEof || !Proof.StderrEof))) return;
    releaseAttempted=true;
    try {
     if(environment!=null && !environmentAllocation.TryRelease(createState)) { MarkUnknown();return; }
     CloseParentWriters();Close(ref held,heldClose);
     for(int i=0;i<2;i++) Close(ref Channels[i].Server,Channels[i].ServerClose);
-    Close(ref Original.Thread,threadClose);Close(ref Original.Process,processClose);CloseSentinel();
+    CloseOriginal(ref Original.Thread,threadClose,false);CloseOriginal(ref Original.Process,processClose,true);CloseSentinel();
     for(int i=0;i<slots.Length;i++) if(!slots[i].Release()) { MarkUnknown();return; }
     if(attributeInitialized) { ChildCaptureApi.DeleteProcThreadAttributeList(attributes);attributeInitialized=false; }
     if(attributes!=IntPtr.Zero) { Marshal.FreeHGlobal(attributes);attributes=IntPtr.Zero; }
@@ -359,7 +382,8 @@ namespace PortableVBox {
     if(descriptor!=IntPtr.Zero) { if(PipeNative.LocalFree(descriptor)!=IntPtr.Zero) { MarkUnknown();return; } descriptor=IntPtr.Zero; }
     if(imageLease!=null) { imageLease.Dispose();imageLease=null; }
     if(evidence!=null) { evidence.Dispose();evidence=null; }
-    bool all=EnvironmentReleased && Original.Process==IntPtr.Zero && Original.Thread==IntPtr.Zero && sentinel==IntPtr.Zero && input==IntPtr.Zero && held==IntPtr.Zero &&
+    if(fixedImage!=null && !fixedImage.TryRelease()) { MarkUnknown();return; }
+    bool all=(fixedImage==null || fixedImage.Released) && EnvironmentReleased && Original.Process==IntPtr.Zero && Original.Thread==IntPtr.Zero && sentinel==IntPtr.Zero && input==IntPtr.Zero && held==IntPtr.Zero &&
      attributes==IntPtr.Zero && handleList==IntPtr.Zero && descriptor==IntPtr.Zero && imageLease==null && evidence==null && !CloseUnresolved;
     for(int i=0;i<2;i++) all=all && Channels[i].Server==IntPtr.Zero && Channels[i].Writer==IntPtr.Zero;
     for(int i=0;i<slots.Length;i++) all=all && slots[i].Released;
@@ -370,23 +394,26 @@ namespace PortableVBox {
    return Scenario==CaptureCase.Empty?Proof.ExitObserved && ExitCode==0:
     SentinelProtocol.IsExcluded(Channels[0].Capture.Retained,Channels[0].Capture.RetainedCount);
   }
-  void InspectSentinel() {
+  internal void InspectSentinel() {
+   TraceComposition("InspectSentinel");
    SentinelProbe=CapturedSentinelExcluded();
-   SentinelUnsignaled=sentinel!=IntPtr.Zero && ChildCaptureApi.WaitForSingleObject(sentinel,0)==258;
+   SentinelUnsignaled=sentinel!=IntPtr.Zero && processCalls.WaitForSingleObject(sentinel,0)==258;
    if(!SentinelProbe || !SentinelUnsignaled) MarkUnknown();
   }
   internal void Run() {
    Proof.UseOnce(); // Throws before setup/close/cancel/report on repeat.
    if(used) throw new InvalidOperationException("Already used");used=true;
+   TraceComposition("Run");
    try {
-    Prepare();
+    if(!PrepareImageOnce())return;
+    TraceComposition("PrepareTransport");flow.PrepareTransport(this);
     try { Launch(); } catch { MarkUnknown(); }
-    if(!nativeOutcomeUnknown) CloseParentWriters();
-    if(created && !nativeOutcomeUnknown) { Pump();InspectSentinel(); }
+    if(!nativeOutcomeUnknown) flow.CloseParentWriters(this);
+    if(created && !nativeOutcomeUnknown) { TraceComposition("Pump");flow.Pump(this);flow.InspectSentinel(this); }
    } catch { MarkUnknown(); }
    finally {
     Refresh();
-    if(!Proof.IoTerminal) { MarkUnknown();Recover(); }
+    if(!Proof.IoTerminal) { MarkUnknown();flow.Recover(this); }
     Release();
    }
   }

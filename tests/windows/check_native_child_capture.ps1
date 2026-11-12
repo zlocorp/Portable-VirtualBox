@@ -8,7 +8,7 @@ function Invoke-ManagedContracts {
     $managedNames=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
         'NativeChildCapture.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
         'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs',
-        'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs','NativeFixedImageIdentity.cs')
+        'NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs')
     Add-Type -Path @(Get-FixedFixtureConsumerSources $build $managedNames)
     if ([PortableVBox.NativeChildCaptureTests]::RunManaged() -ne 0) { throw 'Managed child capture contracts failed' }
     if ([PortableVBox.NativeSentinelObservationNativeTests]::RunManaged() -ne 0) { throw 'Managed sentinel native adapter contracts failed' }
@@ -34,7 +34,7 @@ try {
     $exe=Join-Path $out 'NativeChildCaptureTests.exe'
     $sources=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePipeTransportNative.cs',
         'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeSentinelObservationNativeTests.cs','NativeChildCaptureTests.cs','NativeChildCaptureNative.cs',
-        'NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs')
+        'NativeChildCaptureNativeTests.cs','NativeLaunchEnvironment.cs','NativeLaunchEnvironmentNative.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs')
     $sources=@(Get-FixedFixtureConsumerSources $build $sources)
     Compile-FixedFixtureSources $sources $exe 'PortableVBox.NativeChildCaptureNativeTests'
     Copy-FixedFixtureSibling $build $exe

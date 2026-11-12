@@ -11,7 +11,7 @@ namespace PortableVBox {
    for(int i=0;i<length;i++) hash=unchecked((hash^(byte)((i*31+seed)&255))*1099511628211UL);
    return hash;
   }
-  static void AssertCase(ChildCaptureOwner owner) {
+  internal static void AssertCase(ChildCaptureOwner owner) {
    int a=17,b=257;uint exit=0;
    switch(owner.Scenario) {
     case CaptureCase.Empty: a=0;b=0;break;

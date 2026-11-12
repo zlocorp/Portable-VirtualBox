@@ -2,6 +2,51 @@
 
 ## Status and boundary
 
+**Current source-only checkpoint:** Source/managed work for Tasks 2D–2E is
+complete. Independent whole-composition source review is complete with no open
+source findings; the checked source is suitable for separately authorized Draft
+publication and fresh exact-source acceptance CI. No new exact-source
+Windows/native execution or independent actual-artifact acceptance exists.
+
+The fixed Binary mode uses the existing owner lifecycle, one shared command
+formatter, real original-handle query/exit/close ledgers and checked image/probe
+release gates. Schema 1/file-only and schema 2/composed remain strictly separated;
+explicit validator modes enforce nullability, one-shot snapshots, sticky UNKNOWN
+and conservative Binary data/EOF/read/round accounting. These are source and
+managed proofs, not observations of native calls.
+
+The final managed/source suite ran **449 total: 442 passed, seven expected
+platform skips**. The fixed-image module ran 54 total: 53 passed, one expected
+Windows-only skip. All **41 real managed serializer rows are FAIL diagnostics**,
+with zero native pipe rounds/reads/visits and no native overlapped I/O. Plausible
+synthetic PASS records are validator fixtures only, never native evidence.
+
+Fresh exact-source Windows acceptance must still preserve the old nine capture,
+three environment and four file-only cases plus all four new composed cases,
+the unchanged full Binary assertion, strict explicit validator modes, actual
+Windows PowerShell 5.1/.NET Framework >=4.8 host/Unicode comparison and observed
+completion within the unchanged six-minute native job budget. Source review does
+not close those gates. This harmless test-only fixture adds no arbitrary launcher,
+production wiring/image admission or recovery authority. It supplies no user
+Windows 10/11, UAC, VM, driver/service, workstation, merge or release acceptance.
+
+## Historical SDS prerequisite checkpoint fc6abad
+
+At `fc6abadde89feda0c86a741a4e21fe2afabd0976`, the changed-source SDS
+diagnostic/native prerequisite was independently accepted; test-only Task 2D could
+resume but was still unimplemented. Task 2E/native schema-2 integration and
+whole-composition review were still required at that source. The
+[SDS checkpoint](../EXECUTION-2026-11-12-sds-observation-diagnostics.md) records
+12 natural attempt-1 successes, actual PS5.1 fixtures, unchanged native nine/three/
+four suites and the real Framework bridge, 16 real diagnostic pairs and all nine
+payload continuations. That later decision did not explain or erase 6a164db's
+failed first Prepare, zero completed cases, unknown cause or absent final teardown
+proof. Harmless fixture development has its own source-specific prerequisites and
+grants no production recovery authority. All production, user-Windows, merge and
+release limits remain in force.
+
+## Historical Task 1 and sentinel prerequisites
+
 Task 1 is accepted as a test-only file-observation stage at source
 `33447ae2ff048230675c05c72509857d252fceee`. Independent review verified actual
 native PR observations at synthetic merge
@@ -38,7 +83,7 @@ production changes, signatures, elevation, drivers, services, security settings,
 user's Windows experiments, merge or release. Preserve the nine baseline cases,
 three environment cases, their assertions and their separate evidence schemas.
 
-## Accepted build/path checkpoint 98bec8f
+## Historical accepted build/path checkpoint 98bec8f
 
 Tasks **2A–2B** are independently accepted at
 [`98bec8f6fb035b90156b02fec8c63e9278deb010`](https://github.com/zlocorp/Portable-VirtualBox/commit/98bec8f6fb035b90156b02fec8c63e9278deb010),
@@ -58,13 +103,14 @@ The host is Windows Server 2022, not user Windows 10/11. The earlier local
 hosted 423/7. See the [execution record](../EXECUTION-2026-11-11-fixed-fixture-build-paths.md)
 for exact checkouts, actual bridge output, full inventory and artifact digests.
 
-This accepts only the build/path prerequisite for Task 2C. Tasks **2C–2E remain
-unfinished**. The reusable path-comparison status guard is implemented, but its
-actual composed-artifact validator integration remains **Task 2E**. No schema-2
-composition, production lifetime repair or release/workstation acceptance follows.
+At that historical checkpoint only the build/path prerequisite for Task 2C was
+accepted; Tasks **2C–2E were unfinished**. The reusable path-comparison status
+guard was implemented, but its actual composed-artifact validator integration
+was still deferred to **Task 2E**. No schema-2 composition, production lifetime
+repair or release/workstation acceptance followed from that checkpoint.
 Later source changes require their own evidence; this record cannot certify them.
 
-## Partial ownership checkpoint 6a164db; composition paused
+## Historical partial ownership checkpoint 6a164db; composition paused
 
 Task 2C's source implementation and limited native/build proof are independently
 accepted at `6a164dbdc14bf5d4d6ddadb072d7f7586f8560ff`, tree
@@ -85,12 +131,15 @@ or final data-preservation result; initial false proof fields do not prove data
 loss. The underlying cause is unknown. Existing ambiguous-SDS partial-recovery
 refusal remains mandatory; job teardown is not cleanup proof.
 
-**The overall checkpoint is blocked and Task 2D is paused.** This accepts only
-2C source/limited proof, not the downstream launch binding/process integration.
-Tasks 2D/2E remain unfinished, including actual schema-2 composed-validator and
-comparison-status-guard integration. The binding requirements below remain the
-future implementation contract; they are not descriptions of completed native
-composition. Historical accepted records above remain unchanged.
+**At 6a164db the overall checkpoint was blocked and Task 2D was paused.** That
+record accepts only 2C source/limited proof, not downstream launch binding/process
+integration. The later historical fc6abad decision above permitted test-only 2D
+to resume without rewriting the failed run or claiming a causal repair. Tasks
+2D/2E were unfinished at those sources. Their current source/managed completion,
+including actual schema-2 validator/status-guard integration, does not establish
+native composition acceptance or repair the historical failure. The requirements
+below remain binding on the implementation and pending native acceptance.
+Historical accepted records above remain unchanged.
 
 ## Approaches and recommendation
 
@@ -479,9 +528,10 @@ positive launch. No exploit, race or hostile replacement reproduction.
 ## Separate artifact contract (version 1)
 
 The accepted Task 1 schema remains version 1 and accepts only `stage=file-only`.
-The proposed Task 2 schema below is separate version 2, pinned to `stage=composed`;
-it remains unavailable until independent composition preflight and implementation
-review. Contributions remain on the Draft branch.
+The implemented Task 2 schema below is separate version 2, pinned to
+`stage=composed`. Its source/managed proof and independent source review are
+complete; fresh exact-source native artifacts and their acceptance remain pending.
+Contributions remain on the Draft branch.
 
 `native-fixed-image-observation.jsonl` is UTF-8 text, at most five records, 16 KiB
 per line including newline and 128 KiB total. Each record has exact keys; reject
@@ -512,8 +562,8 @@ Case order is exactly `matching-image`, `digest-mismatch`, `size-mismatch`,
   `close_state`. Open states/errors follow the rules above.
 - `close_state`: `not-opened`, `not-entered`, `return-unknown`, `returned-failure`
   or `returned-success`; applies to the exact owned image/probe handle.
-- `process_observation`: always null in file-only schema 1. The unimplemented
-  composed observation is specified separately below, not accepted through this key.
+- `process_observation`: always null in file-only schema 1. The composed
+  observation is specified separately below and cannot be accepted in schema 1.
 
 Unavailable means JSON null, never empty string, zero, expected-value substitution
 or a made-up observation. Zero is valid only where it is an actual count/result.
@@ -558,7 +608,7 @@ Task 1 includes narrowly scoped CI path triggers, file-only execution and this
 separate bounded artifact. Independently reviewed exact-source Windows file-only
 results are a prerequisite to beginning Task 2, not merely its final acceptance.
 
-## Proposed composed evidence (schema 2, stage=composed)
+## Implemented composed evidence contract (schema 2, stage=composed)
 
 Keep the same separate filename, four-case order, <=5 records, <=16 KiB UTF-8 per
 line and <=128 KiB total. Retain all schema-1 file/probe field names and meanings,
@@ -659,6 +709,24 @@ retained bytes, terminal/released connect/read slots, fair visits equal to round
 with max gap <=1, and second Run refusal with unchanged rounds/release. The composed
 validator checks the corresponding capture fields as well as image/query evidence.
 Baseline nine-case and three-environment native assertions/schemas remain intact.
+
+PASS read accounting is conservative, not a fixed-count oracle. For each channel,
+let B be captured bytes, D=ceil(B/4096), I=issued, T=terminal, K=pending+immediate
+and R=rounds. Require K<=I, K>=D, T=I, T>=D+1, I<=R-1, visits=R and max gap=1;
+require 1<=wait_calls<=R and exactly one exit-code read. Data results hold at most
+4096 bytes, EOF is separate, and each submitted read needs a later fair visit.
+Partial/zero-byte data results may increase counts. Synchronous FALSE/error109
+EOF increments neither pending nor immediate, so do not require K=I. Apply these
+full-PASS bounds only to PASS, not indiscriminately to partial FAIL diagnostics.
+Every present capture, including FAIL, requires the one-shot snapshot fact;
+observed capture faults must retain sticky UNKNOWN even after successful release.
+
+Every image CloseHandle entry, including failed or unavailable return, requires
+known acquisition and resolved probes, independently of aggregate release labels.
+After valid successful creation it additionally requires observed original-handle
+exit, both EOFs, terminal I/O and released read/connect slots on both channels.
+Known precreate refusal or known FALSE-create may close only after their applicable
+existing gates resolve. Aggregate retention never excuses speculative close entry.
 
 Schema-2 summary has the same exact summary keys as schema 1, with schema=2 and
 stage=composed. PASS still requires exactly four ordered passing cases and no stop

@@ -43,6 +43,11 @@ on:
       - tests/test_native_launch_environment_contract.py
       - tests/windows/NativeFixedFixtureBuild.ps1
       - tests/windows/NativeFixedImageIdentity.cs
+      - tests/windows/NativeFixedFixtureCommand.cs
+      - tests/windows/NativeFixedImageComposition.cs
+      - tests/windows/NativeFixedImageCompositionTests.cs
+      - tests/windows/NativeFixedImageCompositionNativeTests.cs
+      - tests/windows/check_native_fixed_image_composition.ps1
       - tests/windows/NativeFixedImagePath.cs
       - tests/windows/check_native_fixed_image_paths.ps1
       - tests/windows/NativeFixedImageIdentityTests.cs
@@ -196,5 +201,17 @@ jobs:
         with:
           name: native-fixed-image-observation-text-only
           path: ${{ runner.temp }}/pvbox-native-fixed-image-evidence/native-fixed-image-observation.jsonl
+          if-no-files-found: error
+          retention-days: 7
+      - name: Compose fixed image proof with full Binary capture (no authority)
+        id: native_fixed_image_composition
+        shell: powershell
+        run: ./tests/windows/check_native_fixed_image_composition.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-fixed-composition-evidence')
+      - name: Store bounded composed fixed image observations (text only)
+        if: always() && steps.native_fixed_image_composition.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-fixed-image-composition-text-only
+          path: ${{ runner.temp }}/pvbox-native-fixed-composition-evidence/native-fixed-image-observation.jsonl
           if-no-files-found: error
           retention-days: 7

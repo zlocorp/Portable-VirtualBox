@@ -8,7 +8,7 @@ $sourceNames=@('NativePipeTransport.cs','NativePipeTransportTests.cs','NativePip
     'NativeChildCapture.cs','NativeSentinelObservation.cs','NativeSentinelObservationNative.cs','NativeChildCaptureNative.cs','NativeChildCaptureNativeTests.cs',
     'NativeLaunchEnvironment.cs','NativeLaunchEnvironmentTests.cs','NativeLaunchEnvironmentNative.cs',
     'NativeLaunchEnvironmentPolicyTests.cs','NativeLaunchEnvironmentObservation.cs',
-    'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs','NativeFixedImageIdentity.cs')
+    'NativeLaunchEnvironmentObservationTests.cs','NativeLaunchEnvironmentNativeTests.cs','NativeFixedImageIdentity.cs','NativeFixedFixtureCommand.cs','NativeFixedImageComposition.cs')
 function Invoke-ManagedContracts {
     Add-Type -Path @(Get-FixedFixtureConsumerSources $build $sourceNames)
     if ([PortableVBox.NativeLaunchEnvironmentNativeTests]::RunManaged() -ne 0) { throw 'Managed environment contracts failed' }

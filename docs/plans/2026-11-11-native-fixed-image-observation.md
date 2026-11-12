@@ -3,9 +3,13 @@
 > Execute each stage with TDD and independent review; steps use checkboxes.
 > Keep contributions on the Draft branch and review each stage before its successor.
 > Task 1 and Tasks 2A–2B are test-only accepted; Task 2C source/limited proof is accepted.
-> The 6a164db overall checkpoint is blocked; Task 2D is paused and 2D–2E remain unfinished.
-> This document authorizes no new implementation, publication,
-> production integration, merge, release or primary-host execution.
+> Current 2D/2E source/managed work and independent whole-composition source review
+> are complete, with no open source findings. Fresh exact-source Windows/native
+> execution and independent actual-artifact acceptance remain pending.
+> The historical fc6abad prerequisites and failed/blocked 6a164db checkpoint,
+> including its pause, remain source-specific records.
+> Draft publication and hosted native execution require separate authorization.
+> No production integration, merge, release or primary-host execution follows.
 
 **Goal:** Observe a fixed harmless build image and refuse unexpected bytes before
 native creation, without treating matching bytes as privileged admission.
@@ -111,7 +115,7 @@ context, not pass raw paths or handles into a new launcher.
   This stage is independently useful without launching a process or modifying
   ChildCaptureOwner; publish only through a separately authorized branch process.
 
-## Task 2: Build/path accepted; composition unfinished
+## Task 2: Source/managed composition complete; native acceptance pending
 
 **Historical gate before 2A:** Task 1's accepted historical record is retained below. The
 successor `519056432b4d9bd045140d2ba2bbe924e5c135e9` sentinel native artifacts have
@@ -128,9 +132,10 @@ host-frame correction reviews are complete. The actual changed-source native
 build/path prerequisite is accepted in the
 [execution record](../EXECUTION-2026-11-11-fixed-fixture-build-paths.md).
 At that historical checkpoint only 2A–2B were accepted. The later 2C source/limited
-proof is recorded below; the overall checkpoint is blocked and 2D is paused.
-The schema-independent path-comparison status guard does not yet enforce actual
-composed artifacts; that integration remains 2E.
+proof and historical 6a164db blocked/pause decision are recorded below. The
+historical fc6abad checkpoint permitted test-only 2D to resume. The current
+source-only checkpoint below records completed 2D/2E source work, including actual
+composed-validator/status-guard integration, not fresh Windows/native acceptance.
 
 ### Shared files and interface preflight
 
@@ -254,9 +259,11 @@ overall UNKNOWN); every PASS summary is rejected even with require_pass=False.
 ### Task 2C: Make file ownership exclusively transferable
 
 **Status at 6a164db:** Source implementation and limited native/build proof accepted;
-overall checkpoint blocked by the failed payload-continuation Prepare. Task 2D
-is paused. The checked items below cover source and managed recording-call
-behavior plus preserved standalone native file/probe forwarding, not completed
+overall checkpoint blocked by the failed payload-continuation Prepare, with
+Task 2D paused at that time. The later historical fc6abad prerequisite decision
+below allowed test-only 2D to resume. The checked 2C items cover source and
+managed recording-call behavior plus preserved standalone native file/probe
+forwarding, not completed
 native composition. See the [partial execution record](../EXECUTION-2026-11-11-exclusive-image-ownership-partial.md).
 
 **Files:** Modify `NativeFixedImageIdentity.cs`, `NativeFixedImageIdentityTests.cs`,
@@ -310,6 +317,13 @@ the forwarding adapter without transferring the image into a process owner.
 
 ### Task 2D: Compose the existing Binary owner and real decisions
 
+**Current source/managed status:** All six items below are complete and covered
+by independent whole-composition source review. Checked items prove source and
+actual-method recording behavior only, not native CreateProcess/query/exit,
+overlapped I/O or CloseHandle results. Fresh Windows/native acceptance remains
+pending under 2E; this status does not alter the historical fc6abad prerequisites
+or 6a164db failure/pause.
+
 **Files:** Create `NativeFixedImageComposition.cs`,
 `NativeFixedImageCompositionTests.cs`, `NativeFixedFixtureCommand.cs`; modify
 `NativeFixedImageIdentity.cs` for deferred lease command binding,
@@ -339,40 +353,46 @@ bytes are verified and fed through fake ReadFile, never a digest override.
 Default constructors always install native adapters. The constructor claims last,
 without native calls; legacy constructor signatures/allowed scenarios stay closed.
 
-- [ ] Write failing `RealConstructorClaimsOnce`, `RealRunRefusesBeforeTransportOrCreate`
+- [x] Write failing `RealConstructorClaimsOnce`, `RealRunRefusesBeforeTransportOrCreate`
   (missing/size/digest/probe failures), and `RealRunIsOneShot`. Assert zero
   Proof.BeforeCreate/CreateCalls/query entries on every preflight refusal, no
   transport setup, and actual checked image resolution where permitted.
-- [ ] Write `RealLaunchUsesFixedBindingAndOriginalHandles`: same existing create
+- [x] Write `RealLaunchUsesFixedBindingAndOriginalHandles`: same existing create
   method/flags/allowlist, one create, no second FileStream lease in composed mode,
   exact query Original.Process/flags 0/capacity 32768, never thread/PID substitute.
   Add `SharedCommandFormatterPreservesLegacyBytes`: all existing scenario strings,
   quoted paths/spaces, invariant decimal candidates and tokens produce byte-for-byte
   the original inline command; the composed Binary binding calls that same formatter.
   Assert there is no second formatter or temporary 2C command-construction body.
-- [ ] Write `QueryDiagnosticFailureStillClosesWritersPumpsAndReleases` for FALSE,
+- [x] Write `QueryDiagnosticFailureStillClosesWritersPumpsAndReleases` for FALSE,
   unavailable, malformed/truncated/unsupported and valid-but-different paths.
   The recording flow feeds capture/EOF events and invokes real exit observation;
   writer close, sentinel inspection (including injected wait) and recovery forward
   to the real methods, with zero real transport/allocation handles;
   assert the actual Run trace continues through writer close, pump, sentinel,
   Refresh and Release, with sticky UNKNOWN even after successful image release.
-- [ ] Write `UnknownCreateAndInvalidOriginalsRetainWithoutQuery`,
+- [x] Write `UnknownCreateAndInvalidOriginalsRetainWithoutQuery`,
   `UnavailableExitDoesNotFabricateWaitZero`, `ImageCloseFailureRetainsWholeOwner`,
   and `MixedNativeAndRecordingDomainsAreRejected`. Assert exact unavailable states,
   actual wait returns including 258/0xffffffff, no speculative close/retry, no fake
   process close through PipeNative, and no synthetic pipe/unmanaged-slot handles.
-- [ ] Witness failures, implement shared decisions/adapters and immutable ledgers.
+- [x] Witness failures, implement shared decisions/adapters and immutable ledgers.
   The flow delegates side effects only; existing Run owns every branch and existing
   Release enforces every old gate plus both EOFs for known-success composed
   launches before adding checked image release. No duplicate
   launcher/lifecycle model, PID reopen, CREATE_SUSPENDED or production change.
-- [ ] Run the three Python modules plus managed composition tests with genuine
+- [x] Run the three Python modules plus managed composition tests with genuine
   expectations. Review every reachable downstream native boundary for recording
   handles. Audit a known successful query fault separately from uncertain create;
   refuse 2E if either can bypass drainage or close an unresolved acquisition.
 
 ### Task 2E: Prove composed evidence and full Binary behavior
+
+**Current source/managed status:** The first five items are complete, including
+actual schema-2 validator/status-guard integration. Independent whole-composition
+source review is complete with no open source findings. Those checks are source/
+managed proof only. The last two items remain unchecked: no new exact-source
+Windows/native execution or independent actual-artifact acceptance exists.
 
 **Files:** Create `NativeFixedImageCompositionNativeTests.cs`,
 `check_native_fixed_image_composition.ps1`; modify `NativeFixedImageIdentity.cs`
@@ -392,7 +412,7 @@ three assertion sets and schema-1 file-only fields.
 old runner pins file-only. New native Main has no arguments and a compile-time
 allowlisted case constant; new runner accepts ManagedOnly/EvidenceDirectory only.
 
-- [ ] Write failing `test_composed_stage_rejects_file_only_and_mixed_schema`,
+- [x] Write failing `test_composed_stage_rejects_file_only_and_mixed_schema`,
   `test_composed_failure_matrix_nullability_and_owner_consistency`,
   `test_composed_retained_owner_stops_prefix`, and
   `test_composed_binary_assertions_are_complete`. Use the real C# serializer on
@@ -401,35 +421,37 @@ allowlisted case constant; new runner accepts ManagedOnly/EvidenceDirectory only
   create_calls>1, query-after-zero-create, unavailable exact comparison with a PASS
   summary even when require_pass=False, released image with unknown creation,
   owner-released with image retained, and continued cases after a retained owner.
-- [ ] Witness failures, implement the separate exact schema and strict stage pin.
+- [x] Witness failures, implement the separate exact schema and strict stage pin.
   Every design-matrix row gets a managed serialized diagnostic test; only the
   four expected native cases may PASS. Unavailable values stay null. Neither
   schema-1 acceptance nor synthetic records count as actual composed evidence.
-- [ ] Implement four isolated fixed harness builds using the shared pristine
+- [x] Implement four isolated fixed harness builds using the shared pristine
   expectation. Only after all builds, prepare matching/same-size-corrupt/appended/
   absent copies in that order; never execute either corrupt copy. Each Main roots
   the real owner before Run, checks the expected refusal or calls unchanged full
   Binary AssertCase, reports snapshots and keeps unresolved roots. No unconditional
   transferred-image finally release. Exit 2 means any composed/file/probe owner
   remains retained; runner stops later cases and emits the attempted FAIL prefix.
-- [ ] Keep old native nine capture/three environment/four file-only suites intact.
+- [x] Keep old native nine capture/three environment/four file-only suites intact.
   The positive composed assertion must include the design's exact Binary lengths,
   hashes, PVC2 exclusion, independent sentinel, both EOFs, terminal/released slots,
   fairness, exit 0, one create and one-shot refusal, plus matching image query and
   checked file release. No reduced assertion helper or UNKNOWN success exception.
-- [ ] Run the full managed/source suite, active-tree/whitespace checks, C# 5/x64
-  warnings-as-errors and PowerShell/workflow parse checks against the final tree.
+- [x] Run the full managed/source suite, active-tree/whitespace checks, C# 5/x64
+  warnings-as-errors and PowerShell/workflow parse checks against the final implementation tree.
   Confirm new runner/helper scripts stay ASCII-safe for Windows PowerShell 5.1.
 - [ ] On separately permitted disposable/hosted Windows, execute all four runners
   (old capture/environment/file-only plus new composed), preserve actual logs and
   bounded artifacts, and validate the exact-source records in their explicit modes.
   Record actual runtime/path-comparison host. Verify the unchanged six-minute
   workflow budget from observed execution; do not raise it or drop gates silently.
-- [ ] Obtain independent code and actual exact-source artifact review, including
+- [ ] Obtain independent actual exact-source artifact review, including
   original-handle query, all four new cases, old nine/three/four suites, zero-create
   negatives, full Binary checks and every retained-owner failure contract.
-  Native evidence stays pending until observed; publication is a separate branch
-  authorization. No merge/release or user-host safety claim follows from this work.
+  Independent code/source review is complete; this checkbox remains pending for
+  actual Windows artifacts. Native evidence stays pending until observed;
+  publication is a separate branch authorization. No merge/release or user-host
+  safety claim follows from this work.
 
 **Managed commands for the subtask cycles:**
 
@@ -440,9 +462,38 @@ allowlisted case constant; new runner accepts ManagedOnly/EvidenceDirectory only
   and the repository's active-tree gate. A failure from unavailable official refs/
   compiler is a prerequisite blocker, not the required TDD behavioral failure.
 
-During eventual implementation, each 2A-2E cycle requires independent review before
-its successor. Contributions remain on the Draft branch. This plan does not itself
-advance implementation, publication or native execution past their separate gates.
+The completed source/managed stages do not advance native acceptance past its
+separate execution/artifact gates. Contributions remain on the Draft branch;
+publication and hosted execution require their own authorization.
+
+## Current source-only composition checkpoint; native acceptance pending
+
+The checked test-only implementation composes fixed Binary mode into the existing
+owner lifecycle, with one shared command formatter and real original-handle
+query/exit/close ledgers. Strict file-only/schema-1 and composed/schema-2 modes
+validate exact states/nullability, every image-close entry's prerequisites,
+one-shot snapshots and sticky UNKNOWN. Conservative Binary accounting requires
+enough data and separate EOF completions plus later fair read visits; it does not
+invent native activity or require pending+immediate to equal issued.
+
+The final managed/source suite ran **449 total: 442 passed, seven expected
+platform skips**. The covering fixed-image module passed 53 of 54 with one expected
+Windows-only skip. All **41 real managed serializer rows remain FAIL diagnostics**,
+with zero native pipe rounds/reads/visits and no native overlapped I/O. Plausible
+synthetic PASS records are validator fixtures only. Independent whole-composition
+source review is complete with no open source findings; this supports separately
+authorized Draft publication and fresh exact-source acceptance CI, not native
+acceptance. No new exact-source Windows/native CI has run.
+
+Next gates are actual old nine capture/three environment/four file-only and four
+new composed cases, unchanged full Binary checks, strict explicit validator modes,
+actual Windows PowerShell 5.1/.NET Framework >=4.8 host/Unicode comparison and
+observed completion within the unchanged six-minute native job budget, followed by
+independent actual-artifact acceptance. No arbitrary launcher, production wiring/
+image admission or recovery authority is added. User Windows 10/11, UAC, VM,
+driver/service, workstation, merge and release acceptance remain outside this
+harmless fixture checkpoint. Earlier source successes do not explain or repair
+the unknown historical 6a164db failure or supply its absent teardown proof.
 
 ## Historical Task 1 verification checkpoint
 
@@ -463,9 +514,10 @@ unimplemented and still required separate composition review and numeric sentine
 diagnostic hardening. The exact-source file-only prerequisite is satisfied for Task 1; it is not whole-product readiness, privileged admission or release
 approval.
 
-Task 1 validators accept only schema=1/stage=file-only. Schema=2/stage=composed
-remains unavailable until the controller assigns the separately reviewed Task 2
-implementation and that implementation is completed.
+At this historical checkpoint Task 1 validators accepted only schema=1/
+stage=file-only; schema=2/stage=composed was unavailable until separately reviewed
+Task 2 implementation. Current source integration is recorded above, not native
+acceptance retroactively attributed to this source.
 
 ## Historical source 5190564 planning checkpoint
 
@@ -485,7 +537,7 @@ resolves planning preflight only. Independent composition review remains require
 before the next implementation stage. Contributions remain on the Draft branch;
 native execution/publication and exact-source acceptance retain separate review gates.
 
-## Accepted 98bec8f build/path checkpoint; next gate 2C
+## Historical accepted 98bec8f build/path checkpoint; next gate then 2C
 
 Published source
 [`98bec8f6fb035b90156b02fec8c63e9278deb010`](https://github.com/zlocorp/Portable-VirtualBox/commit/98bec8f6fb035b90156b02fec8c63e9278deb010),
@@ -511,14 +563,14 @@ pass **423 tests/seven skips**, including both new host-frame regressions and
 successful pinned net48 provisioning. Exact log proof, ZIP hashes and the full
 run ledger are in the [execution record](../EXECUTION-2026-11-11-fixed-fixture-build-paths.md).
 
-Only Tasks **2A–2B** are accepted here. Tasks **2C–2E remain unfinished**; their
-checkboxes are unchanged. Task 2E must integrate the reusable path-comparison
-guard into the actual stage-aware composed-artifact validator. Schema 1 remains
-file-only and cannot certify schema 2. Later ownership/composition edits require
-independent review and their own changed-source native evidence. No new primary-host,
+Only Tasks **2A–2B** were accepted at that source. Tasks **2C–2E were unfinished**;
+their checkboxes were then unchanged. Task 2E still needed to integrate the reusable
+path-comparison guard into the actual stage-aware composed-artifact validator.
+Schema 1 remains file-only and cannot certify schema 2. Later ownership/composition
+edits require independent review and their own changed-source native evidence. No new primary-host,
 production, merge or release permission is conferred by this checkpoint.
 
-## Partial 6a164db ownership checkpoint; 2D paused
+## Historical partial 6a164db ownership checkpoint; 2D paused
 
 Published source `6a164dbdc14bf5d4d6ddadb072d7f7586f8560ff`, tree
 `e8ebd3522f130e7c818148d32136a65112d97e92`, satisfies the reviewed 2C source and
@@ -538,9 +590,50 @@ incomplete and zero continuation cases complete. No verified teardown or final
 data-preservation result exists. The underlying cause is unknown; ambiguous
 partial recovery remains refused. Do not infer cleanup from job teardown.
 
-**The overall checkpoint remains blocked; Task 2D is paused.** No later success
-may overwrite this failure. Resolve the diagnosis and complete independent review
-before the next implementation stage. Contributions remain on the Draft branch. Task 2D command/binding/process work and Task 2E
-actual schema-2 composed-validator/status-guard/native integration remain unchecked.
+**At 6a164db the overall checkpoint remained blocked and Task 2D was paused.** No
+later success may overwrite this failure or claim its unknown cause resolved.
+The later fc6abad decision below accepted new source-specific prerequisites and
+permitted resuming harmless test-only 2D. At those historical sources Task 2D
+command/binding/process work and Task 2E schema-2 validator/status-guard/native
+integration were unchecked. Current source/managed progress above is separate
+from still-pending native acceptance. Contributions remain on the Draft branch.
 No production, primary-host, merge or release authority follows. See the
 [partial execution record](../EXECUTION-2026-11-11-exclusive-image-ownership-partial.md).
+
+## Historical fc6abad SDS prerequisite checkpoint; test-only 2D could resume
+
+Source `fc6abadde89feda0c86a741a4e21fe2afabd0976`, tree
+`6fd4627bcef4c3769858c29aa5c60323e2479fdd`, has accepted independent source,
+native/build, system/payload and unsigned ALPHA file/build reviews. All twelve
+natural workflows pass on attempt 1 (nine push, three PR), without manual dispatch,
+reruns or assertion weakening. Native push checks out the head; PR checks out
+same-tree synthetic merge `55d3cc09167c0da68c50082deac37d9ac998fb39`.
+
+Actual Windows PowerShell 5.1 managed fixtures test the original bodies with
+substituted effects, 47 Prepare cases, bounded renderer/writer and collector
+refusals. Both native runs retain nine capture/three environment/four standalone
+file-only suites and execute the real Framework bridge: Release 533509, minimum
+528040/Framework >=4.8, on Server 2022 rather than Windows 10/11. Both Linux full
+suites run 430 total/423 passed/seven skipped. Real protected-worker output has
+16 diagnostic pairs with measured SDS exit 0; all nine payload continuations
+complete with preserved original evidence and VM sentinel. Registry comparison
+against the requested path is not launched-image identity, and no new system
+query, retry, cleanup authority or production lifetime repair is introduced.
+Exact runs, artifacts, package resources/pins and remaining limits are in the
+[SDS execution record](../EXECUTION-2026-11-12-sds-observation-diagnostics.md).
+
+**At fc6abad the changed-source diagnostic/native prerequisite was accepted;
+test-only Task 2D could resume and was still unimplemented.** That next-stage
+ruling did not rewrite the earlier audits' pause or the 6a164db failure. Harmless
+fixture work could proceed on its own reviewed prerequisites while the historical
+registration cause remained unknown and ambiguous production recovery stayed
+refused. Task 2D implementation/review and Task 2E native composition, actual
+schema-2 validator/status-guard integration and whole-composition review were
+still required then; all 2D/2E checkboxes were unchecked at that source. Current
+checkboxes above record later source/managed proof only. No production integration,
+user-Windows, merge or release authority follows. A subsequent review of the six
+captured launcher PNGs found no blocking clipping/overlap/Cyrillic defect, with
+byte-identical Russian returns and 16 actually measured Button captions per view
+(25 JSON controls total). That narrow visual result is not workstation/DPI/Oracle/
+UAC/portability acceptance; two minor wording suggestions remain unimplemented.
+ALPHA packaging is not runtime acceptance.
