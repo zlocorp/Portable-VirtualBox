@@ -18,15 +18,40 @@ namespace PortableVBox {
    info.EnvironmentVariables["TEMP"]=Path.GetTempPath();info.EnvironmentVariables["TMP"]=Path.GetTempPath();
    return info;
   }
+  // Bounded diagnostics of generated fixture output only, not caller data.
+  static string Units(string text,int start,int count) {
+   var result=new StringBuilder();
+   for(int i=start;i<Math.Min(text.Length,start+count);i++)result.Append(((int)text[i]).ToString("X4")).Append(' ');
+   return result.ToString();
+  }
+  static void Describe(string label,string text,string expected) {
+   int mismatch=0;while(mismatch<text.Length&&mismatch<expected.Length&&text[mismatch]==expected[mismatch])mismatch++;
+   Console.WriteLine(label+" length="+text.Length+" expected="+expected.Length+" firstDifference="+mismatch);
+   Console.WriteLine(label+" firstUnits="+Units(text,0,128));
+   Console.WriteLine(label+" lastUnits="+Units(text,Math.Max(0,text.Length-128),128));
+  }
   public static int Main() {
    Assert(Environment.OSVersion.Platform==PlatformID.Win32NT&&IntPtr.Size==8,"Windows x64 required");
    Console.OutputEncoding=new UTF8Encoding(false);
    const string encoding="[Console]::OutputEncoding=New-Object Text.UTF8Encoding($false);";
    const string large=encoding+"[Console]::Out.Write(('a'*180000)+'Привет 世界');[Console]::Error.Write(('b'*190000)+'Ошибка 世界');exit 259";
+   string expectedOut=new string('a',180000)+"Привет 世界",expectedError=new string('b',190000)+"Ошибка 世界";
+   string baselineOut,baselineError;
+   // Comparison only: former managed launch transport with the identical closed
+   // harmless command/environment. It does not decide whether native is accepted.
+   using(var baseline=new Process {StartInfo=Fixture(large)}) {
+    baseline.Start();var output=baseline.StandardOutput.ReadToEndAsync();var errors=baseline.StandardError.ReadToEndAsync();
+    baseline.WaitForExit();baselineOut=output.GetAwaiter().GetResult();baselineError=errors.GetAwaiter().GetResult();
+    Console.WriteLine("BASELINE exit="+baseline.ExitCode+" readerEncoding="+Console.OutputEncoding.CodePage);
+   }
+   Describe("BASELINE stdout",baselineOut,expectedOut);Describe("BASELINE stderr",baselineError,expectedError);
    using(var owner=FixedEffectWorker.Run(Fixture(large))) {
     Assert(owner.WithinDeadline&&owner.ExitCodeKnown&&owner.ExitCode==259,"Measured exit 259 is not STILL_ACTIVE");owner.VerifyImageObservation();
-    Assert(owner.StandardOutput.GetAwaiter().GetResult()==new string('a',180000)+"Привет 世界","Full stdout/Unicode changed");
-    Assert(owner.StandardError.GetAwaiter().GetResult()==new string('b',190000)+"Ошибка 世界","Full stderr/Unicode changed");
+    string output=owner.StandardOutput.GetAwaiter().GetResult(),errors=owner.StandardError.GetAwaiter().GetResult();
+    Describe("NATIVE stdout",output,expectedOut);Describe("NATIVE stderr",errors,expectedError);
+    Console.WriteLine("BASELINE_NATIVE exact stdout="+(baselineOut==output)+" stderr="+(baselineError==errors));
+    Assert(output==expectedOut,"Full stdout/Unicode changed");
+    Assert(errors==expectedError,"Full stderr/Unicode changed");
    }
    Console.WriteLine("NATIVE full-output Unicode both-streams exit-259 PASS");
    var invalid=Fixture("exit 0");invalid.WorkingDirectory=Path.Combine(Path.GetTempPath(),"pvbox-missing-"+Guid.NewGuid().ToString("N"));
