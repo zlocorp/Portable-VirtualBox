@@ -60,6 +60,24 @@ class LauncherLocalizations(unittest.TestCase):
                 en = re.search(r'(?m)^\s*Return "([^"]+)"', body).group(1)
                 self.assertNotEqual(ru, en)
 
+    def test_russian_guest_process_caption_explains_vm_window_modes(self):
+        cases = case_segments(function_body(I18N, "_LI"))
+        body = cases["diag.guest_processes"]
+        ru = re.search(r'If \$ru Then Return "([^"]+)"', body).group(1)
+        en = re.search(r'(?m)^\s*Return "([^"]+)"', body).group(1)
+        self.assertEqual(ru, "Процессы ВМ (с окном / без окна): ",
+                         "Explain guest VM modes, not the Manager window; keep the count separator")
+        self.assertEqual(en, "VM processes (GUI/headless): ")
+
+    def test_russian_backup_hint_excludes_disks_outside_data_folder(self):
+        cases = case_segments(function_body(I18N, "_LI"))
+        body = cases["backup.hint"]
+        ru = re.search(r'If \$ru Then Return "([^"]+)"', body).group(1)
+        en = re.search(r'(?m)^\s*Return "([^"]+)"', body).group(1)
+        self.assertEqual(ru, "Копируется только папка data. Диски ВМ вне data не включены.",
+                         "The exclusion is the data-folder boundary, not physically external disks")
+        self.assertEqual(en, "Backs up data only. VM disks outside data are not included.")
+
     def test_preflight_blockers_have_russian_translations(self):
         section = function_body(PREFLIGHT, "_PortablePreflightBlocker")
         other = function_body(PREFLIGHT, "_PortableReadOnlyPreflight")
