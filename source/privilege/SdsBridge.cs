@@ -47,6 +47,22 @@ namespace PortableVBox {
    else if(operation==SdsOperation.UnregisterPartial){if(seconds>=10&&seconds<=75)return;}
    throw new InvalidOperationException("Unknown SDS operation/deadline");
   }
+  static string ModeToken(string value){return value=="CI"||value=="ALPHA"?value:(value==null?"missing":"unknown");}
+  static string Bit(bool value){return value?"true":"false";}
+  // Exact existing admission predicates, factored only to identify the failing
+  // comparison. Never include input paths/names or arbitrary environment text.
+  static string OriginFailure(string leaf,string codeLeaf,string storeParent,string sessionName,string expectedStore,string expectedMode,string currentMode,bool commonFolderEmpty,bool programDataMatchesKnownFolder){
+   bool leafMatch=Equal(leaf,BridgeName),codeMatch=Equal(codeLeaf,"code"),storeMatch=Equal(storeParent,expectedStore);
+   bool sessionMatch=Regex.IsMatch(sessionName,"\\Apvbox-manager-[1-9][0-9]*-[1-9][0-9]*\\z");
+   if(leafMatch&&codeMatch&&storeMatch&&sessionMatch)return null;
+   return "Untrusted fixed SDS assembly origin: leaf_match="+Bit(leafMatch)+";code_match="+Bit(codeMatch)+
+    ";store_parent_match="+Bit(storeMatch)+";session_name_match="+Bit(sessionMatch)+
+    ";expected_mode="+ModeToken(expectedMode)+";current_mode="+ModeToken(currentMode)+
+    ";leaf_length="+leaf.Length.ToString(CultureInfo.InvariantCulture)+";code_length="+codeLeaf.Length.ToString(CultureInfo.InvariantCulture)+
+    ";store_parent_length="+(storeParent==null?0:storeParent.Length).ToString(CultureInfo.InvariantCulture)+
+    ";session_name_length="+sessionName.Length.ToString(CultureInfo.InvariantCulture)+";expected_store_length="+expectedStore.Length.ToString(CultureInfo.InvariantCulture)+
+    ";common_folder_empty="+Bit(commonFolderEmpty)+";program_data_matches_known_folder="+Bit(programDataMatchesKnownFolder);
+  }
   static DirectorySecurity ExpectedSecurity(string sid){
    var security=new DirectorySecurity();
    security.SetSecurityDescriptorSddlForm("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;"+sid+")(A;OICI;RC;;;OW)");
@@ -147,9 +163,11 @@ namespace PortableVBox {
     if(PinnedBuild.Mode!="CI"&&PinnedBuild.Mode!="ALPHA")throw new InvalidOperationException("Unknown fixed SDS build mode");
     if(Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE")!=PinnedBuild.Mode)throw new InvalidOperationException("Fixed SDS build mode mismatch");
     string bridge=Full(typeof(SdsBridge).Assembly.Location),code=Path.GetDirectoryName(bridge),session=Path.GetDirectoryName(code);
-    string store=Full(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),PinnedBuild.Mode=="ALPHA"?"PortableVirtualBox.Alpha":"PortableVirtualBox.Experiment"));
-    if(!Equal(Path.GetFileName(bridge),BridgeName)||!Equal(Path.GetFileName(code),"code")||!Equal(Path.GetDirectoryName(session),store)||
-       !Regex.IsMatch(Path.GetFileName(session),"\\Apvbox-manager-[1-9][0-9]*-[1-9][0-9]*\\z"))throw new InvalidOperationException("Untrusted fixed SDS assembly origin");
+    string commonFolder=Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+    string store=Full(Path.Combine(commonFolder,PinnedBuild.Mode=="ALPHA"?"PortableVirtualBox.Alpha":"PortableVirtualBox.Experiment"));
+    string originFailure=OriginFailure(Path.GetFileName(bridge),Path.GetFileName(code),Path.GetDirectoryName(session),Path.GetFileName(session),store,
+     PinnedBuild.Mode,Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE"),String.IsNullOrEmpty(commonFolder),Equal(Environment.GetEnvironmentVariable("ProgramData"),commonFolder));
+    if(originFailure!=null)throw new InvalidOperationException(originFailure);
     using(var process=Process.GetCurrentProcess())
      if(!Equal(process.MainModule.FileName,Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe")))throw new InvalidOperationException("Fixed SDS bridge requires fixed PowerShell worker");
     string app=Path.Combine(session,"app64"),output=operation==SdsOperation.Register?session:Path.Combine(session,"cleanup");
