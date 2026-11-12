@@ -117,13 +117,13 @@ $process=$null;$window=[IntPtr]::Zero
 try{
     $process=Start-Process -FilePath $exe -ArgumentList '--lang ru' -PassThru -WorkingDirectory $root
     $null=$process.Handle # retain the actual process identity/exit code
-    $window=Await-View $process 'Портативный VirtualBox' 'Резервная копия охватывает только data'
+    $window=Await-View $process 'Портативный VirtualBox' 'Копируется только папка data. Диски ВМ вне data не включены.'
     Capture-View $process $window 'launcher-ru' @('Русский','Английский','Запомнить язык','Восстановить в новую папку','Отменить копирование')
     Click-Exact $process $window 'Английский'
     $window=Await-View $process 'Portable-VirtualBox' 'Backs up data only'
     Capture-View $process $window 'launcher-en' @('Russian','English','Save language','Restore to new folder','Cancel copy')
     Click-Exact $process $window 'Russian'
-    $window=Await-View $process 'Портативный VirtualBox' 'Резервная копия охватывает только data'
+    $window=Await-View $process 'Портативный VirtualBox' 'Копируется только папка data. Диски ВМ вне data не включены.'
     Capture-View $process $window 'launcher-ru-return' @('Запомнить язык','Восстановить в новую папку')
     if(-not [LocaleWindow]::PostMessageW($window,0x10,[IntPtr]::Zero,[IntPtr]::Zero)){throw 'Could not close owned fixture window'}
     if(-not $process.WaitForExit(10000) -or $process.ExitCode -ne 2){throw 'Read-only GUI did not exit normally'}

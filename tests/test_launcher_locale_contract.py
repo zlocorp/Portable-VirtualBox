@@ -77,6 +77,9 @@ class LauncherLocalizations(unittest.TestCase):
         self.assertEqual(ru, "Копируется только папка data. Диски ВМ вне data не включены.",
                          "The exclusion is the data-folder boundary, not physically external disks")
         self.assertEqual(en, "Backs up data only. VM disks outside data are not included.")
+        gui = (ROOT / "scripts/check_russian_gui.ps1").read_text(encoding="utf-8-sig")
+        self.assertEqual(gui.count("'" + ru + "'"), 2,
+                         "Both Russian GUI waits must follow the current backup caption")
 
     def test_preflight_blockers_have_russian_translations(self):
         section = function_body(PREFLIGHT, "_PortablePreflightBlocker")
