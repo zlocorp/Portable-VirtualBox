@@ -17,6 +17,9 @@ from safe_files import windows_relative_parts
 
 ROOT=Path(__file__).resolve().parents[1]
 PIN_PATH=ROOT/'source/privilege/oracle-7.2.22-pin.json'
+# This source-only read-only tool intentionally has no compiled-bridge provenance.
+# Sessions containing PortableVBox.SdsBridge.dll remain BLOCKED as an unknown code
+# file. Do not omit the binary, trust its filename, or relax _tree to force review.
 SCRIPT_NAMES=('privileged_session_worker.ps1','vbox_sup_standalone.ps1',
               'vbox_sup_start_owned.ps1','vbox_sup_cleanup.ps1',
               'vbox_sup_partial_cleanup.ps1','vbox_sup_package_identity.ps1')

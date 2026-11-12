@@ -410,7 +410,7 @@ function Test-PrivilegedPrepare([string]$Source,[string]$TestRoot) {
     # Fail closed on new commands/selectors before loading any production code.
     foreach ($selection in @(
         @{Ast=$prepare;Allowed=@('Test-Path','Join-Path','Get-Content','ConvertFrom-Json','Run-Sds','Get-ItemProperty','ConvertTo-Json','Set-Content','Write-Host','Write-SdsRegistrationDiagnostics')},
-        @{Ast=(Get-RequiredFunction $Source 'Run-Sds').Ast;Allowed=@('Start-Process','Join-Path')},
+        @{Ast=(Get-RequiredFunction $Source 'Run-Sds').Ast;Allowed=@('Start-Process','Join-Path','Invoke-ProtectedSds')},
         @{Ast=(Get-RequiredFunction $Source 'ConvertTo-SdsDiagnosticLines').Ast;Allowed=@('Get-DiagnosticToken','Get-DiagnosticNumber')},
         @{Ast=(Get-RequiredFunction $Source 'Write-SdsRegistrationDiagnostics').Ast;Allowed=@('ConvertTo-SdsDiagnosticLines')}
     )) {
@@ -909,8 +909,14 @@ try {
     } elseif ($Target -eq 'Privileged') {
         $ast=Parse-Script 'privileged_session_worker.ps1'
         Test-SdsDiagnostics $ast.Extent.Text
-        $prepareResults=@(Test-PrivilegedPrepare $ast.Extent.Text $testRoot)
-        Test-ControlledDiagnosticExport $prepareResults $testRoot
+        # Existing cases retain the standalone Start-Process transport contract.
+        # Protected DLL wrapper behavior has its own actual-wrapper fixture.
+        $savedFixedMode=$env:PVBOX_FIXED_HELPER_MODE
+        try {
+            $env:PVBOX_FIXED_HELPER_MODE=$null
+            $prepareResults=@(Test-PrivilegedPrepare $ast.Extent.Text $testRoot)
+            Test-ControlledDiagnosticExport $prepareResults $testRoot
+        } finally { $env:PVBOX_FIXED_HELPER_MODE=$savedFixedMode }
     } else {
         $ast=Parse-Script 'manager_session_worker.ps1'
         $prepare=$ast.Find({param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -eq "`$Action -eq 'Prepare'"},$true)

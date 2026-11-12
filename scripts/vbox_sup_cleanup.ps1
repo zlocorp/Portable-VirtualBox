@@ -234,7 +234,16 @@ try {
     # Revalidate service path immediately before Oracle's supported unregister.
     $sdsConfig=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS'
     if (([string]$sdsConfig.ImagePath).Trim().Trim('"') -ine $expectedSds) { throw 'VBoxSDS changed during idle wait' }
-    $sdsExit=Run-Bounded $expectedSds '--unregservice' 'sds-unregister'
+    if ($env:PVBOX_FIXED_HELPER_MODE) {
+        if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
+        $sdsResult=Invoke-ProtectedSds -Operation UnregisterFull -TimeoutSeconds $TimeoutSeconds
+        if (-not $sdsResult.WithinDeadline) { throw 'SDS unregistration exceeded safety deadline; child exited, retain resources' }
+        if (-not $sdsResult.ExitCodeKnown) { throw 'SDS unregistration exit code unavailable' }
+        $sdsExit=[int]$sdsResult.ExitCode
+    } else {
+        # Explicit standalone fixture path, not a fallback on protected failure.
+        $sdsExit=Run-Bounded $expectedSds '--unregservice' 'sds-unregister'
+    }
     if ($sdsExit -ne 0 -or (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) {
         throw "Exact VBoxSDS unregistration failed: $sdsExit"
     }

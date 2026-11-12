@@ -27,13 +27,25 @@ if ($inventory.manifest_rows_sha256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid
 $pin=Join-Path $out 'SessionBuildPin.cs'
 [IO.File]::WriteAllText($pin,('namespace PortableVBox { internal static class PinnedBuild { internal const string FrontendSha256="'+$hash+'"; internal const string FrontendName="'+$controllerName+'"; internal const string Mode="'+$mode+'"; internal const string HelperName="'+$helperName+'"; internal const string InventorySha256="'+$inventory.manifest_rows_sha256+'"; } }'))
 $target=Join-Path $out $helperName
+# Fixed bridge exists only as an embedded resource in the paired helper.
+$bridge=Join-Path $out 'PortableVBox.SdsBridge.dll'
+if (Test-Path -LiteralPath $bridge) { throw 'Stale bridge build output' }
+try {
+    $bridgeArguments=@('/nologo','/target:library','/platform:x64','/optimize+','/reference:System.Web.Extensions.dll',('/out:'+$bridge),
+        (Join-Path $repo 'source/privilege/FixedEffectWorker.cs'),
+        (Join-Path $repo 'source/privilege/SdsDiagnosticFiles.cs'),
+        (Join-Path $repo 'source/privilege/SdsBridge.cs'),$pin)
+    & $compiler @bridgeArguments
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $bridge -PathType Leaf)) { throw 'Fixed SDS bridge compilation failed' }
 $arguments=@('/nologo','/target:winexe','/platform:x64','/optimize+','/reference:System.Web.Extensions.dll','/reference:System.ServiceProcess.dll',('/out:'+ $target))
+$arguments+=('/resource:'+$bridge+',PortableVBox.SdsBridge.dll')
 foreach($name in @('privileged_session_worker.ps1','vbox_sup_standalone.ps1','vbox_sup_start_owned.ps1','vbox_sup_cleanup.ps1','vbox_sup_partial_cleanup.ps1','vbox_sup_package_identity.ps1')) {
     $arguments+=('/resource:'+(Join-Path $repo ('scripts\'+$name))+','+$name)
 }
 $arguments+=@((Join-Path $repo 'source\privilege\TokenFacts.cs'),(Join-Path $repo 'source\privilege\SessionHelper.cs'),(Join-Path $repo 'source\privilege\DurableJournal.cs'),(Join-Path $repo 'source\privilege\PayloadCleanupJournal.cs'),(Join-Path $repo 'source\privilege\PayloadCleanupPlan.cs'),(Join-Path $repo 'source\privilege\SessionHelper.PayloadObjects.cs'),(Join-Path $repo 'source\privilege\SessionHelper.PayloadCleanup.cs'),(Join-Path $repo 'source\privilege\SessionHelper.CleanupCompletion.cs'),(Join-Path $repo 'source\privilege\FixedEffectWorker.cs'),(Join-Path $repo 'source\privilege\SessionHelper.Main.cs'),$pin)
 & $compiler @arguments
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $target -PathType Leaf)) { throw 'Fixed helper compilation failed' }
+} finally { if (Test-Path -LiteralPath $bridge) { Remove-Item -LiteralPath $bridge -Force } }
 Write-Host ('Helper built with embedded effect code/inventory for frontend SHA256 '+$hash)
 
 # Ordinary console adapter: same frontend/inventory pin, no embedded effects.

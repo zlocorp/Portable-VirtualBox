@@ -240,11 +240,20 @@ class CleanupReconcile(unittest.TestCase):
         self.assertEqual(result['status'],'REVIEW_ONLY')
         after={str(p.relative_to(self.root)):p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
         self.assertEqual(before,after)
+    def test_embedded_bridge_without_binary_provenance_remains_blocked(self):
+        bridge=self.code/'PortableVBox.SdsBridge.dll'
+        bridge.write_bytes(b'unknown compiled bridge')
+        before={str(p.relative_to(self.root)):p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        result=self.inspect()
+        self.assertEqual(result['status'],'BLOCKED')
+        self.authority(result)
+        self.assertEqual(before,{str(p.relative_to(self.root)):p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+
     def test_inventory_is_the_existing_fixed_helper_script_allowlist(self):
         import re
         text=(ROOT/'source/privilege/SessionHelper.cs').read_text()
         block=text.split('static readonly string[] Scripts={',1)[1].split('};',1)[0]
-        self.assertEqual(tuple(re.findall(r'"([^"\n]+)"',block)),self.mod.SCRIPT_NAMES)
+        self.assertEqual(tuple(re.findall(r'"([^"\n]+)"',block)),self.mod.SCRIPT_NAMES+('PortableVBox.SdsBridge.dll',))
         self.assertNotIn('reconcile_cleanup.py',(ROOT/'scripts/package_preview.py').read_text())
         self.assertNotIn('reconcile_cleanup.py',(ROOT/'scripts/build_session_helper.ps1').read_text())
 

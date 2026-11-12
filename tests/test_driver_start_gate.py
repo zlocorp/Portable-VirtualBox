@@ -69,7 +69,8 @@ class SdsDiagnosticSourceContracts(unittest.TestCase):
         self.assertIn("$arguments+=('/resource:'+(Join-Path $repo ('scripts\\'+$name))+','+$name)", build)
         scripts = re.findall(r"static readonly string\[\] Scripts=\{([^}]+)\}", helper)
         self.assertEqual(len(scripts), 1)
-        self.assertEqual(re.findall(r'"([^"]+)"', scripts[0]), names)
+        self.assertEqual(re.findall(r'"([^"]+)"', scripts[0]), names + ["PortableVBox.SdsBridge.dll"])
+        self.assertEqual(build.count("$arguments+=(\'/resource:\'+$bridge+\',PortableVBox.SdsBridge.dll\')"), 1)
         self.assertIn("Assembly.GetExecutingAssembly().GetManifestResourceStream(name)", helper)
         main = self.source("source/privilege/SessionHelper.Main.cs")
         self.assertIn('Quote(Path.Combine(working,"privileged_session_worker.ps1"))+" -Action "+args[0]', main)
@@ -90,7 +91,8 @@ class SdsDiagnosticSourceContracts(unittest.TestCase):
             'if(process.ExitCode!=0) throw new InvalidOperationException("Fixed effect worker rejected operation");',
         ]
         owner = self.source("source/privilege/FixedEffectWorker.cs")
-        self.assertIn("WaitForSingleObject(original.Process,150000)", owner)
+        self.assertIn("WaitForSingleObject(original.Process,deadline)", owner)
+        self.assertIn("return RunCore(info,image,150000,false)", owner)
         self.assertIn("if(wait==258)wait=WaitForSingleObject(original.Process,0xffffffff)", owner)
         positions = []
         for fragment in ordered:

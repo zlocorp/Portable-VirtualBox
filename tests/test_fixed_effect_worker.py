@@ -29,6 +29,15 @@ class FixedEffectWorker(unittest.TestCase):
                                     cwd=ROOT, capture_output=True, text=True, timeout=60)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_closed_sds_wrapper_preserves_distinct_environment_and_deadlines(self):
+        owner = (ROOT / "source/privilege/FixedEffectWorker.cs").read_text()
+        self.assertIn("return RunCore(info,image,150000,false)", owner)
+        self.assertIn("internal static FixedEffectWorker RunSds(string image,bool unregister,int timeoutSeconds)", owner)
+        self.assertIn('unregister?"--unregservice":"--regservice"', owner)
+        self.assertIn("return RunCore(info,image,checked((uint)timeoutSeconds*1000),true)", owner)
+        self.assertIn("if(!inheritEnvironment)environment=Marshal.StringToHGlobalUni(BuildEnvironment(info))", owner)
+        self.assertNotIn("public static FixedEffectWorker", owner)
+
     def test_exit_is_persisted_before_capture_and_success_gates(self):
         main = (ROOT / "source/privilege/SessionHelper.Main.cs").read_text()
         self.assertIn("exit_code_known=process.ExitCodeKnown", main)
@@ -36,7 +45,7 @@ class FixedEffectWorker(unittest.TestCase):
         self.assertLess(prepare.index("journal.WorkerExited("), prepare.index("stdout.GetAwaiter().GetResult()"))
         self.assertLess(prepare.index("process.VerifyImageObservation()"), prepare.index("if(process.ExitCode!=0)"))
         owner = (ROOT / "source/privilege/FixedEffectWorker.cs").read_text()
-        self.assertIn("WaitForSingleObject(original.Process,150000)", owner)
+        self.assertIn("WaitForSingleObject(original.Process,deadline)", owner)
         self.assertIn("if(wait==258)wait=WaitForSingleObject(original.Process,0xffffffff)", owner)
         self.assertNotIn("TerminateProcess", owner)
         self.assertIn("catch(ThreadInterruptedException)", owner)

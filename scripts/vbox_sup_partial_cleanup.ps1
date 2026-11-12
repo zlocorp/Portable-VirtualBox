@@ -211,7 +211,16 @@ function Run-Bounded([string]$Command,[string]$Arguments,[string]$Label) {
 try {
     if ($markerExists) {
         Require-Quiescent
-        $result=Run-Bounded $sdsExe '--unregservice' 'sds-unregister'
+        if ($env:PVBOX_FIXED_HELPER_MODE) {
+            if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
+            $sdsResult=Invoke-ProtectedSds -Operation UnregisterPartial -TimeoutSeconds $TimeoutSeconds
+            if (-not $sdsResult.WithinDeadline) { throw 'SDS unregistration exceeded safety deadline; child exited, retain resources' }
+            if (-not $sdsResult.ExitCodeKnown) { throw 'SDS unregistration exit code unavailable' }
+            $result=[int]$sdsResult.ExitCode
+        } else {
+            # Explicit standalone fixture path, not a fallback on protected failure.
+            $result=Run-Bounded $sdsExe '--unregservice' 'sds-unregister'
+        }
         if ($result -ne 0 -or (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) {
             throw 'Owned SDS unregistration unconfirmed'
         }

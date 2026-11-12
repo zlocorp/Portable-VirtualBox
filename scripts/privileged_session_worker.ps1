@@ -215,7 +215,51 @@ function Write-SdsRegistrationDiagnostics([hashtable]$Facts) {
         try { [Console]::Out.Write($line+"`r`n") } catch { }
     }
 }
+# Loaded only from the exact embedded resource installed and hash-leased by
+# the parent helper. Never load the mutable portable-root helper assembly.
+$script:SdsBridgeType=$null
+$script:SdsOperationType=$null
+function Invoke-ProtectedSds {
+    param([ValidateSet('Register','UnregisterFull','UnregisterPartial')][string]$Operation,[int]$TimeoutSeconds)
+    if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
+    if ($null -eq $script:SdsBridgeType) {
+        $bridgePath=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'PortableVBox.SdsBridge.dll'))
+        $existing=@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'PortableVBox.SdsBridge' })
+        if ($existing.Count -ne 0) { throw 'Unexpected preloaded SDS bridge assembly' }
+        $assembly=[Reflection.Assembly]::LoadFrom($bridgePath)
+        if ($assembly.Location -cne $bridgePath) { throw 'SDS bridge assembly origin changed' }
+        $facade=$assembly.GetType('PortableVBox.SdsBridge',$true,$false)
+        $operationType=$assembly.GetType('PortableVBox.SdsOperation',$true,$false)
+        if ($facade.Assembly -ne $assembly -or $operationType.Assembly -ne $assembly) { throw 'SDS bridge type origin changed' }
+        $script:SdsOperationType=$operationType
+        $script:SdsBridgeType=$facade
+    }
+    return $script:SdsBridgeType::Run([Enum]::Parse($script:SdsOperationType,$Operation,$false),$TimeoutSeconds)
+}
 function Run-Sds([string]$Argument,[string]$Label,[hashtable]$DiagnosticFacts=$null) {
+    if ($Argument -cne '--regservice' -or $Label -cne 'sds-register') { throw 'Unknown fixed SDS registration selector' }
+    if ($env:PVBOX_FIXED_HELPER_MODE) {
+        if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
+        try { $result=Invoke-ProtectedSds -Operation Register -TimeoutSeconds 30 } catch {
+            # The bridge can throw after measured child exit (capture/file/query).
+            # An atomic failed call alone does not identify its launch stage.
+            try { if ($null -ne $DiagnosticFacts) { $DiagnosticFacts['Launch']='unknown' } } catch { }
+            throw
+        }
+        try {
+            if ($null -ne $DiagnosticFacts) {
+                $DiagnosticFacts['Launch']='returned';$DiagnosticFacts['Handle']='nonzero'
+                $DiagnosticFacts['Wait']=if ($result.WithinDeadline) { 'within_deadline' } else { 'exceeded' }
+                $DiagnosticFacts['Completion']='confirmed';$DiagnosticFacts['ElapsedMs']=$result.ElapsedMs
+            }
+        } catch { }
+        if (-not $result.WithinDeadline) { throw 'SDS operation exceeded safety deadline; child exited, state requires inspection' }
+        if (-not $result.ExitCodeKnown) { throw 'SDS process exit code unavailable' }
+        try { if ($null -ne $DiagnosticFacts) { $DiagnosticFacts['ExitCode']=$result.ExitCode } } catch { }
+        if ($result.ExitCode -ne 0) { throw 'SDS operation unconfirmed; retain resources' }
+        return
+    }
+    # Separate legacy standalone test path; never a fallback from bridge failure.
     $timer=$null
     if ($null -ne $DiagnosticFacts) {
         try { $timer=[Diagnostics.Stopwatch]::StartNew() } catch { }

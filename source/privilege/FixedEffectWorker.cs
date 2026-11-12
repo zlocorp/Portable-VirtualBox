@@ -135,7 +135,7 @@ namespace PortableVBox {
    foreach(var entry in entries)block.Append(entry.Key).Append('=').Append(entry.Value).Append('\0');
    block.Append('\0');return block.ToString();
   }
-  void Prepare(ProcessStartInfo info,string image) {
+  void Prepare(ProcessStartInfo info,string image,bool inheritEnvironment) {
    if(!info.RedirectStandardOutput||!info.RedirectStandardError||info.UseShellExecute||!info.CreateNoWindow)
     throw new InvalidOperationException("Invalid fixed worker transport policy");
    imageLease=new FileStream(image,FileMode.Open,FileAccess.Read,FileShare.Read);
@@ -171,7 +171,7 @@ namespace PortableVBox {
    handleList=Marshal.AllocHGlobal(3*IntPtr.Size);
    Marshal.WriteIntPtr(handleList,0,input);Marshal.WriteIntPtr(handleList,IntPtr.Size,stdoutWrite);Marshal.WriteIntPtr(handleList,2*IntPtr.Size,stderrWrite);
    Check(UpdateProcThreadAttribute(attributes,0,new IntPtr(0x20002),handleList,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero),"Pin worker inherited handles");
-   environment=Marshal.StringToHGlobalUni(BuildEnvironment(info));
+   if(!inheritEnvironment)environment=Marshal.StringToHGlobalUni(BuildEnvironment(info));
    Encoding encoding=Console.OutputEncoding;
    stdout=new Reader(stdoutRead,encoding);
    stderr=new Reader(stderrRead,encoding);
@@ -208,13 +208,13 @@ namespace PortableVBox {
    if(created && (!stdout.Eof||!stderr.Eof))RetainUnknown();
   }
   internal void VerifyImageObservation() {if(observationFailure!=null)throw observationFailure;}
-  void ObserveAndWait(StringBuilder observed,string image) {
+  void ObserveAndWait(StringBuilder observed,string image,uint deadline) {
    try {
     uint size=(uint)observed.Capacity;
     bool queried=QueryFullProcessImageNameW(original.Process,0,observed,ref size);
     if(!queried||!String.Equals(observed.ToString(),image,StringComparison.OrdinalIgnoreCase))observationFailure=invalidImage;
    } catch {observationFailure=invalidImage;}
-   uint wait=WaitForSingleObject(original.Process,150000);
+   uint wait=WaitForSingleObject(original.Process,deadline);
    WithinDeadline=wait==0;
    if(wait==258)wait=WaitForSingleObject(original.Process,0xffffffff);
    if(wait!=0)RetainUnknown();
@@ -232,11 +232,28 @@ namespace PortableVBox {
    string image=Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe");
    if(info==null||!String.Equals(info.FileName,image,StringComparison.OrdinalIgnoreCase)||image.IndexOf('"')>=0)
     throw new InvalidOperationException("Only built-in Windows PowerShell may execute");
+   return RunCore(info,image,150000,false);
+  }
+  // The protected SDS facade admits the pinned Oracle image and fixes all paths.
+  // This internal wrapper cannot select arbitrary executable names or arguments.
+  internal static FixedEffectWorker RunSds(string image,bool unregister,int timeoutSeconds) {
+   if(String.IsNullOrEmpty(image)||!Path.IsPathRooted(image)||
+      !String.Equals(Path.GetFileName(image),"VBoxSDS.exe",StringComparison.OrdinalIgnoreCase)||
+      image.IndexOf('"')>=0||timeoutSeconds<5||timeoutSeconds>90)
+    throw new InvalidOperationException("Invalid fixed SDS image/deadline");
+   var info=new ProcessStartInfo(image,unregister?"--unregservice":"--regservice");
+   info.WorkingDirectory=Path.GetDirectoryName(image);info.UseShellExecute=false;
+   info.CreateNoWindow=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
+   // SDS inherits the existing protected PowerShell environment, as before.
+   // A null native environment pointer preserves it without a caller selector.
+   return RunCore(info,image,checked((uint)timeoutSeconds*1000),true);
+  }
+  static FixedEffectWorker RunCore(ProcessStartInfo info,string image,uint deadline,bool inheritEnvironment) {
    var owner=new FixedEffectWorker();
    var command=new StringBuilder("\""+image+"\" "+info.Arguments);
    var observed=new StringBuilder(32768);
    try {
-    owner.Prepare(info,image);
+    owner.Prepare(info,image,inheritEnvironment);
     var startup=new ExtendedStartup();startup.Startup.Size=Marshal.SizeOf(typeof(ExtendedStartup));startup.Startup.Flags=0x100;
     startup.Startup.Input=owner.input;startup.Startup.Output=owner.stdoutWrite;startup.Startup.Error=owner.stderrWrite;startup.Attributes=owner.attributes;
     owner.createEntered=true;
@@ -251,7 +268,7 @@ namespace PortableVBox {
     if(!Valid(owner.original.Process)||!Valid(owner.original.Thread)||owner.original.Process==owner.original.Thread)owner.RetainUnknown();
     owner.originalsOwned=true;
     owner.CloseParentWriters();
-    owner.ObserveAndWait(observed,image);
+    owner.ObserveAndWait(observed,image,deadline);
     // Return measured exit before waiting for inherited descendant writers or
     // string materialization. Main persists WorkerExited before awaiting Tasks.
     return owner;
