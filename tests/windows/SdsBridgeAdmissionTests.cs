@@ -24,9 +24,32 @@ namespace PortableVBox {
    var manifest=new Dictionary<string,object>{{"files",new object[0]},{"file_count",185},{"total_bytes",247834716}};
    bool rejected=false;try{typeof(SdsBridge).GetMethod("ValidateManifest",Hidden).Invoke(null,new object[]{manifest});}catch(TargetInvocationException e){rejected=e.InnerException is InvalidOperationException;}
    Assert(rejected,"Empty forged manifest accepted");
+   var locator=typeof(SdsBridge).GetMethod("ValidateStoreLocator",Hidden);
+   Assert(locator!=null,"Parent store locator validator is absent");
+   Func<string,string,string> validate=(path,mode)=>(string)locator.Invoke(null,new object[]{path,mode});
+   Assert(validate(@"C:\ProgramData\PortableVirtualBox.Experiment","CI")==@"C:\ProgramData\PortableVirtualBox.Experiment","CI store locator changed");
+   Assert(validate(@"D:\Program Data\PortableVirtualBox.Alpha","ALPHA")==@"D:\Program Data\PortableVirtualBox.Alpha","ALPHA store locator changed");
+   Assert(validate(@"C:\Данные 世界\PortableVirtualBox.Experiment","CI")==@"C:\Данные 世界\PortableVirtualBox.Experiment","Unicode canonical spelling rejected");
+   foreach(string path in new string[]{@"C:\COM¹\PortableVirtualBox.Experiment",@"C:\LPT².txt\PortableVirtualBox.Experiment",@"C:\CONIN$\PortableVirtualBox.Experiment",@"C:\CONOUT$.txt\PortableVirtualBox.Experiment",
+    "C:\\bad"+'\u0080'+"name\\PortableVirtualBox.Experiment","C:\\bad"+'\u007f'+"name\\PortableVirtualBox.Experiment","C:\\"+'\u00a0'+"ProgramData\\PortableVirtualBox.Experiment",
+    @"C:\PROGRA~3\PortableVirtualBox.Experiment",@"C:\ ProgramData\PortableVirtualBox.Experiment",@"C:\ProgramData\bad"+'\t'+@"name\PortableVirtualBox.Experiment",null,""," ",@"PortableVirtualBox.Experiment",@"C:PortableVirtualBox.Experiment",@"/C:/ProgramData/PortableVirtualBox.Experiment",
+    @"\\server\share\PortableVirtualBox.Experiment",@"\\?\C:\ProgramData\PortableVirtualBox.Experiment",@"\\.\C:\ProgramData\PortableVirtualBox.Experiment",
+    @"C:/ProgramData/PortableVirtualBox.Experiment",@"C:\ProgramData\\PortableVirtualBox.Experiment",@"C:\ProgramData\.\PortableVirtualBox.Experiment",
+    @"C:\ProgramData\..\PortableVirtualBox.Experiment",@"C:\ProgramData\PortableVirtualBox.Experiment\",@"C:\ProgramData\PortableVirtualBox.Experiment.",
+    @"C:\ProgramData\PortableVirtualBox.Experiment ",@"C:\ProgramData.\PortableVirtualBox.Experiment",@"C:\ProgramData \PortableVirtualBox.Experiment",
+    @"C:\ProgramData\PortableVirtualBox.Experiment:stream",@"C:\ProgramData:stream\PortableVirtualBox.Experiment",@"C:\CON\PortableVirtualBox.Experiment",
+    @"C:\NUL.txt\PortableVirtualBox.Experiment",@"C:\COM1\PortableVirtualBox.Experiment",@"C:\LPT9.txt\PortableVirtualBox.Experiment",
+    @"C:\ProgramData\PortableVirtualBox.Alpha",@"C:\ProgramData\Other", "C:\\ProgramData\\bad\nname\\PortableVirtualBox.Experiment"}){
+    bool refused=false;try{validate(path,"CI");}catch(TargetInvocationException e){refused=e.InnerException is InvalidOperationException;}
+    Assert(refused,"Malformed or wrong-mode parent store locator accepted");
+   }
+   foreach(string mode in new string[]{null,"","ci","unknown"}){
+    bool refused=false;try{validate(@"C:\ProgramData\PortableVirtualBox.Experiment",mode);}catch(TargetInvocationException e){refused=e.InnerException is InvalidOperationException;}
+    Assert(refused,"Unknown locator build mode accepted");
+   }
    var origin=typeof(SdsBridge).GetMethod("OriginFailure",Hidden);
    Assert(origin!=null,"Actual pure origin gate is absent");
-   Func<string,string,string,string,string,string,string,string> check=(leaf,code,parent,name,store,expected,current)=>(string)origin.Invoke(null,new object[]{leaf,code,parent,name,store,expected,current,false,true});
+   Func<string,string,string,string,string,string,string,string> check=(leaf,code,parent,name,store,expected,current)=>(string)origin.Invoke(null,new object[]{leaf,code,parent,name,store,expected,current});
    string hiddenStore="private-location-not-for-logs";
    Assert(check("PortableVBox.SdsBridge.dll","code",hiddenStore,"pvbox-manager-5276-41",hiddenStore,"CI","CI")==null,"Valid measured session layout refused");
    Assert(check("portablevbox.sdsbridge.DLL","CODE",hiddenStore.ToUpperInvariant(),"pvbox-manager-1-1",hiddenStore,"ALPHA","ALPHA")==null,"Existing case-insensitive comparisons changed");
@@ -45,7 +68,6 @@ namespace PortableVBox {
     Assert(check("PortableVBox.SdsBridge.dll","code",hiddenStore,invalid,hiddenStore,"CI","CI")!=null,"Session-name regex literal changed");
    string tokens=check("invalid","code",hiddenStore,"pvbox-manager-5276-41",hiddenStore,"secret-mode",null);
    Assert(tokens.Contains("expected_mode=unknown;current_mode=missing")&&!tokens.Contains("secret"),"Unbounded mode diagnostic");
-   Assert(tokens.Contains("common_folder_empty=false;program_data_matches_known_folder=true"),"Known-folder booleans missing");
    Console.WriteLine("SDS_BRIDGE_ADMISSION_PASS assertions="+count);return 0;
   }
  }

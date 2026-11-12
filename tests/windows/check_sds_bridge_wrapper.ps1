@@ -13,7 +13,69 @@ Require ($functions.Count -eq 1) 'Exactly one Run-Sds required'
 # Load only reviewed wrapper; dependencies are substituted fixed boundaries.
 . ([scriptblock]::Create($functions[0].Extent.Text))
 $savedMode=$env:PVBOX_FIXED_HELPER_MODE
+$savedRunnerTemp=$env:RUNNER_TEMP
 try {
+ # Execute the actual ALPHA guard with only the workstation query replaced.
+ # The child must use the parent-pinned locator, not rediscover ProgramData
+ # from the deliberately cleared child environment.
+ foreach($name in @('Assert-CanonicalAlphaLocator','Assert-PortableFixedHelper')){
+  $declarations=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true))
+  Require ($declarations.Count -eq 1) "Exactly one $name required"
+  . ([scriptblock]::Create($declarations[0].Extent.Text))
+ }
+ $validStore='C:\ProgramData\PortableVirtualBox.Alpha'
+ $validSession=$validStore+'\pvbox-manager-123-1'
+ $locatorCases=@(
+  @{Name='Valid';Store=$validStore;Session=$validSession;Ok=$true},
+  @{Name='Unicode';Store='D:\Данные 世界\PortableVirtualBox.Alpha';Session='D:\Данные 世界\PortableVirtualBox.Alpha\pvbox-manager-123-1';Ok=$true},
+  @{Name='Missing';Store=$null;Session=$validSession},
+  @{Name='Relative';Store='PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='DriveRelative';Store='C:PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='Mismatch';Store=$validStore;Session='C:\Other\PortableVirtualBox.Alpha\pvbox-manager-123-1'},
+  @{Name='WrongLeaf';Store='C:\ProgramData\Other';Session='C:\ProgramData\Other\pvbox-manager-123-1'},
+  @{Name='WrongMode';Store=$validStore;Session=$validSession;Mode='CI'},
+  @{Name='UNC';Store='\\server\share\PortableVirtualBox.Alpha';Session='\\server\share\PortableVirtualBox.Alpha\pvbox-manager-123-1'},
+  @{Name='Device';Store='\\?\C:\ProgramData\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='Slash';Store='C:/ProgramData/PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='Traversal';Store='C:\Other\..\ProgramData\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='DotSegment';Store='C:\ProgramData\.\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='RepeatedSeparator';Store='C:\ProgramData\\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='TrailingSlash';Store=$validStore+'\';Session=$validSession},
+  @{Name='TrailingDot';Store='C:\ProgramData.\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='TrailingSpace';Store='C:\ProgramData \PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='ShortName';Store='C:\PROGRA~1\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='ADS';Store='C:\ProgramData:stream\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='BadSession';Store=$validStore;Session=$validStore+'\..\pvbox-manager-123-1'},
+  @{Name='MissingSession';Store=$validStore;Session=$null},
+  @{Name='CaseEquivalent';Store='c:\programdata\portablevirtualbox.alpha';Session='C:\ProgramData\PortableVirtualBox.Alpha\pvbox-manager-123-1';Ok=$true},
+  @{Name='LeadingSpace';Store='C:\ ProgramData\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='UnicodeWhitespace';Store=('C:\Data'+[char]0xa0+'\PortableVirtualBox.Alpha');Session=$validSession},
+  @{Name='Reserved';Store='C:\NUL.txt\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='ReservedConsole';Store='C:\CONIN$\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='ReservedSuperscript';Store='C:\COM¹\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='Wildcard';Store='C:\Data*\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='Control';Store=('C:\Data'+[char]0x1f+'\PortableVirtualBox.Alpha');Session=$validSession},
+  @{Name='C1Control';Store=('C:\Data'+[char]0x85+'\PortableVirtualBox.Alpha');Session=$validSession},
+  @{Name='LongPath';Store=('C:\'+('a'*240)+'\PortableVirtualBox.Alpha');Session=$validSession},
+  @{Name='SessionAlias';Store=$validStore;Session=$validStore+'\pvbox-manager-123-1.'}
+ )
+ foreach($case in $locatorCases){
+  & {
+   $env:PVBOX_FIXED_HELPER_MODE=if($case.ContainsKey('Mode')){$case.Mode}else{'ALPHA'}
+   $env:RUNNER_TEMP=$case.Store;$SessionDir=$case.Session;$observations=@{Os=0}
+   function Get-CimInstance {
+    [CmdletBinding()]param([string]$ClassName)
+    $observations.Os++
+    Require ($ClassName -ceq 'Win32_OperatingSystem' -and $PSBoundParameters['ErrorAction'] -eq 'Stop') 'Unexpected ALPHA query'
+    return [pscustomobject]@{ProductType=1;BuildNumber='22631'}
+   }
+   $caught=$null;try{Assert-PortableFixedHelper}catch{$caught=$_}
+   $ok=$case.ContainsKey('Ok') -and $case.Ok
+   Require (($null -eq $caught) -eq $ok) "ALPHA/$($case.Name) locator acceptance: $caught"
+   Require ($observations.Os -eq $(if($ok){1}else{0})) "ALPHA/$($case.Name) queried workstation before valid locator"
+   Write-Host "PASS fixed ALPHA locator $($case.Name)"
+  }
+ }
  foreach ($mode in @('CI','ALPHA')) {
   foreach ($case in @('Success','Nonzero','LateZero','LateNonzero','ObservationError','UnknownExit','MissingBridge')) {
    & {
@@ -125,5 +187,5 @@ try {
   }
   }
  }
-} finally { $env:PVBOX_FIXED_HELPER_MODE=$savedMode }
+} finally { $env:PVBOX_FIXED_HELPER_MODE=$savedMode; $env:RUNNER_TEMP=$savedRunnerTemp }
 Write-Host 'SDS_BRIDGE_WRAPPER_PASS'

@@ -24,13 +24,32 @@ if ($PSVersionTable.PSEdition -ne 'Desktop' -or $PSVersionTable.PSVersion.Major 
 # The candidate mode is supplied only by the pinned C# helper after its
 # independent Windows workstation/owner/SHA-256 checks. Environment markers
 # below are anti-accident checks, NOT authority to mutate system resources.
-function Assert-PortableFixedHelper {
-    if ($env:PVBOX_FIXED_HELPER_MODE -ne 'ALPHA') { throw 'Not a candidate fixed-helper worker' }
-    $expected=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Alpha'
-    if (-not $env:RUNNER_TEMP -or
-        [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\') -ine $expected) {
+# Pure locator validation only. The parent helper owns filesystem identity,
+# ACL and hash admission and supplies RUNNER_TEMP in its cleared environment.
+# Do not resolve CommonApplicationData again in the stripped child environment.
+function Assert-CanonicalAlphaLocator([string]$Store,[string]$Session) {
+    foreach ($value in @($Store,$Session)) {
+        if ([string]::IsNullOrEmpty($value) -or $value.Length -gt 240 -or
+            $value -cnotmatch '\A[A-Za-z]:\\' -or
+            $value.Substring(3) -match '[\x00-\x1f\x7f-\x9f/:*?"<>|~]') {
+            throw 'Protected alpha locator is not canonical'
+        }
+        foreach ($part in $value.Substring(3).Split([char]'\')) {
+            if ($part.Length -eq 0 -or $part -eq '.' -or $part -eq '..' -or
+                $part.EndsWith('.') -or $part.Trim() -cne $part -or
+                $part -match '\A(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|\z)') {
+                throw 'Protected alpha locator is not canonical'
+            }
+        }
+    }
+    if ($Store.Substring($Store.LastIndexOf('\')+1) -ine 'PortableVirtualBox.Alpha' -or
+        -not [string]::Equals($Store,$Session.Substring(0,$Session.LastIndexOf('\')),[StringComparison]::OrdinalIgnoreCase)) {
         throw 'Protected alpha session base mismatched'
     }
+}
+function Assert-PortableFixedHelper {
+    if ($env:PVBOX_FIXED_HELPER_MODE -ne 'ALPHA') { throw 'Not a candidate fixed-helper worker' }
+    Assert-CanonicalAlphaLocator -Store $env:RUNNER_TEMP -Session $SessionDir
     if (-not [Environment]::Is64BitProcess -or -not [Environment]::Is64BitOperatingSystem) {
         throw 'Only Windows x64 is permitted'
     }

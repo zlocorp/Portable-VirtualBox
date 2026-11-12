@@ -121,7 +121,7 @@ namespace PortableVBox {
   }
   static string BuildEnvironment(ProcessStartInfo info) {
    var allowed=new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-    "SystemRoot","WINDIR","PATH","ProgramFiles","ProgramData","ALLUSERSPROFILE","TEMP","TMP","PSModulePath",
+    "SystemRoot","WINDIR","PATH","ProgramFiles","ProgramData","TEMP","TMP","PSModulePath",
     "GITHUB_ACTIONS","GITHUB_REPOSITORY","RUNNER_ENVIRONMENT","RUNNER_OS","GITHUB_SHA","PVBOX_FIXED_HELPER_MODE","RUNNER_TEMP"
    };
    var entries=new SortedDictionary<string,string>(StringComparer.OrdinalIgnoreCase);

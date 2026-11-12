@@ -50,16 +50,19 @@ namespace PortableVBox {
     Assert(probe.StandardError.Result=="","Known-folder baseline stderr changed");
    }
    Console.WriteLine("KNOWN_FOLDER baseline_empty="+(baselineCommon.Length==0)+" baseline_matches_parent="+String.Equals(baselineCommon,trustedCommon,StringComparison.OrdinalIgnoreCase)+" baseline_length="+baselineCommon.Length);
-   // Omitted-variable baseline is observed, not required to fail on every host.
-   var restoredEnvironment=Fixture(knownFolderProbe);restoredEnvironment.EnvironmentVariables["ProgramData"]=trustedCommon;
-   restoredEnvironment.EnvironmentVariables["ALLUSERSPROFILE"]=trustedCommon;
-   using(var probe=FixedEffectWorker.Run(restoredEnvironment)){
-    probe.VerifyImageObservation();Assert(probe.WithinDeadline&&probe.ExitCodeKnown&&probe.ExitCode==0,"Restored known-folder probe did not complete");
-    string restoredCommon=Encoding.Unicode.GetString(Convert.FromBase64String(probe.StandardOutput.Result));
-    Assert(String.Equals(restoredCommon,trustedCommon,StringComparison.OrdinalIgnoreCase),"Restored known folder differs from trusted parent");
-    Assert(probe.StandardError.Result=="","Restored known-folder stderr changed");
+   // Child shell lookup remains unresolved. The protected worker instead uses
+   // the explicit store validated by the parent; this is transport proof only,
+   // not authority or a claim that known-folder resolution has been repaired.
+   string trustedStore=Path.Combine(trustedCommon,"PortableVirtualBox.Experiment");
+   const string storeProbe="[Console]::Out.Write([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($env:RUNNER_TEMP)));exit 0";
+   var explicitEnvironment=Fixture(storeProbe);explicitEnvironment.EnvironmentVariables["RUNNER_TEMP"]=trustedStore;
+   using(var probe=FixedEffectWorker.Run(explicitEnvironment)){
+    probe.VerifyImageObservation();Assert(probe.WithinDeadline&&probe.ExitCodeKnown&&probe.ExitCode==0,"Explicit store probe did not complete");
+    string observedStore=Encoding.Unicode.GetString(Convert.FromBase64String(probe.StandardOutput.Result));
+    Assert(String.Equals(observedStore,trustedStore,StringComparison.Ordinal),"Explicit store differs from trusted parent");
+    Assert(probe.StandardError.Result=="","Explicit store probe stderr changed");
    }
-   Console.WriteLine("NATIVE trusted ALLUSERSPROFILE known-folder restoration PASS");
+   Console.WriteLine("NATIVE explicit trusted parent store transport PASS");
    const string encoding="[Console]::OutputEncoding=New-Object Text.UTF8Encoding($false);";
    const string large=encoding+"[Console]::Out.Write(('a'*180000)+'Привет 世界');[Console]::Error.Write(('b'*190000)+'Ошибка 世界');exit 259";
    string expectedOut=new string('a',180000)+"Привет 世界",expectedError=new string('b',190000)+"Ошибка 世界";

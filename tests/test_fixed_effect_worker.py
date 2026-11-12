@@ -38,15 +38,15 @@ class FixedEffectWorker(unittest.TestCase):
         self.assertIn("if(!inheritEnvironment)environment=Marshal.StringToHGlobalUni(BuildEnvironment(info))", owner)
         self.assertNotIn("public static FixedEffectWorker", owner)
 
-    def test_parent_binds_both_programdata_variables_to_verified_known_folder(self):
+    def test_parent_transports_only_verified_store_locator(self):
         main = (ROOT / "source/privilege/SessionHelper.Main.cs").read_text()
         self.assertIn('info.EnvironmentVariables["ProgramData"]=commonData;', main)
-        self.assertIn('info.EnvironmentVariables["ALLUSERSPROFILE"]=commonData;', main)
+        self.assertIn('info.EnvironmentVariables["RUNNER_TEMP"]=store;', main)
+        self.assertNotIn('ALLUSERSPROFILE', main)
         self.assertIn('string store=Path.Combine(commonData,', main)
         self.assertLess(main.index("String.IsNullOrEmpty(commonData)"), main.index("string store=Path.Combine(commonData,"))
-        bridge = (ROOT / "source/privilege/SdsBridge.cs").read_text()
-        self.assertLess(bridge.index("String.IsNullOrEmpty(commonFolder)||!Path.IsPathRooted(commonFolder)"), bridge.index("string store=Full(Path.Combine(commonFolder,"))
-        self.assertNotIn('commonFolder=Environment.GetEnvironmentVariable', bridge)
+        owner = (ROOT / "source/privilege/FixedEffectWorker.cs").read_text()
+        self.assertNotIn('ALLUSERSPROFILE', owner)
 
     def test_exit_is_persisted_before_capture_and_success_gates(self):
         main = (ROOT / "source/privilege/SessionHelper.Main.cs").read_text()

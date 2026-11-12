@@ -47,11 +47,30 @@ namespace PortableVBox {
    else if(operation==SdsOperation.UnregisterPartial){if(seconds>=10&&seconds<=75)return;}
    throw new InvalidOperationException("Unknown SDS operation/deadline");
   }
+  static string ValidateStoreLocator(string locator,string mode){
+   string leaf=mode=="CI"?"PortableVirtualBox.Experiment":mode=="ALPHA"?"PortableVirtualBox.Alpha":null;
+   if(leaf==null||String.IsNullOrEmpty(locator)||locator.Length<4||locator.Length>240||
+      !((locator[0]>='A'&&locator[0]<='Z')||(locator[0]>='a'&&locator[0]<='z'))||locator[1]!=':'||locator[2]!='\\')
+    throw new InvalidOperationException("Invalid fixed SDS parent store locator");
+   for(int i=0;i<locator.Length;i++)
+    if(Char.IsControl(locator[i])||locator[i]=='/'||locator[i]=='"'||locator[i]=='<'||locator[i]=='>'||
+       locator[i]=='|'||locator[i]=='?'||locator[i]=='*'||locator[i]=='~'||(i!=1&&locator[i]==':'))
+     throw new InvalidOperationException("Invalid fixed SDS parent store locator");
+   string[] parts=locator.Substring(3).Split('\\');
+   foreach(string part in parts)
+    if(part.Length==0||part=="."||part==".."||Char.IsWhiteSpace(part[0])||Char.IsWhiteSpace(part[part.Length-1])||
+       part[part.Length-1]=='.'||Regex.IsMatch(part,@"\A(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³]|CONIN\$|CONOUT\$)(?:\.|\z)",RegexOptions.IgnoreCase|RegexOptions.CultureInvariant))
+     throw new InvalidOperationException("Invalid fixed SDS parent store locator");
+   if(!Equal(parts[parts.Length-1],leaf))throw new InvalidOperationException("Fixed SDS parent store mode mismatch");
+   // Lexical spelling only. Existing final-handle identity/reparse/ACL checks
+   // below establish the filesystem identity; this value is never authority.
+   return locator;
+  }
   static string ModeToken(string value){return value=="CI"||value=="ALPHA"?value:(value==null?"missing":"unknown");}
   static string Bit(bool value){return value?"true":"false";}
   // Exact existing admission predicates, factored only to identify the failing
   // comparison. Never include input paths/names or arbitrary environment text.
-  static string OriginFailure(string leaf,string codeLeaf,string storeParent,string sessionName,string expectedStore,string expectedMode,string currentMode,bool commonFolderEmpty,bool programDataMatchesKnownFolder){
+  static string OriginFailure(string leaf,string codeLeaf,string storeParent,string sessionName,string expectedStore,string expectedMode,string currentMode){
    bool leafMatch=Equal(leaf,BridgeName),codeMatch=Equal(codeLeaf,"code"),storeMatch=Equal(storeParent,expectedStore);
    bool sessionMatch=Regex.IsMatch(sessionName,"\\Apvbox-manager-[1-9][0-9]*-[1-9][0-9]*\\z");
    if(leafMatch&&codeMatch&&storeMatch&&sessionMatch)return null;
@@ -60,8 +79,7 @@ namespace PortableVBox {
     ";expected_mode="+ModeToken(expectedMode)+";current_mode="+ModeToken(currentMode)+
     ";leaf_length="+leaf.Length.ToString(CultureInfo.InvariantCulture)+";code_length="+codeLeaf.Length.ToString(CultureInfo.InvariantCulture)+
     ";store_parent_length="+(storeParent==null?0:storeParent.Length).ToString(CultureInfo.InvariantCulture)+
-    ";session_name_length="+sessionName.Length.ToString(CultureInfo.InvariantCulture)+";expected_store_length="+expectedStore.Length.ToString(CultureInfo.InvariantCulture)+
-    ";common_folder_empty="+Bit(commonFolderEmpty)+";program_data_matches_known_folder="+Bit(programDataMatchesKnownFolder);
+    ";session_name_length="+sessionName.Length.ToString(CultureInfo.InvariantCulture)+";expected_store_length="+expectedStore.Length.ToString(CultureInfo.InvariantCulture);
   }
   static DirectorySecurity ExpectedSecurity(string sid){
    var security=new DirectorySecurity();
@@ -163,11 +181,14 @@ namespace PortableVBox {
     if(PinnedBuild.Mode!="CI"&&PinnedBuild.Mode!="ALPHA")throw new InvalidOperationException("Unknown fixed SDS build mode");
     if(Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE")!=PinnedBuild.Mode)throw new InvalidOperationException("Fixed SDS build mode mismatch");
     string bridge=Full(typeof(SdsBridge).Assembly.Location),code=Path.GetDirectoryName(bridge),session=Path.GetDirectoryName(code);
-    string commonFolder=Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-    if(String.IsNullOrEmpty(commonFolder)||!Path.IsPathRooted(commonFolder))throw new InvalidOperationException("Fixed SDS known-folder resolution unavailable");
-    string store=Full(Path.Combine(commonFolder,PinnedBuild.Mode=="ALPHA"?"PortableVirtualBox.Alpha":"PortableVirtualBox.Experiment"));
+    // The fixed parent clears the environment, validates its store and supplies
+    // that exact locator in RUNNER_TEMP. This is not environment-based authority:
+    // assembly/session equality, protected ACLs, leases and payload pins still gate
+    // admission. Do not fall back to child shell/known-folder resolution, whose
+    // unavailable result in the protected worker remains separately unexplained.
+    string store=ValidateStoreLocator(Environment.GetEnvironmentVariable("RUNNER_TEMP"),PinnedBuild.Mode);
     string originFailure=OriginFailure(Path.GetFileName(bridge),Path.GetFileName(code),Path.GetDirectoryName(session),Path.GetFileName(session),store,
-     PinnedBuild.Mode,Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE"),String.IsNullOrEmpty(commonFolder),Equal(Environment.GetEnvironmentVariable("ProgramData"),commonFolder));
+     PinnedBuild.Mode,Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE"));
     if(originFailure!=null)throw new InvalidOperationException(originFailure);
     using(var process=Process.GetCurrentProcess())
      if(!Equal(process.MainModule.FileName,Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe")))throw new InvalidOperationException("Fixed SDS bridge requires fixed PowerShell worker");
