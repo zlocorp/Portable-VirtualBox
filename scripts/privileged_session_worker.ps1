@@ -74,18 +74,195 @@ function Test-OriginalControllerAbsent([int]$OldPid) {
     return $null -eq $observed
 }
 function VBox-Processes { return @(Get-Process -ErrorAction Stop | Where-Object ProcessName -match '^(VBox|VirtualBox)') }
-function Run-Sds([string]$Argument,[string]$Label) {
-    $p=Start-Process -FilePath (Join-Path $app 'VBoxSDS.exe') -ArgumentList $Argument -WorkingDirectory $app -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $session ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $session ($Label+'.stderr.txt'))
+# Optional evidence only: normalize captured facts without observing the system.
+# This format is never an admission, cleanup or child-lifetime authority.
+function ConvertTo-SdsDiagnosticLines([hashtable]$Facts) {
+    function Get-DiagnosticToken($Value,[string[]]$Allowed,[string]$Fallback) {
+        if ($Value -is [string] -and $Allowed -ccontains $Value) { return $Value }
+        return $Fallback
+    }
+    function Get-DiagnosticNumber($Value,[long]$Minimum,[long]$Maximum) {
+        if (($Value -is [int] -or $Value -is [long]) -and $Value -ge $Minimum -and $Value -le $Maximum) {
+            return [Convert]::ToString([long]$Value,[Globalization.CultureInfo]::InvariantCulture)
+        }
+        return 'unavailable'
+    }
+    if ($null -eq $Facts) { $Facts=@{} }
+    $launch=Get-DiagnosticToken $Facts['Launch'] @('not_attempted','returned','error','unknown') 'unknown'
+    $handle=Get-DiagnosticToken $Facts['Handle'] @('not_observed','nonzero','zero','error','unknown') 'unknown'
+    $wait=Get-DiagnosticToken $Facts['Wait'] @('not_observed','within_deadline','exceeded','unconfirmed') 'not_observed'
+    $completion=Get-DiagnosticToken $Facts['Completion'] @('not_observed','confirmed','unconfirmed') 'not_observed'
+    $exitCode=Get-DiagnosticNumber $Facts['ExitCode'] ([int]::MinValue) ([int]::MaxValue)
+    $elapsed=Get-DiagnosticNumber $Facts['ElapsedMs'] 0 ([long]::MaxValue)
+    $preflight=Get-DiagnosticToken $Facts['Preflight'] @('not_observed','absent','present','error','unknown') 'unknown'
+    $source=Get-DiagnosticToken $Facts['RegistrySource'] @('gate','not_observed') 'not_observed'
+    $gate=Get-DiagnosticToken $Facts['Gate'] @('not_reached','missing','observation_error','identity_mismatch','identity_match') 'not_reached'
+    $query='not_observed'; $image='unavailable'; $type='unavailable'; $start='unavailable'; $account='unavailable'
+    $errorCategory='unknown'; $hresult='unavailable'
+    if ($source -ceq 'gate') {
+        $query='unknown'
+        $registryError=$Facts['RegistryError']
+        if ($null -ne $registryError) {
+            $query='error'
+            if ($registryError -is [Management.Automation.ErrorRecord]) {
+                # Recognize only the original fixed Get-ItemProperty missing-key
+                # shape. No error text parsing or later registry query is used.
+                try {
+                    # Keep rejecting PowerShell overrides, but PSProperty alone
+                    # also admits hidden CLR getters. Read only these fixed base
+                    # members, whose nonvirtual getters cannot dispatch to input.
+                    $members=@{
+                        Exception=[Management.Automation.ErrorRecord].GetProperty('Exception')
+                        FullyQualifiedErrorId=[Management.Automation.ErrorRecord].GetProperty('FullyQualifiedErrorId')
+                        CategoryInfo=[Management.Automation.ErrorRecord].GetProperty('CategoryInfo')
+                        TargetObject=[Management.Automation.ErrorRecord].GetProperty('TargetObject')
+                        HResult=[Exception].GetProperty('HResult')
+                        Category=[Management.Automation.ErrorCategoryInfo].GetProperty('Category')
+                    }
+                    foreach ($member in $members.Values) {
+                        if ($null -eq $member -or $null -eq $member.GetGetMethod() -or $member.GetGetMethod().IsVirtual) {
+                            throw 'Unsupported diagnostic base member'
+                        }
+                    }
+                    foreach ($name in @('Exception','FullyQualifiedErrorId','CategoryInfo','TargetObject')) {
+                        if ($registryError.PSObject.Properties[$name] -isnot [Management.Automation.PSProperty]) {
+                            throw 'Extended diagnostic error member'
+                        }
+                    }
+                    $exception=$members['Exception'].GetValue($registryError,$null)
+                    $categoryInfo=$members['CategoryInfo'].GetValue($registryError,$null)
+                    if ($exception -isnot [Exception] -or $categoryInfo -isnot [Management.Automation.ErrorCategoryInfo] -or
+                        $exception.PSObject.Properties['HResult'] -isnot [Management.Automation.PSProperty] -or
+                        $categoryInfo.PSObject.Properties['Category'] -isnot [Management.Automation.PSProperty]) {
+                        throw 'Extended diagnostic exception/category member'
+                    }
+                    $hresult=Get-DiagnosticNumber ($members['HResult'].GetValue($exception,$null)) ([int]::MinValue) ([int]::MaxValue)
+                    if ($exception -is [Management.Automation.ItemNotFoundException] -and
+                        ($members['FullyQualifiedErrorId'].GetValue($registryError,$null)) -ceq 'PathNotFound,Microsoft.PowerShell.Commands.GetItemPropertyCommand' -and
+                        ($members['Category'].GetValue($categoryInfo,$null)) -eq [Management.Automation.ErrorCategory]::ObjectNotFound -and
+                        ($members['TargetObject'].GetValue($registryError,$null)) -is [string] -and
+                        ($members['TargetObject'].GetValue($registryError,$null)) -ceq 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS') {
+                        $query='missing'; $errorCategory='not_found'
+                    } elseif ($exception -is [UnauthorizedAccessException]) { $errorCategory='access_denied'
+                    } elseif ($exception -is [Security.SecurityException]) { $errorCategory='security'
+                    } elseif ($exception -is [IO.IOException]) { $errorCategory='io'
+                    } elseif ($exception -is [Exception]) { $errorCategory='other' }
+                } catch { $query='error'; $errorCategory='unknown'; $hresult='unavailable' }
+            }
+        } elseif ($Facts['RegistryValue'] -is [Management.Automation.PSCustomObject]) {
+            # The original registry result carries note properties, not getters.
+            # Do not invoke scripted/adapted getters on malformed input.
+            $observed=@{}
+            foreach ($name in @('ImagePath','Type','Start','ObjectName')) {
+                try {
+                    $property=$Facts['RegistryValue'].PSObject.Properties[$name]
+                    if ($property -is [Management.Automation.PSNoteProperty]) { $observed[$name]=$property.Value }
+                } catch { }
+            }
+            if ($observed.Count -gt 0) { $query='present' }
+            $type=Get-DiagnosticNumber $observed['Type'] ([int]::MinValue) ([int]::MaxValue)
+            $start=Get-DiagnosticNumber $observed['Start'] ([int]::MinValue) ([int]::MaxValue)
+            $imageValue=$observed['ImagePath']; $requested=$Facts['RequestedImage']
+            if ($null -ne $imageValue) {
+                if ($imageValue -isnot [string] -or [string]::IsNullOrWhiteSpace($imageValue)) { $image='malformed'
+                } elseif ($requested -is [string] -and -not [string]::IsNullOrWhiteSpace($requested)) {
+                    # Copy the primitive string before instance operations so
+                    # input-supplied PowerShell methods cannot run.
+                    $imageText=[string]::new([char[]]$imageValue)
+                    if ([string]::Equals($imageText.Trim().Trim('"'),$requested,[StringComparison]::OrdinalIgnoreCase)) { $image='matches_requested'
+                    } else { $image='different' }
+                }
+            }
+            $accountValue=$observed['ObjectName']
+            if ($null -ne $accountValue) {
+                if ($accountValue -isnot [string] -or [string]::IsNullOrWhiteSpace($accountValue)) { $account='malformed'
+                } elseif ([string]::Equals($accountValue,'LocalSystem',[StringComparison]::OrdinalIgnoreCase)) { $account='LocalSystem'
+                } else { $account='different' }
+            }
+        }
+    }
+    $lines=[string[]]@(
+        "PVBOX_SDS_DIAG_V1 kind=process authority=none operation=register requested_image=protected_app/VBoxSDS.exe launched_image=not_observed launch=$launch handle=$handle wait=$wait completion=$completion exit_code=$exitCode elapsed_ms=$elapsed deadline_ms=30000",
+        "PVBOX_SDS_DIAG_V1 kind=registry authority=none key=VBoxSDS preflight=$preflight source=$source query=$query image=$image type=$type start=$start account=$account gate=$gate error=$errorCategory exception_hresult=$hresult"
+    )
+    # Validate the complete records before any emission, including the explicit
+    # CRLF the writer will add. Never truncate a token into different evidence.
+    $total=0
+    foreach ($line in $lines) {
+        $bytes=[Text.Encoding]::UTF8.GetByteCount($line+"`r`n")
+        if ($bytes -gt 1024 -or $line -cmatch '[^\x20-\x7e]') { throw 'Diagnostic record bounds exceeded' }
+        $total+=$bytes
+    }
+    if ($total -gt 2048) { throw 'Diagnostic total bounds exceeded' }
+    return $lines
+}
+function Write-SdsRegistrationDiagnostics([hashtable]$Facts) {
+    try { $lines=@(ConvertTo-SdsDiagnosticLines $Facts) } catch { return }
+    # Recheck both complete lines before writing, so an unexpected renderer
+    # result cannot add writes or exceed either cap. Rendering failure is silent.
     try {
-        $ownedHandle=$p.Handle
+        if ($lines.Count -ne 2) { return }
+        $total=0
+        foreach ($line in $lines) {
+            if ($line -isnot [string]) { return }
+            $bytes=[Text.Encoding]::UTF8.GetByteCount($line+"`r`n")
+            if ($bytes -gt 1024 -or $line -cmatch '[^\x20-\x7e]') { return }
+            $total+=$bytes
+        }
+        if ($total -gt 2048) { return }
+    } catch { return }
+    foreach ($line in $lines) {
+        try { [Console]::Out.Write($line+"`r`n") } catch { }
+    }
+}
+function Run-Sds([string]$Argument,[string]$Label,[hashtable]$DiagnosticFacts=$null) {
+    $timer=$null
+    if ($null -ne $DiagnosticFacts) {
+        try { $timer=[Diagnostics.Stopwatch]::StartNew() } catch { }
+    }
+    # Launch remains outside the existing process try/finally. A launch error
+    # does not establish that no child was created or repair its lifetime.
+    try {
+        $p=Start-Process -FilePath (Join-Path $app 'VBoxSDS.exe') -ArgumentList $Argument -WorkingDirectory $app -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $session ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $session ($Label+'.stderr.txt'))
+    } catch {
+        try { if ($null -ne $DiagnosticFacts) { $DiagnosticFacts['Launch']='error' } } catch { }
+        throw
+    }
+    try { if ($null -ne $DiagnosticFacts) { $DiagnosticFacts['Launch']='returned' } } catch { }
+    try {
+        try { $ownedHandle=$p.Handle } catch {
+            try { if ($null -ne $DiagnosticFacts) { $DiagnosticFacts['Handle']='error' } } catch { }
+            throw
+        }
+        try {
+            if ($null -ne $DiagnosticFacts) {
+                $DiagnosticFacts['Handle']=if ($ownedHandle -isnot [IntPtr]) { 'unknown' } elseif ($ownedHandle -eq [IntPtr]::Zero) { 'zero' } else { 'nonzero' }
+            }
+        } catch { }
         if ($ownedHandle -eq [IntPtr]::Zero) { throw 'SDS process handle unavailable' }
+        try { if ($null -ne $DiagnosticFacts) { $DiagnosticFacts['Wait']='unconfirmed'; $DiagnosticFacts['Completion']='unconfirmed' } } catch { }
         if (-not $p.WaitForExit(30000)) {
+            try { if ($null -ne $DiagnosticFacts) { $DiagnosticFacts['Wait']='exceeded' } } catch { }
             # Registration/unregistration is a persistent Windows service
             # mutation. Retain the exact child even when it runs too long.
             $p.WaitForExit()
+            try {
+                if ($null -ne $DiagnosticFacts) {
+                    $DiagnosticFacts['Completion']='confirmed'
+                    if ($null -ne $timer) { $DiagnosticFacts['ElapsedMs']=$timer.ElapsedMilliseconds }
+                }
+            } catch { }
             throw 'SDS operation exceeded safety deadline; child exited, state requires inspection'
         }
-        if ($p.ExitCode -ne 0) { throw 'SDS operation unconfirmed; retain resources' }
+        try {
+            if ($null -ne $DiagnosticFacts) {
+                $DiagnosticFacts['Wait']='within_deadline'; $DiagnosticFacts['Completion']='confirmed'
+                if ($null -ne $timer) { $DiagnosticFacts['ElapsedMs']=$timer.ElapsedMilliseconds }
+            }
+        } catch { }
+        $exitCode=$p.ExitCode
+        try { if ($null -ne $DiagnosticFacts) { $DiagnosticFacts['ExitCode']=$exitCode } } catch { }
+        if ($exitCode -ne 0) { throw 'SDS operation unconfirmed; retain resources' }
     } finally { $p.Dispose() }
 }
 try {
@@ -110,22 +287,55 @@ try {
             throw 'Driver activation proof unconfirmed; preparation denied'
         }
         if ($TestBreakAfter -eq 'Start') { throw 'CI_TEST_BREAK_AFTER_START: protected driver start report committed' }
-        if (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS') { throw 'SDS appeared before our explicit registration' }
-        Run-Sds '--regservice' 'sds-register'
-        $sds=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS' -ErrorAction Stop
-        if (([string]$sds.ImagePath).Trim().Trim('"') -ine (Join-Path $app 'VBoxSDS.exe') -or
-            $sds.Type -ne 16 -or $sds.Start -ne 3 -or $sds.ObjectName -ne 'LocalSystem') { throw 'SDS registration identity differs' }
-        # The final SDS effect is recorded independently BEFORE the final
-        # prepared session receipt. A crash between registration and this marker
-        # remains ambiguous and requires manual handling, not guessed cleanup.
-        [ordered]@{schema=1;registered=$true;protected_app=$app;
-            controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();
-            sds_image=(Join-Path $app 'VBoxSDS.exe');source_commit=$env:GITHUB_SHA} |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $session 'sds-registered.json') -Encoding utf8
-        if ($TestBreakAfter -eq 'Sds') { throw 'CI_TEST_BREAK_AFTER_SDS: protected service registration marker committed' }
-        [ordered]@{schema=1;portable_root=$root;protected_app=$app;controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();controller_image=$controllerImage;prepared=$true;source_commit=$env:GITHUB_SHA} |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $session 'session.json') -Encoding utf8
-        Write-Host 'PRIVILEGED_PREPARED_WITHOUT_USER_PROFILE_EXECUTION'
+        $sdsFacts=$null
+        try {
+            $sdsFacts=@{RequestedImage=(Join-Path $app 'VBoxSDS.exe');Preflight='not_observed';Launch='not_attempted';Handle='not_observed';Wait='not_observed';Completion='not_observed';ExitCode=$null;ElapsedMs=$null;RegistrySource='not_observed';RegistryValue=$null;RegistryError=$null;Gate='not_reached'}
+        } catch { }
+        $sdsPreflight=$null; $sdsPreflightError=$null; $sds=$null; $sdsReadReturned=$false; $sdsReadError=$null
+        $sdsIdentityDiffers=$null; $sdsIdentityError=$null
+        try {
+            try {
+                if (($sdsPreflight=Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) { throw 'SDS appeared before our explicit registration' }
+            } catch { $sdsPreflightError=$_; throw }
+            Run-Sds '--regservice' 'sds-register' $sdsFacts
+            try {
+                $sds=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS' -ErrorAction Stop
+            } catch { $sdsReadError=$_; throw }
+            $sdsReadReturned=$true
+            try {
+                if (($sdsIdentityDiffers=(([string]$sds.ImagePath).Trim().Trim('"') -ine (Join-Path $app 'VBoxSDS.exe') -or
+                    $sds.Type -ne 16 -or $sds.Start -ne 3 -or $sds.ObjectName -ne 'LocalSystem'))) { throw 'SDS registration identity differs' }
+            } catch { $sdsIdentityError=$_; throw }
+            # The final SDS effect is recorded independently BEFORE the final
+            # prepared session receipt. A crash between registration and this marker
+            # remains ambiguous and requires manual handling, not guessed cleanup.
+            [ordered]@{schema=1;registered=$true;protected_app=$app;
+                controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();
+                sds_image=(Join-Path $app 'VBoxSDS.exe');source_commit=$env:GITHUB_SHA} |
+                ConvertTo-Json | Set-Content -LiteralPath (Join-Path $session 'sds-registered.json') -Encoding utf8
+            if ($TestBreakAfter -eq 'Sds') { throw 'CI_TEST_BREAK_AFTER_SDS: protected service registration marker committed' }
+            [ordered]@{schema=1;portable_root=$root;protected_app=$app;controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();controller_image=$controllerImage;prepared=$true;source_commit=$env:GITHUB_SHA} |
+                ConvertTo-Json | Set-Content -LiteralPath (Join-Path $session 'session.json') -Encoding utf8
+            Write-Host 'PRIVILEGED_PREPARED_WITHOUT_USER_PROFILE_EXECUTION'
+        } finally {
+            # Only translate observations after the original marker/receipt or
+            # refusal. Optional reporting cannot replace a propagating error.
+            try {
+                if ($null -ne $sdsFacts) {
+                    $sdsFacts['Preflight']=if ($sdsPreflight -isnot [bool]) { if ($null -ne $sdsPreflightError) { 'error' } else { 'unknown' } } elseif ($sdsPreflight) { 'present' } else { 'absent' }
+                    if ($sdsReadReturned -or $null -ne $sdsReadError) {
+                        $sdsFacts['RegistrySource']='gate'; $sdsFacts['RegistryValue']=$sds
+                        if ($sdsIdentityDiffers -is [bool]) {
+                            $sdsFacts['Gate']=if ($sdsIdentityDiffers) { 'identity_mismatch' } else { 'identity_match' }
+                        } else {
+                            $sdsFacts['Gate']='observation_error'
+                            $sdsFacts['RegistryError']=if ($null -ne $sdsReadError) { $sdsReadError } else { $sdsIdentityError }
+                        }
+                    }
+                }
+                Write-SdsRegistrationDiagnostics $sdsFacts
+            } catch { }
+        }
     } else {
         if ($Action -eq 'Recover' -and $IncompletePreparation) {
             # A protected intent alone is not a driver ownership receipt. Stage

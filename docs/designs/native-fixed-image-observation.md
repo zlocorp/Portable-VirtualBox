@@ -64,6 +64,34 @@ actual composed-artifact validator integration remains **Task 2E**. No schema-2
 composition, production lifetime repair or release/workstation acceptance follows.
 Later source changes require their own evidence; this record cannot certify them.
 
+## Partial ownership checkpoint 6a164db; composition paused
+
+Task 2C's source implementation and limited native/build proof are independently
+accepted at `6a164dbdc14bf5d4d6ddadb072d7f7586f8560ff`, tree
+`e8ebd3522f130e7c818148d32136a65112d97e92`. The
+[partial execution record](../EXECUTION-2026-11-11-exclusive-image-ownership-partial.md)
+retains **ten successes and one failed payload-continuation workflow**, all
+attempt 1. Both native runs execute the injected lease/owner assertions exactly
+once as **managed recording-call tests**. Real file/probe forwarding is covered
+by four standalone file-only cases; no native image/process composition is
+complete. Exact-source PUSH and same-tree PR preserve nine capture/three environment
+cases. Both Linux suites pass 425 tests/seven skips, and both real Windows
+Framework bridge assertions pass with observed Release 533509 (gate >=528040).
+
+The payload run fails in the first Prepare after observed VBoxSup staging/start,
+when the SDS key is absent following a success-like process result. Its journal
+is incomplete and zero continuation cases complete. There is no verified teardown
+or final data-preservation result; initial false proof fields do not prove data
+loss. The underlying cause is unknown. Existing ambiguous-SDS partial-recovery
+refusal remains mandatory; job teardown is not cleanup proof.
+
+**The overall checkpoint is blocked and Task 2D is paused.** This accepts only
+2C source/limited proof, not the downstream launch binding/process integration.
+Tasks 2D/2E remain unfinished, including actual schema-2 composed-validator and
+comparison-status-guard integration. The binding requirements below remain the
+future implementation contract; they are not descriptions of completed native
+composition. Historical accepted records above remain unchanged.
+
 ## Approaches and recommendation
 
 1. Own an exact native file handle and hash through bounded synchronous ReadFile
@@ -452,8 +480,8 @@ positive launch. No exploit, race or hostile replacement reproduction.
 
 The accepted Task 1 schema remains version 1 and accepts only `stage=file-only`.
 The proposed Task 2 schema below is separate version 2, pinned to `stage=composed`;
-it is unavailable until composition preflight review and the controller's
-implementation assignment.
+it remains unavailable until independent composition preflight and implementation
+review. Contributions remain on the Draft branch.
 
 `native-fixed-image-observation.jsonl` is UTF-8 text, at most five records, 16 KiB
 per line including newline and 128 KiB total. Each record has exact keys; reject

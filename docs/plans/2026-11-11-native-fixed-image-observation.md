@@ -1,9 +1,9 @@
 # Native Fixed-Image Observation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
-> or superpowers:executing-plans only after preflight review and controller assignment. Execute
-> task-by-task with TDD and independent review; steps use checkboxes.
-> Task 1 and Tasks 2A–2B are test-only accepted; Tasks 2C–2E remain unfinished.
+> Execute each stage with TDD and independent review; steps use checkboxes.
+> Keep contributions on the Draft branch and review each stage before its successor.
+> Task 1 and Tasks 2A–2B are test-only accepted; Task 2C source/limited proof is accepted.
+> The 6a164db overall checkpoint is blocked; Task 2D is paused and 2D–2E remain unfinished.
 > This document authorizes no new implementation, publication,
 > production integration, merge, release or primary-host execution.
 
@@ -116,21 +116,19 @@ context, not pass raw paths or handles into a new launcher.
 **Historical gate before 2A:** Task 1's accepted historical record is retained below. The
 successor `519056432b4d9bd045140d2ba2bbe924e5c135e9` sentinel native artifacts have
 now been independently accepted, including unchanged file-only image results.
-That satisfies the changed-source native prerequisite, not permission to implement.
-Obtain independent review of this revised design/plan and the controller's next
-implementation assignment before changing any code. Existing user authorization
-already covers local test-only checked-branch development; renewed user permission
-is not a prerequisite. Every subtask below is sequential and ends
-in a focused independent review; do not start its dependent subtask first.
-Publication, native execution and exact-source final acceptance retain their own
-authorization/gates. No primary/user Windows experiments are authorized here.
+That satisfies the changed-source native prerequisite. Obtain independent review
+of the revised design/plan before the next implementation stage. Every subtask
+below is sequential and ends in focused independent review; do not start its
+dependent subtask first. Contributions remain on the Draft branch. Publication,
+native execution and exact-source final acceptance retain separate review gates.
+No primary/user Windows experiments are included.
 
 **Accepted scope at 98bec8f:** Independent preflight, 2A, 2B and the bounded
 host-frame correction reviews are complete. The actual changed-source native
 build/path prerequisite is accepted in the
 [execution record](../EXECUTION-2026-11-11-fixed-fixture-build-paths.md).
-Only 2A–2B checkboxes below are closed. Task 2C and later stages remain unfinished
-and require their separate implementation/review and source-specific evidence.
+At that historical checkpoint only 2A–2B were accepted. The later 2C source/limited
+proof is recorded below; the overall checkpoint is blocked and 2D is paused.
 The schema-independent path-comparison status guard does not yet enforce actual
 composed artifacts; that integration remains 2E.
 
@@ -255,6 +253,12 @@ overall UNKNOWN); every PASS summary is rejected even with require_pass=False.
 
 ### Task 2C: Make file ownership exclusively transferable
 
+**Status at 6a164db:** Source implementation and limited native/build proof accepted;
+overall checkpoint blocked by the failed payload-continuation Prepare. Task 2D
+is paused. The checked items below cover source and managed recording-call
+behavior plus preserved standalone native file/probe forwarding, not completed
+native composition. See the [partial execution record](../EXECUTION-2026-11-11-exclusive-image-ownership-partial.md).
+
 **Files:** Modify `NativeFixedImageIdentity.cs`, `NativeFixedImageIdentityTests.cs`,
 `NativeFixedImageIdentityNativeTests.cs`, `check_native_fixed_image_observation.ps1`,
 `test_native_fixed_image_observation_contract.py`.
@@ -274,11 +278,11 @@ expectation before supplying them through fake ReadFile. The image runner must
 actually invoke this integer-returning method with verified pristine bytes, before
 negative setup, in both managed-only and native paths, and reject nonzero return.
 
-- [ ] Write failing managed `ClaimRejectsPreparedReleasedAndReused`,
+- [x] Implement managed `ClaimRejectsPreparedReleasedAndReused`,
   `ConcurrentClaimHasOneWinner`, `TransferredFacadeCannotPrepareProbeOrRelease`,
   `ReadyRequiresLiveUnclosedKnownHandle`, and `UnopenedReleasePreventsLaterClaim`.
   Assert no native calls during claim/rejection and a single irreversible winner.
-- [ ] Write `RealFileOwnerUsesOnlyInjectedCalls`: prepare/hash/probes/release use
+- [x] Implement `RealFileOwnerUsesOnlyInjectedCalls`: prepare/hash/probes/release use
   the actual image owner with fake calls, including partial reads, EOF bounds,
   failed/open-unavailable/read-unavailable/probe-unknown and close FALSE/unavailable.
   Assert exact call order/handle, readiness revocation, no retry and retained owners.
@@ -286,13 +290,23 @@ negative setup, in both managed-only and native paths, and reject nonzero return
   Add `test_runner_executes_injected_owner_contracts`: execute the image runner
   -ManagedOnly and require exactly one `PASS fixed image injected owners` marker,
   emitted only by the invoked method after its actual owner/fake-call assertions.
-- [ ] Witness failures, then add locked use-state transitions, capability binding
-  and native adapters without changing the accepted file-observation algorithm.
+- [x] Add locked use-state transitions, capability binding and native adapters
+  without changing the accepted file-observation algorithm. Verify behavior with
+  runner-invocation/readiness failure witnesses and later weakened-guard controls.
   Both standalone/lease operations call shared private implementations. Add no
   arbitrary filename/digest setters, raw-handle access or public path getter.
-- [ ] Run fixed-image managed/validator tests. Review that standalone file-only
+- [x] Run fixed-image managed/validator tests. Review that standalone file-only
   Main still releases only its own nontransferred image and schema-1 evidence is
   unchanged; a composed Main must never inherit that unconditional finally close.
+
+Witness history: the initial runner invocation and actual-owner readiness
+assertions failed before their corrections. Later weakened-guard controls failed
+at the named claim/facade/readiness/native-boundary assertions; these establish
+regression sensitivity, not six separate original pre-implementation RED runs.
+Both actual Windows runner logs now contain one injected-owner PASS before native
+case output; exact runner source places the invocation before negative setup.
+The claims use recording calls. The four real native file-only cases exercise
+the forwarding adapter without transferring the image into a process owner.
 
 ### Task 2D: Compose the existing Binary owner and real decisions
 
@@ -426,9 +440,9 @@ allowlisted case constant; new runner accepts ManagedOnly/EvidenceDirectory only
   and the repository's active-tree gate. A failure from unavailable official refs/
   compiler is a prerequisite blocker, not the required TDD behavioral failure.
 
-During eventual implementation, each 2A-2E cycle is independently reviewable before
-its successor. Stage a focused commit only if separately authorized; this planning
-revision explicitly permits no commit, publication, native tests or code edits.
+During eventual implementation, each 2A-2E cycle requires independent review before
+its successor. Contributions remain on the Draft branch. This plan does not itself
+advance implementation, publication or native execution past their separate gates.
 
 ## Historical Task 1 verification checkpoint
 
@@ -467,10 +481,9 @@ private-payload continuation 43101335826. The verified
 was committed locally as `31255f3`; the published tested source remains `5190564`.
 Earlier partial results remain unchanged. The exact changed-source native
 prerequisite is satisfied. Composition remains unimplemented and this revision
-resolves planning preflight only. Independent composition review and the controller's
-next assignment remain gates; existing checked-branch development authorization
-covers local test-only implementation without renewed user permission. Native
-execution/publication remain within their authorized branch workflow and review gates.
+resolves planning preflight only. Independent composition review remains required
+before the next implementation stage. Contributions remain on the Draft branch;
+native execution/publication and exact-source acceptance retain separate review gates.
 
 ## Accepted 98bec8f build/path checkpoint; next gate 2C
 
@@ -504,3 +517,30 @@ guard into the actual stage-aware composed-artifact validator. Schema 1 remains
 file-only and cannot certify schema 2. Later ownership/composition edits require
 independent review and their own changed-source native evidence. No new primary-host,
 production, merge or release permission is conferred by this checkpoint.
+
+## Partial 6a164db ownership checkpoint; 2D paused
+
+Published source `6a164dbdc14bf5d4d6ddadb072d7f7586f8560ff`, tree
+`e8ebd3522f130e7c818148d32136a65112d97e92`, satisfies the reviewed 2C source and
+limited native/build requirements. Native PUSH 43117916926 checks out the exact
+source; native PR 43117927011 checks out synthetic merge
+`9a004fbba550a1e33c87b02dd7ab0ae8fd16fd26` with the same tree. Ten native ZIPs
+pass size/digest/CRC and actual-log checks. Both Linux suites pass 425 tests/seven
+skips. Both real Windows bridge assertions execute under PowerShell 5.1/Desktop,
+observed Framework Release 533509 and CLR 4.0.30319.42000/mscorlib; the minimum
+remains Framework >=4.8/Release >=528040, not exact 4.8.0 or user-Windows proof.
+
+The complete natural inventory is **10 successes and one failure, all attempt 1**.
+Payload continuation 43117917218 fails during first Prepare after observed VBoxSup
+staging/start, before any controlled interruption or continuation. The expected
+SDS key is absent after a success-like process result; the helper journal is
+incomplete and zero continuation cases complete. No verified teardown or final
+data-preservation result exists. The underlying cause is unknown; ambiguous
+partial recovery remains refused. Do not infer cleanup from job teardown.
+
+**The overall checkpoint remains blocked; Task 2D is paused.** No later success
+may overwrite this failure. Resolve the diagnosis and complete independent review
+before the next implementation stage. Contributions remain on the Draft branch. Task 2D command/binding/process work and Task 2E
+actual schema-2 composed-validator/status-guard/native integration remain unchecked.
+No production, primary-host, merge or release authority follows. See the
+[partial execution record](../EXECUTION-2026-11-11-exclusive-image-ownership-partial.md).
