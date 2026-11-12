@@ -194,12 +194,95 @@ try {
   }
   }
  }
- # Real nested '& child.ps1' call across distinct defining/caller directories.
- # Production loader, harmless fixed DLL, isolated PowerShell; no system effects.
+ # Actual add/start transport try/catch: status distinctions are safety inputs.
+ foreach($selection in @(
+  @{File='vbox_sup_standalone.ps1';Operation='AddSupPackage';Timeout=75},
+  @{File='vbox_sup_start_owned.ps1';Operation='StartSup';Timeout=30}
+ )){
+  $tokens=$null;$errors=$null
+  $driverAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $Repository ('scripts/'+$selection.File)),[ref]$tokens,[ref]$errors)
+  Require ($errors.Count -eq 0) 'Driver source parse failed'
+  $transport=@($driverAst.FindAll({param($n)$n -is [Management.Automation.Language.TryStatementAst] -and $n.Body.Extent.Text.Contains('Invoke-ProtectedDriver -Operation '+$selection.Operation)},$true))
+  Require ($transport.Count -eq 1) 'Expected one actual add/start transport'
+  foreach($command in @($transport[0].FindAll({param($n)$n -is [Management.Automation.Language.CommandAst]},$true))){
+   Require ($command.GetCommandName() -cin @('Invoke-ProtectedDriver','Start-Process')) 'Unexpected effect in add/start transport'
+  }
+  $body=[scriptblock]::Create($transport[0].Extent.Text)
+  foreach($mode in @('CI','ALPHA')){
+   foreach($case in @('Success','Nonzero','LateZero','LateNonzero','LateUnknown','UnknownExit','ObservationError','MissingBridge','UnknownMode')){
+    & {
+     $env:PVBOX_FIXED_HELPER_MODE=if($case -eq 'UnknownMode'){'OTHER'}else{$mode}
+     $state=@{Native=0;Bridge=0};$TimeoutSeconds=$selection.Timeout
+     $status='LAUNCH_ERROR';$exitCode=$null;$exception='';$problem='';$process=$null;$proc=$null
+     $clock=[Diagnostics.Stopwatch]::StartNew()
+     function Start-Process {$state.Native++;throw 'FORBIDDEN_LEGACY_NATIVE'}
+     if($case -ne 'MissingBridge'){
+      function Invoke-ProtectedDriver {
+       param([string]$Operation,[int]$TimeoutSeconds)
+       $state.Bridge++
+       Require ($Operation -ceq $selection.Operation -and $TimeoutSeconds -eq $selection.Timeout) 'Driver selector/deadline changed'
+       if($case -eq 'ObservationError'){throw 'FIXTURE_OBSERVATION_FAILURE'}
+       return [pscustomobject]@{WithinDeadline=($case -notin @('LateZero','LateNonzero','LateUnknown'));ExitCodeKnown=($case -notin @('UnknownExit','LateUnknown'));ExitCode=$(if($case -in @('Nonzero','LateNonzero')){5}else{0})}
+      }
+     }
+     . $body
+     $expectedStatus=if($case -in @('Success','Nonzero')){'EXITED'}elseif($case -in @('LateZero','LateNonzero','LateUnknown')){'TIMEOUT'}else{'UNKNOWN'}
+     $expectedExit=if($case -in @('Nonzero','LateNonzero')){5}elseif($case -in @('Success','LateZero')){0}else{$null}
+     Require ($status -ceq $expectedStatus -and $exitCode -eq $expectedExit) "$mode/$($selection.Operation)/$case lost measured status/exit"
+     Require ($state.Native -eq 0 -and $state.Bridge -eq $(if($case -in @('UnknownMode','MissingBridge')){0}else{1})) 'Protected add/start used fallback or repeated call'
+     Write-Host "PASS protected driver $mode/$($selection.Operation)/$case"
+    }
+   }
+  }
+ }
+ # Six cleanup sites retain only fixed enum dispatch. Their surrounding receipt,
+ # stopped-state and package-identity gates remain in the production script.
+ foreach($filename in @('vbox_sup_cleanup.ps1','vbox_sup_partial_cleanup.ps1')){
+  $tokens=$null;$errors=$null
+  $cleanupAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $Repository ('scripts/'+$filename)),[ref]$tokens,[ref]$errors)
+  Require ($errors.Count -eq 0) 'Driver cleanup parse failed'
+  foreach($operation in @('StopSup','RemoveSupPackage','DeleteSupService')){
+   $branches=@($cleanupAst.FindAll({param($n)$n -is [Management.Automation.Language.IfStatementAst] -and $n.Clauses[0].Item1.Extent.Text -ceq '$env:PVBOX_FIXED_HELPER_MODE' -and $n.Extent.Text.Contains('Invoke-ProtectedDriver -Operation '+$operation)},$true))
+   Require ($branches.Count -eq 1) 'Expected one fixed driver cleanup branch'
+   foreach($command in @($branches[0].FindAll({param($n)$n -is [Management.Automation.Language.CommandAst]},$true))){
+    Require ($command.GetCommandName() -cin @('Invoke-ProtectedDriver','Run-Bounded')) 'Unexpected effect in fixed cleanup branch'
+   }
+   $body=[scriptblock]::Create($branches[0].Extent.Text)
+   $assignment=@($branches[0].Clauses[0].Item2.Statements | Where-Object {$_ -is [Management.Automation.Language.AssignmentStatementAst] -and $_.Right.Extent.Text -ceq '[int]$fixed.ExitCode'})
+   Require ($assignment.Count -eq 1) 'Expected measured driver exit assignment'
+   $variable=$assignment[0].Left.VariablePath.UserPath
+   foreach($mode in @('CI','ALPHA')){
+    foreach($case in @('Success','Nonzero','LateZero','UnknownExit','ObservationError','MissingBridge','UnknownMode')){
+     & {
+      $env:PVBOX_FIXED_HELPER_MODE=if($case -eq 'UnknownMode'){'OTHER'}else{$mode}
+      $state=@{Legacy=0;Bridge=0};$TimeoutSeconds=45;$wantedOperation=$operation
+      function Run-Bounded {$state.Legacy++;throw 'FORBIDDEN_LEGACY_CLEANUP'}
+      if($case -ne 'MissingBridge'){
+       function Invoke-ProtectedDriver{
+        param([string]$Operation,[int]$TimeoutSeconds)
+        $state.Bridge++
+        Require ($Operation -ceq $wantedOperation -and $TimeoutSeconds -eq 45) 'Cleanup enum/deadline changed'
+        if($case -eq 'ObservationError'){throw 'FIXTURE_OBSERVATION_FAILURE'}
+        return [pscustomobject]@{WithinDeadline=($case -ne 'LateZero');ExitCodeKnown=($case -ne 'UnknownExit');ExitCode=$(if($case -eq 'Nonzero'){5}else{0})}
+       }
+      }
+      $caught=$null;try{. $body}catch{$caught=$_}
+      Require (($null -eq $caught) -eq ($case -in @('Success','Nonzero'))) 'Cleanup unknown/late result became success'
+      Require ($state.Legacy -eq 0 -and $state.Bridge -eq $(if($case -in @('MissingBridge','UnknownMode')){0}else{1})) 'Protected cleanup used fallback or repeated call'
+      if($case -in @('Success','Nonzero')){Require ((Get-Variable -Name $variable -ValueOnly) -eq $(if($case -eq 'Nonzero'){5}else{0})) 'Cleanup lost exit before authority gate'}
+      Write-Host "PASS protected driver cleanup $filename/$mode/$operation/$case"
+     }
+    }
+   }
+  }
+ }
+ # Actual one-shot initializer and captured functions across script/module scopes.
+ # Only the managed facade is harmless test code; production initializer/closures
+ # execute unchanged. Every context runs in a fresh isolated PowerShell process.
  if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -or $env:PVBOX_TEST_NET48_REFERENCES) {
-  $loader=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Invoke-ProtectedSds'},$true))
-  Require ($loader.Count -eq 1) 'Exactly one production protected loader required'
-  $fixtureRoot=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-sds-nested-'+[guid]::NewGuid().ToString('N'))
+  $loader=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Initialize-ProtectedEffects'},$true))
+  Require ($loader.Count -eq 1) 'Exactly one file-defined protected context initializer required'
+  $fixtureRoot=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-effect-context-'+[guid]::NewGuid().ToString('N'))
   $defining=Join-Path $fixtureRoot 'defining';$calling=Join-Path $fixtureRoot 'calling'
   New-Item -ItemType Directory -Path $defining,$calling | Out-Null
   try {
@@ -207,19 +290,32 @@ try {
    [IO.File]::WriteAllText($fixtureSource,@'
 namespace PortableVBox {
  public enum SdsOperation { Register, UnregisterFull, UnregisterPartial }
+ public enum DriverOperation { AddSupPackage, StartSup, StopSup, RemoveSupPackage, DeleteSupService }
+ public enum EffectPurpose { Preparation, FullCleanup, PartialCleanup }
  public sealed class HarmlessResult {
   public string Kind { get { return "TEST_ONLY_NO_EFFECTS"; } }
   public string Operation { get; internal set; }
   public int TimeoutSeconds { get; internal set; }
   public string Location { get; internal set; }
+  public string Context { get; internal set; }
+  public string Purpose { get; internal set; }
+  public int Calls { get; internal set; }
+ }
+ public sealed class FixedEffectContext {
+  readonly string identity=System.Guid.NewGuid().ToString("N");
+  readonly EffectPurpose purpose;
+  int calls;
+  internal FixedEffectContext(EffectPurpose p) {purpose=p;}
+  HarmlessResult Result(string operation,int timeout) {
+   return new HarmlessResult {Operation=operation,TimeoutSeconds=timeout,
+    Location=typeof(FixedEffectContext).Assembly.Location,Context=identity,
+    Purpose=purpose.ToString(),Calls=++calls};
+  }
+  public HarmlessResult RunSds(SdsOperation operation,int timeoutSeconds) {return Result(operation.ToString(),timeoutSeconds);}
+  public HarmlessResult RunDriver(DriverOperation operation,int timeoutSeconds) {return Result(operation.ToString(),timeoutSeconds);}
  }
  public static class SdsBridge {
-  public static HarmlessResult Run(SdsOperation operation,int timeoutSeconds) {
-   return new HarmlessResult {
-    Operation=operation.ToString(),TimeoutSeconds=timeoutSeconds,
-    Location=typeof(SdsBridge).Assembly.Location
-   };
-  }
+  public static FixedEffectContext Open(EffectPurpose purpose) {return new FixedEffectContext(purpose);}
  }
 }
 '@,[Text.UTF8Encoding]::new($false))
@@ -227,49 +323,86 @@ namespace PortableVBox {
    . (Join-Path $PSScriptRoot 'NativeFixedFixtureBuild.ps1')
    Compile-FixedFixtureSources @($fixtureSource) $fixtureDll $null
    Require ([Reflection.AssemblyName]::GetAssemblyName($fixtureDll).Name -ceq 'PortableVBox.SdsBridge') 'Harmless assembly simple name changed'
-   Require (@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object {$_.GetName().Name -ceq 'PortableVBox.SdsBridge'}).Count -eq 0) 'Compiler loaded the harmless fixture before real loader'
-   Require (-not (Test-Path -LiteralPath (Join-Path $calling 'PortableVBox.SdsBridge.dll'))) 'Calling directory must not contain a bridge'
+   Require (@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object {$_.GetName().Name -ceq 'PortableVBox.SdsBridge'}).Count -eq 0) 'Compiler loaded harmless fixture'
+   Require (-not (Test-Path -LiteralPath (Join-Path $calling 'PortableVBox.SdsBridge.dll'))) 'Calling directory must not contain bridge'
    $child=Join-Path $calling 'child.ps1'
    [IO.File]::WriteAllText($child,@'
-param([string]$ExpectedDll)
+param([string]$ExpectedDll,[string]$ExpectedPurpose)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-# Recreate the actual loader body without a defining file in a nested scope.
-# It must refuse before loading any assembly, then leave the file-defined
-# function intact for the real child-call regression below.
-$memoryDefinition=[scriptblock]::Create('function Invoke-ProtectedSds {'+(Get-Command Invoke-ProtectedSds -CommandType Function).Definition+'}')
-& {
- . $memoryDefinition
- if (-not [string]::IsNullOrEmpty((Get-Command Invoke-ProtectedSds -CommandType Function).ScriptBlock.File)) { throw 'Expected in-memory function definition' }
- $refused=$false
- try { Invoke-ProtectedSds -Operation UnregisterPartial -TimeoutSeconds 45 | Out-Null }
- catch { if ($_.Exception.Message -ceq 'Unknown protected SDS function definition') { $refused=$true } else { throw } }
- if (-not $refused) { throw 'Loader accepted a function without a defining file' }
- if (@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object {$_.GetName().Name -ceq 'PortableVBox.SdsBridge'}).Count -ne 0) { throw 'No-file refusal loaded an assembly' }
- Write-Host 'SDS_NOFILE_LOADER_REFUSAL_PASS'
+# Poison caller locals: captured exact context must not re-resolve these names.
+$context='caller-spoof';$exactContext='caller-spoof';$assembly='caller-spoof';$contextType=[object]
+$operations=if($ExpectedPurpose -ceq 'Preparation'){@('AddSupPackage','StartSup','Register')}elseif($ExpectedPurpose -ceq 'FullCleanup'){@('UnregisterFull','StopSup','RemoveSupPackage','DeleteSupService')}else{@('UnregisterPartial','StopSup','RemoveSupPackage','DeleteSupService')}
+$identity=$null;$count=0
+foreach($operation in $operations){
+ $result=if($operation -in @('Register','UnregisterFull','UnregisterPartial')){Invoke-ProtectedSds -Operation $operation -TimeoutSeconds 30}else{Invoke-ProtectedDriver -Operation $operation -TimeoutSeconds 45}
+ $count++
+ if($null -eq $identity){$identity=$result.Context}
+ if($result.Kind -cne 'TEST_ONLY_NO_EFFECTS' -or $result.Operation -cne $operation -or
+    $result.Location -cne $ExpectedDll -or $result.Purpose -cne $ExpectedPurpose -or
+    $result.Context -cne $identity -or $result.Calls -ne $count) {throw 'Nested closure did not preserve exact admitted context'}
 }
-$result=Invoke-ProtectedSds -Operation UnregisterPartial -TimeoutSeconds 45
-if ($result.Kind -cne 'TEST_ONLY_NO_EFFECTS' -or
-    $result.Operation -cne 'UnregisterPartial' -or $result.TimeoutSeconds -ne 45 -or
-    $result.Location -cne $ExpectedDll) { throw 'Nested loader did not execute exact defining-directory harmless bridge' }
+# Closed ValidateSet refuses a name before reaching harmless context.
 $refused=$false
-try { Invoke-ProtectedSds -Operation UnregisterPartial -TimeoutSeconds 45 | Out-Null }
-catch { if ($_.Exception.Message -ceq 'Unexpected preloaded SDS bridge assembly') { $refused=$true } else { throw } }
-if (-not $refused) { throw 'Second loader call did not refuse preloaded bridge' }
-Write-Host 'SDS_NESTED_LOADER_PASS'
+try{Invoke-ProtectedDriver -Operation ArbitraryCommand -TimeoutSeconds 45 | Out-Null}catch{$refused=$true}
+if(-not $refused){throw 'Driver closure admitted unknown operation'}
+# Per-call object/type identity check must reject replaced captured context.
+$driverBlock=(Get-Command Invoke-ProtectedDriver -CommandType Function).ScriptBlock
+$driverBlock.Module.SessionState.PSVariable.Set('context',[object]::new())
+$refused=$false
+try{Invoke-ProtectedDriver -Operation StopSup -TimeoutSeconds 45 | Out-Null}
+catch{if($_.Exception.Message -ceq 'Protected effect context identity changed'){$refused=$true}else{throw}}
+if(-not $refused){throw 'Driver closure accepted replaced context'}
+Write-Host ('FIXED_CONTEXT_NESTED_PASS '+$ExpectedPurpose)
 '@,[Text.UTF8Encoding]::new($false))
-   # Preserve old top-level cache initializers for red regression. They belong
-   # to the defining script, not the nested calling script.
-   $initializers=@([regex]::Matches([IO.File]::ReadAllText($source),'(?m)^\$script:Sds(?:BridgeType|OperationType)=\$null\r?$') | ForEach-Object {$_.Value})
    $worker=Join-Path $defining 'privileged_session_worker.ps1'
    $nl=[Environment]::NewLine
-   $workerText='Set-StrictMode -Version Latest'+$nl+'$ErrorActionPreference=''Stop'''+$nl+($initializers -join $nl)+$nl+$loader[0].Extent.Text+$nl+"& '"+$child.Replace("'","''")+"' '"+$fixtureDll.Replace("'","''")+"'"+$nl
+   $before=@'
+param([string]$Action,[switch]$IncompletePreparation)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+'@
+   $after=@'
+# Real body recreated without file: refusal must precede assembly loading.
+$memoryDefinition=[scriptblock]::Create('function Initialize-ProtectedEffects {'+(Get-Command Initialize-ProtectedEffects -CommandType Function).Definition+'}')
+& {
+ . $memoryDefinition
+ $refused=$false
+ try { Initialize-ProtectedEffects | Out-Null }
+ catch { if ($_.Exception.Message -ceq 'Unknown protected SDS function definition') {$refused=$true}else{throw} }
+ if(-not $refused){throw 'Initializer accepted no defining file'}
+}
+& {
+ $Action='Unknown'
+ $refused=$false
+ try { Initialize-ProtectedEffects | Out-Null }
+ catch {if($_.Exception.Message -ceq 'Unknown protected effect purpose'){$refused=$true}else{throw}}
+ if(-not $refused){throw 'Initializer accepted unknown purpose'}
+}
+if(@([AppDomain]::CurrentDomain.GetAssemblies()|Where-Object{$_.GetName().Name -ceq 'PortableVBox.SdsBridge'}).Count -ne 0){throw 'Refused initializer loaded assembly'}
+$dispatch=Initialize-ProtectedEffects
+Set-Item -LiteralPath Function:Invoke-ProtectedSds -Value $dispatch.Sds
+Set-Item -LiteralPath Function:Invoke-ProtectedDriver -Value $dispatch.Driver
+$purpose=if($Action -ceq 'Prepare'){'Preparation'}elseif($IncompletePreparation){'PartialCleanup'}else{'FullCleanup'}
+'@
+   $finish=@'
+$refused=$false
+try{Initialize-ProtectedEffects|Out-Null}
+catch{if($_.Exception.Message -ceq 'Unexpected preloaded SDS bridge assembly'){$refused=$true}else{throw}}
+if(-not $refused){throw 'Initializer accepted already loaded bridge'}
+Write-Host 'FIXED_CONTEXT_PRELOADED_REFUSAL_PASS'
+'@
+   $workerText=$before+$nl+$loader[0].Extent.Text+$nl+$after+$nl+"& '"+$child.Replace("'","''")+"' '"+$fixtureDll.Replace("'","''")+"' "+'$purpose'+$nl+$finish
    [IO.File]::WriteAllText($worker,$workerText,[Text.UTF8Encoding]::new($false))
    $env:PVBOX_FIXED_HELPER_MODE='CI'
    $engine=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-   & $engine -NoProfile -NonInteractive -File $worker
-   Require ($LASTEXITCODE -eq 0) 'Actual nested protected loader child failed'
-  } finally { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force }
- } else { Write-Host 'SKIP SDS nested loader: net48 reference toolchain unavailable on non-Windows' }
+   foreach($selection in @(@{Action='Prepare';Incomplete=$false},@{Action='Finish';Incomplete=$false},@{Action='Recover';Incomplete=$true})){
+    $arguments=@('-NoProfile','-NonInteractive','-File',$worker,'-Action',$selection.Action)
+    if($selection.Incomplete){$arguments+='-IncompletePreparation'}
+    & $engine @arguments
+    Require ($LASTEXITCODE -eq 0) 'Actual nested protected context child failed'
+   }
+  } finally {Remove-Item -LiteralPath $fixtureRoot -Recurse -Force}
+ } else {Write-Host 'SKIP fixed context nested loader: net48 reference toolchain unavailable on non-Windows'}
 } finally { $env:PVBOX_FIXED_HELPER_MODE=$savedMode; $env:RUNNER_TEMP=$savedRunnerTemp }
 Write-Host 'SDS_BRIDGE_WRAPPER_PASS'

@@ -8,7 +8,7 @@ namespace PortableVBox {
   FileStream stdout,stderr;
   bool written;
   internal SdsDiagnosticFiles(string directory,string label) {
-   if(label!="sds-register"&&label!="sds-unregister")throw new InvalidOperationException("Unknown SDS evidence label");
+   if(label!="sds-register"&&label!="sds-unregister"&&label!="pnputil"&&label!="driver-start"&&label!="sup-stop"&&label!="sup-package-remove"&&label!="sup-service-delete")throw new InvalidOperationException("Unknown SDS evidence label");
    try {
     stdout=new FileStream(Path.Combine(directory,label+".stdout.txt"),FileMode.CreateNew,FileAccess.Write,FileShare.Read);
     stdout.Flush(true);

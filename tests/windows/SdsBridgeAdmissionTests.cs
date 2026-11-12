@@ -17,8 +17,67 @@ namespace PortableVBox {
    Deadline(SdsOperation.UnregisterFull,5,true);Deadline(SdsOperation.UnregisterFull,90,true);Deadline(SdsOperation.UnregisterFull,4,false);Deadline(SdsOperation.UnregisterFull,91,false);
    Deadline(SdsOperation.UnregisterPartial,10,true);Deadline(SdsOperation.UnregisterPartial,75,true);Deadline(SdsOperation.UnregisterPartial,9,false);Deadline(SdsOperation.UnregisterPartial,76,false);Deadline((SdsOperation)99,30,false);
    var methods=typeof(SdsBridge).GetMethods(BindingFlags.Public|BindingFlags.Static|BindingFlags.DeclaredOnly);
-   Assert(methods.Length==1&&methods[0].Name=="Run","Facade exposes extra entry points");
-   var parameters=methods[0].GetParameters();Assert(parameters.Length==2&&parameters[0].ParameterType==typeof(SdsOperation)&&parameters[1].ParameterType==typeof(int),"Facade has execution selector");
+   Assert(methods.Length==1&&methods[0].Name=="Open","Facade exposes extra entry points");
+   var parameters=methods[0].GetParameters();Assert(parameters.Length==1&&parameters[0].ParameterType==typeof(EffectPurpose),"Facade has execution selector");
+   Assert(typeof(FixedEffectContext).GetConstructors(BindingFlags.Public|BindingFlags.Instance).Length==0,"Public context constructor");
+   var contextMethods=typeof(FixedEffectContext).GetMethods(BindingFlags.Public|BindingFlags.Instance|BindingFlags.DeclaredOnly);
+   Assert(contextMethods.Length==2,"Unexpected context operation surface");
+   var driverGate=typeof(SdsBridge).GetMethod("ValidateDriver",Hidden);
+   Assert(driverGate!=null,"Missing purpose-bound driver policy");
+   foreach(EffectPurpose purpose in Enum.GetValues(typeof(EffectPurpose)))
+    foreach(DriverOperation operation in Enum.GetValues(typeof(DriverOperation)))
+     foreach(int seconds in new[]{4,5,9,10,14,15,30,60,61,75,76,90,91,120,121}){
+      bool expected=purpose==EffectPurpose.Preparation?
+       (operation==DriverOperation.AddSupPackage&&seconds>=15&&seconds<=120)||(operation==DriverOperation.StartSup&&seconds>=5&&seconds<=60):
+       ((operation==DriverOperation.StopSup||operation==DriverOperation.RemoveSupPackage||operation==DriverOperation.DeleteSupService)&&seconds>=(purpose==EffectPurpose.FullCleanup?5:10)&&seconds<=(purpose==EffectPurpose.FullCleanup?90:75));
+      bool accepted=true;try{driverGate.Invoke(null,new object[]{purpose,operation,seconds});}catch(TargetInvocationException e){if(!(e.InnerException is InvalidOperationException))throw;accepted=false;}
+      Assert(accepted==expected,"Driver purpose/deadline matrix changed");
+     }
+   var ledger=new SdsBridge.AttemptLedger();
+   ledger.Begin(0);var measuredFailure=new SdsResult(true,true,5,123);ledger.Observe(measuredFailure);
+   Assert(measuredFailure.WithinDeadline&&measuredFailure.ExitCodeKnown&&measuredFailure.ExitCode==5&&measuredFailure.ElapsedMs==123,"Measured EXITED/nonzero result changed");
+   bool nonzero=false;try{ledger.Begin(1);}catch(InvalidOperationException){nonzero=true;}
+   Assert(nonzero,"Measured nonzero did not latch a subsequent distinct operation");
+   // A later separately authorized recovery context has independent attempt state.
+   var recovery=new SdsBridge.AttemptLedger();bool recoveryAllowed=true;
+   try{recovery.Begin(2);recovery.Observe(new SdsResult(true,true,0,0));recovery.Begin(3);}catch(InvalidOperationException){recoveryAllowed=false;}
+   Assert(recoveryAllowed,"Failed context contaminated separate recovery ledger");
+   ledger=new SdsBridge.AttemptLedger();ledger.Begin(0);ledger.Observe(new SdsResult(true,true,0,0));ledger.Begin(1);
+   bool repeated=false;try{ledger.Begin(0);}catch(InvalidOperationException){repeated=true;}
+   Assert(repeated,"Operation retry allowed");
+   ledger=new SdsBridge.AttemptLedger();ledger.Begin(0);ledger.Observe(new SdsResult(false,true,0,1));
+   bool late=false;try{ledger.Begin(1);}catch(InvalidOperationException){late=true;}Assert(late,"Late child did not latch context");
+   ledger=new SdsBridge.AttemptLedger();ledger.Fail();
+   bool fault=false;try{ledger.Begin(0);}catch(InvalidOperationException){fault=true;}Assert(fault,"Exception did not latch context");
+   ledger=new SdsBridge.AttemptLedger();ledger.Begin(2);ledger.Observe(new SdsResult(true,false,0,0));
+   bool unknown=false;try{ledger.Begin(3);}catch(InvalidOperationException){unknown=true;}Assert(unknown,"Unknown exit did not latch context");
+   foreach(object[] values in new[]{new object[]{(EffectPurpose)99,DriverOperation.StopSup,30},new object[]{EffectPurpose.FullCleanup,(DriverOperation)99,30}}){
+    bool invalid=false;try{driverGate.Invoke(null,values);}catch(TargetInvocationException e){invalid=e.InnerException is InvalidOperationException;}Assert(invalid,"Unknown driver purpose/operation allowed");
+   }
+   var sdsGate=typeof(SdsBridge).GetMethod("ValidateSds",Hidden);
+   foreach(EffectPurpose purpose in Enum.GetValues(typeof(EffectPurpose)))
+    foreach(SdsOperation operation in Enum.GetValues(typeof(SdsOperation))){
+     bool expected=(purpose==EffectPurpose.Preparation&&operation==SdsOperation.Register)||(purpose==EffectPurpose.FullCleanup&&operation==SdsOperation.UnregisterFull)||(purpose==EffectPurpose.PartialCleanup&&operation==SdsOperation.UnregisterPartial);
+     bool accepted=true;try{sdsGate.Invoke(null,new object[]{purpose,operation,30});}catch(TargetInvocationException e){if(!(e.InnerException is InvalidOperationException))throw;accepted=false;}
+     Assert(accepted==expected,"SDS purpose mismatch accepted");
+    }
+   var receiptGate=typeof(SdsBridge).GetMethod("ValidatePublishedReceipt",Hidden);
+   string infHash=new string('a',64);
+   Func<Dictionary<string,object>> receipt=()=>new Dictionary<string,object>{{"published_inf_schema",1},{"published_inf","oem123.inf"},{"published_inf_was_absent",true},{"published_inf_sha256",infHash}};
+   Assert((string)receiptGate.Invoke(null,new object[]{receipt(),infHash})=="oem123.inf","Valid fixed receipt rejected");
+   foreach(string field in new[]{"published_inf_schema","published_inf","published_inf_was_absent","published_inf_sha256"}){
+    var bad=receipt();bad.Remove(field);bool invalid=false;try{receiptGate.Invoke(null,new object[]{bad,infHash});}catch(TargetInvocationException e){invalid=e.InnerException is InvalidOperationException;}Assert(invalid,"Incomplete receipt accepted");
+   }
+   foreach(object value in new object[]{"../oem123.inf","oem123.inf /force","oem1234567.inf","oem.inf","OEM123.inf","C:\\oem123.inf",null}){
+    var bad=receipt();bad["published_inf"]=value;bool invalid=false;try{receiptGate.Invoke(null,new object[]{bad,infHash});}catch(TargetInvocationException e){invalid=e.InnerException is InvalidOperationException;}Assert(invalid,"Unbounded INF selector accepted");
+   }
+   foreach(object value in new object[]{"1",true,0,2,null}){
+    var bad=receipt();bad["published_inf_schema"]=value;bool invalid=false;try{receiptGate.Invoke(null,new object[]{bad,infHash});}catch(TargetInvocationException e){invalid=e.InnerException is InvalidOperationException;}Assert(invalid,"Coerced receipt schema accepted");
+   }
+   foreach(object value in new object[]{"true",1,false,null}){
+    var bad=receipt();bad["published_inf_was_absent"]=value;bool invalid=false;try{receiptGate.Invoke(null,new object[]{bad,infHash});}catch(TargetInvocationException e){invalid=e.InnerException is InvalidOperationException;}Assert(invalid,"Unproven absence accepted");
+   }
+   {var bad=receipt();bad["published_inf_sha256"]=new string('b',64);bool invalid=false;try{receiptGate.Invoke(null,new object[]{bad,infHash});}catch(TargetInvocationException e){invalid=e.InnerException is InvalidOperationException;}Assert(invalid,"Changed INF digest accepted");}
    var properties=typeof(SdsResult).GetProperties(BindingFlags.Public|BindingFlags.Instance);
    foreach(var property in properties)Assert(property.GetSetMethod()==null,"Mutable public result");
    var manifest=new Dictionary<string,object>{{"files",new object[0]},{"file_count",185},{"total_bytes",247834716}};

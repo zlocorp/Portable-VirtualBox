@@ -260,7 +260,15 @@ try {
         throw 'VBoxSup image/status changed since owned acquisition'
     }
     $sc=Join-Path $env:SystemRoot 'System32\sc.exe'
-    $stopExit=Run-Bounded $sc 'stop VBoxSup' 'sup-stop'
+    if ($env:PVBOX_FIXED_HELPER_MODE) {
+        if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+        $fixed=Invoke-ProtectedDriver -Operation StopSup -TimeoutSeconds $TimeoutSeconds
+        if (-not $fixed.WithinDeadline) { throw 'sup-stop exceeded safety deadline; native child has exited, ownership must be inspected' }
+        if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
+        $stopExit=[int]$fixed.ExitCode
+    } else {
+        $stopExit=Run-Bounded $sc 'stop VBoxSup' 'sup-stop'
+    }
     $report.service_stop="EXIT_$stopExit"
     if ($stopExit -ne 0) { throw 'VBoxSup stop failed; retain package without deletion' }
     for($i=0;$i -lt 20;$i++) {
@@ -277,7 +285,15 @@ try {
     }
     $pnputil=Join-Path $env:SystemRoot 'System32\pnputil.exe'
     # No /force and no wildcard; Windows PnP manager owns the package teardown.
-    $removeExit=Run-Bounded $pnputil "/delete-driver $published /uninstall" 'sup-package-remove'
+    if ($env:PVBOX_FIXED_HELPER_MODE) {
+        if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+        $fixed=Invoke-ProtectedDriver -Operation RemoveSupPackage -TimeoutSeconds $TimeoutSeconds
+        if (-not $fixed.WithinDeadline) { throw 'sup-package-remove exceeded safety deadline; native child has exited, ownership must be inspected' }
+        if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
+        $removeExit=[int]$fixed.ExitCode
+    } else {
+        $removeExit=Run-Bounded $pnputil "/delete-driver $published /uninstall" 'sup-package-remove'
+    }
     $report.driver_package_removal="EXIT_$removeExit"
     if ($removeExit -ne 0) { throw 'PnPUtil refused driver package deletion' }
     # PnPUtil may defer kernel-service cleanup. Observe for a bounded period
@@ -312,7 +328,15 @@ try {
         # Only on our fresh disposable host after its own exact driver package
         # was removed and only the expected stopped service key remains.
         # This is not an unscoped wildcard deletion or production routine.
-        $deleteExit=Run-Bounded $sc 'delete VBoxSup' 'sup-service-delete'
+        if ($env:PVBOX_FIXED_HELPER_MODE) {
+            if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+            $fixed=Invoke-ProtectedDriver -Operation DeleteSupService -TimeoutSeconds $TimeoutSeconds
+            if (-not $fixed.WithinDeadline) { throw 'sup-service-delete exceeded safety deadline; native child has exited, ownership must be inspected' }
+            if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
+            $deleteExit=[int]$fixed.ExitCode
+        } else {
+            $deleteExit=Run-Bounded $sc 'delete VBoxSup' 'sup-service-delete'
+        }
         $report.service_delete="EXIT_$deleteExit"
         if ($deleteExit -ne 0) { throw 'Exact stopped VBoxSup service delete failed' }
         for($i=0;$i -lt 25;$i++) {

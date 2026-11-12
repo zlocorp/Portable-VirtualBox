@@ -236,26 +236,58 @@ function Write-SdsRegistrationDiagnostics([hashtable]$Facts) {
 }
 # Loaded only from the exact embedded resource installed and hash-leased by
 # the parent helper. Never load the mutable portable-root helper assembly.
-function Invoke-ProtectedSds {
-    param([ValidateSet('Register','UnregisterFull','UnregisterPartial')][string]$Operation,[int]$TimeoutSeconds)
+function Initialize-ProtectedEffects {
     if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
-    # One SDS operation per worker. Do not cache in caller-dependent script scope.
-    # Nested cleanup invokes this function from a separate script; bind the DLL
-    # to this function's actual protected defining file, never the caller or cwd.
+    # Resolve before GetNewClosure: generated dynamic modules have no trustworthy
+    # defining-file locator. Never adopt a preloaded assembly or caller path.
     $definition=$MyInvocation.MyCommand.ScriptBlock.File
     if ([string]::IsNullOrEmpty($definition) -or -not [IO.Path]::IsPathRooted($definition) -or
         [IO.Path]::GetFileName($definition) -cne 'privileged_session_worker.ps1') {
         throw 'Unknown protected SDS function definition'
     }
+    $purpose=if ($Action -ceq 'Prepare') { 'Preparation' }
+        elseif ($Action -ceq 'Finish' -or ($Action -ceq 'Recover' -and -not $IncompletePreparation)) { 'FullCleanup' }
+        elseif ($Action -ceq 'Recover' -and $IncompletePreparation) { 'PartialCleanup' }
+        else { throw 'Unknown protected effect purpose' }
     $bridgePath=[IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetDirectoryName($definition)) 'PortableVBox.SdsBridge.dll'))
     $existing=@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'PortableVBox.SdsBridge' })
     if ($existing.Count -ne 0) { throw 'Unexpected preloaded SDS bridge assembly' }
     $assembly=[Reflection.Assembly]::LoadFrom($bridgePath)
     if ($assembly.Location -cne $bridgePath) { throw 'SDS bridge assembly origin changed' }
     $facade=$assembly.GetType('PortableVBox.SdsBridge',$true,$false)
-    $operationType=$assembly.GetType('PortableVBox.SdsOperation',$true,$false)
-    if ($facade.Assembly -ne $assembly -or $operationType.Assembly -ne $assembly) { throw 'SDS bridge type origin changed' }
-    return $facade::Run([Enum]::Parse($operationType,$Operation,$false),$TimeoutSeconds)
+    $contextType=$assembly.GetType('PortableVBox.FixedEffectContext',$true,$false)
+    $purposeType=$assembly.GetType('PortableVBox.EffectPurpose',$true,$false)
+    $sdsType=$assembly.GetType('PortableVBox.SdsOperation',$true,$false)
+    $driverType=$assembly.GetType('PortableVBox.DriverOperation',$true,$false)
+    foreach ($type in @($facade,$contextType,$purposeType,$sdsType,$driverType)) {
+        if (-not [object]::ReferenceEquals($type.Assembly,$assembly)) { throw 'SDS bridge type origin changed' }
+    }
+    $context=$facade::Open([Enum]::Parse($purposeType,$purpose,$false))
+    if ($null -eq $context -or -not [object]::ReferenceEquals($context.GetType(),$contextType)) {
+        throw 'Protected effect context identity changed'
+    }
+    $exactContext=$context
+    $sdsCall={
+        param([ValidateSet('Register','UnregisterFull','UnregisterPartial')][string]$Operation,[int]$TimeoutSeconds)
+        if (-not [object]::ReferenceEquals($context,$exactContext) -or
+            -not [object]::ReferenceEquals($context.GetType(),$contextType) -or
+            -not [object]::ReferenceEquals($contextType.Assembly,$assembly) -or
+            -not [object]::ReferenceEquals($sdsType.Assembly,$assembly)) {
+            throw 'Protected effect context identity changed'
+        }
+        return $context.RunSds([Enum]::Parse($sdsType,$Operation,$false),$TimeoutSeconds)
+    }.GetNewClosure()
+    $driverCall={
+        param([ValidateSet('AddSupPackage','StartSup','StopSup','RemoveSupPackage','DeleteSupService')][string]$Operation,[int]$TimeoutSeconds)
+        if (-not [object]::ReferenceEquals($context,$exactContext) -or
+            -not [object]::ReferenceEquals($context.GetType(),$contextType) -or
+            -not [object]::ReferenceEquals($contextType.Assembly,$assembly) -or
+            -not [object]::ReferenceEquals($driverType.Assembly,$assembly)) {
+            throw 'Protected effect context identity changed'
+        }
+        return $context.RunDriver([Enum]::Parse($driverType,$Operation,$false),$TimeoutSeconds)
+    }.GetNewClosure()
+    return @{Sds=$sdsCall;Driver=$driverCall}
 }
 function Run-Sds([string]$Argument,[string]$Label,[hashtable]$DiagnosticFacts=$null) {
     if ($Argument -cne '--regservice' -or $Label -cne 'sds-register') { throw 'Unknown fixed SDS registration selector' }
@@ -330,6 +362,12 @@ function Run-Sds([string]$Argument,[string]$Label,[hashtable]$DiagnosticFacts=$n
         if ($exitCode -ne 0) { throw 'SDS operation unconfirmed; retain resources' }
     } finally { $p.Dispose() }
 }
+# One admitted context, created before stage/start/cleanup. The callable closures
+# retain exact objects, not a mutable script/global cache or assembly-name lookup.
+$protectedCalls=Initialize-ProtectedEffects
+Set-Item -LiteralPath Function:Invoke-ProtectedSds -Value $protectedCalls.Sds
+Set-Item -LiteralPath Function:Invoke-ProtectedDriver -Value $protectedCalls.Driver
+$protectedCalls=$null
 try {
     if ($Action -eq 'Prepare') {
         # Helper created and fsync'd protected prepare-intent.json BEFORE

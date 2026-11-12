@@ -68,21 +68,36 @@ $stderr=Join-Path $out 'driver-start.stderr.txt'
 $proc=$null;$status='LAUNCH_ERROR';$exitCode=$null;$problem=''
 $clock=[Diagnostics.Stopwatch]::StartNew()
 try {
-    # Only "sc.exe start VBoxSup", never a driver delete/stop, and only after
-    # proving there is no pre-existing VBox service and verifying the driver.
-    $proc=Start-Process -FilePath $sc -ArgumentList 'start VBoxSup' -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr -ErrorAction Stop
-    $ownedHandle=$proc.Handle
-    if ($ownedHandle -eq [IntPtr]::Zero) { throw 'SCM process handle unavailable' }
-    if ($proc.WaitForExit($TimeoutSeconds*1000)) {
-        $status='EXITED'; $exitCode=$proc.ExitCode
+    if ($env:PVBOX_FIXED_HELPER_MODE) {
+        $status='UNKNOWN'
+        if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+        $fixed=Invoke-ProtectedDriver -Operation StartSup -TimeoutSeconds $TimeoutSeconds
+        if (-not $fixed.WithinDeadline) {
+            $status='TIMEOUT'
+            if ($fixed.ExitCodeKnown) { $exitCode=[int]$fixed.ExitCode }
+            $problem='Driver-start command completed after safety deadline'
+        } elseif (-not $fixed.ExitCodeKnown) {
+            throw 'Driver start exit code unavailable'
+        } else {
+            $status='EXITED';$exitCode=[int]$fixed.ExitCode
+        }
     } else {
-        # Never abort an in-flight SCM driver Start by killing its controller.
-        # Wait for the exact native process before releasing ownership locks;
-        # the TIMEOUT status still fails the next step.
-        $status='TIMEOUT'
-        $proc.WaitForExit()
-        $exitCode=$proc.ExitCode
-        $problem='Driver-start command completed after safety deadline'
+        # Only "sc.exe start VBoxSup", never a driver delete/stop, and only after
+        # proving there is no pre-existing VBox service and verifying the driver.
+        $proc=Start-Process -FilePath $sc -ArgumentList 'start VBoxSup' -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr -ErrorAction Stop
+        $ownedHandle=$proc.Handle
+        if ($ownedHandle -eq [IntPtr]::Zero) { throw 'SCM process handle unavailable' }
+        if ($proc.WaitForExit($TimeoutSeconds*1000)) {
+            $status='EXITED'; $exitCode=$proc.ExitCode
+        } else {
+            # Never abort an in-flight SCM driver Start by killing its controller.
+            # Wait for the exact native process before releasing ownership locks;
+            # the TIMEOUT status still fails the next step.
+            $status='TIMEOUT'
+            $proc.WaitForExit()
+            $exitCode=$proc.ExitCode
+            $problem='Driver-start command completed after safety deadline'
+        }
     }
 } catch { $problem=$_.Exception.Message }
 finally { $clock.Stop(); if ($null -ne $proc) { $proc.Dispose() } }

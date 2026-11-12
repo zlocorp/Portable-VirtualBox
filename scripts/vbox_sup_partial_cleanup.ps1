@@ -232,7 +232,15 @@ try {
     Require-Quiescent
     $sc=Join-Path $env:SystemRoot 'System32\sc.exe'
     if ($phase -in @('Start','Sds')) {
-        $status=Run-Bounded $sc 'stop VBoxSup' 'sup-stop'
+        if ($env:PVBOX_FIXED_HELPER_MODE) {
+            if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+            $fixed=Invoke-ProtectedDriver -Operation StopSup -TimeoutSeconds $TimeoutSeconds
+            if (-not $fixed.WithinDeadline) { throw 'sup-stop exceeded deadline; child has exited, recovery state requires inspection' }
+            if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
+            $status=[int]$fixed.ExitCode
+        } else {
+            $status=Run-Bounded $sc 'stop VBoxSup' 'sup-stop'
+        }
         $report.service_stop="EXIT_$status"
         if ($status -ne 0) { throw 'Owned driver stop failed' }
         for($i=0;$i -lt 25;$i++) {
@@ -250,7 +258,15 @@ try {
     # No /force and never a blanket service/driver-name wildcard.
     $pnputil=Join-Path $env:SystemRoot 'System32\pnputil.exe'
     Assert-FailedStartStopped
-    $status=Run-Bounded $pnputil "/delete-driver $published /uninstall" 'sup-package-remove'
+    if ($env:PVBOX_FIXED_HELPER_MODE) {
+        if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+        $fixed=Invoke-ProtectedDriver -Operation RemoveSupPackage -TimeoutSeconds $TimeoutSeconds
+        if (-not $fixed.WithinDeadline) { throw 'sup-package-remove exceeded deadline; child has exited, recovery state requires inspection' }
+        if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
+        $status=[int]$fixed.ExitCode
+    } else {
+        $status=Run-Bounded $pnputil "/delete-driver $published /uninstall" 'sup-package-remove'
+    }
     $report.driver_package_removal="EXIT_$status"
     if ($status -ne 0) { throw 'PnPUtil refused exact owned package deletion' }
     for($i=0;$i -lt 25;$i++) {
@@ -264,7 +280,15 @@ try {
         if ((Get-Service VBoxSup).Status -ne 'Stopped' -or
             [int](Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSup').Type -ne 1 -or
             @(Get-VBoxProcesses).Count -ne 0) { throw 'Residual service not exclusively ours' }
-        $result=Run-Bounded $sc 'delete VBoxSup' 'sup-service-delete'
+        if ($env:PVBOX_FIXED_HELPER_MODE) {
+            if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+            $fixed=Invoke-ProtectedDriver -Operation DeleteSupService -TimeoutSeconds $TimeoutSeconds
+            if (-not $fixed.WithinDeadline) { throw 'sup-service-delete exceeded deadline; child has exited, recovery state requires inspection' }
+            if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
+            $result=[int]$fixed.ExitCode
+        } else {
+            $result=Run-Bounded $sc 'delete VBoxSup' 'sup-service-delete'
+        }
         $report.service_delete="EXIT_$result"
         if ($result -ne 0) { throw 'Stopped owned service delete failed' }
         for($i=0;$i -lt 25;$i++) {

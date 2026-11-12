@@ -82,6 +82,30 @@ namespace PortableVBox {
    waiter.Start();Thread.Sleep(50);waiter.Interrupt();
    Assert(!joinDone.WaitOne(100),"Interrupted join escaped before EOF");
    gatedStream.Release.Set();Assert(waiter.Join(5000),"Interrupted join never resumed");Assert(joinFailure==null,"Interrupted join leaked exception");Assert((bool)Field(gated,"Eof"),"Interrupted join returned without EOF");
+   var driverBuilder=Owner.GetMethod("BuildDriverStartInfo",Hidden);
+   Assert(driverBuilder!=null,"Closed driver command builder absent");
+   var driverEnum=Owner.Assembly.GetType("PortableVBox.FixedDriverOperation",true);
+   Func<int,string,string,int,ProcessStartInfo> driver=(operation,app,inf,seconds)=>(ProcessStartInfo)driverBuilder.Invoke(null,new object[]{Enum.ToObject(driverEnum,operation),app,inf,seconds});
+   string protectedApp=Path.Combine(Path.GetTempPath(),"Protected Unicode Привет 世界");
+   var add=driver(0,protectedApp,null,75);
+   Assert(add.FileName==Path.Combine(Environment.SystemDirectory,"pnputil.exe"),"Add driver image selector");
+   Assert(add.Arguments=="/add-driver \""+Path.Combine(protectedApp,"drivers","vboxsup","VBoxSup.inf")+"\" /install","Add fixed pinned INF arguments");
+   Assert(add.WorkingDirectory==Path.Combine(protectedApp,"drivers","vboxsup"),"Add fixed working directory");
+   foreach(int op in new[]{1,2,4}) {
+    var command=driver(op,null,null,30);
+    Assert(command.FileName==Path.Combine(Environment.SystemDirectory,"sc.exe"),"SC fixed system image");
+    Assert(command.Arguments==(op==1?"start VBoxSup":op==2?"stop VBoxSup":"delete VBoxSup"),"SC fixed service selector");
+    Assert(!command.UseShellExecute&&command.CreateNoWindow&&command.RedirectStandardOutput&&command.RedirectStandardError,"Driver transport flags");
+   }
+   var remove=driver(3,null,"oem123.inf",45);
+   Assert(remove.FileName==Path.Combine(Environment.SystemDirectory,"pnputil.exe")&&remove.Arguments=="/delete-driver oem123.inf /uninstall","Remove exact receipt INF without force");
+   object[][] invalid={
+    new object[]{99,null,null,30},new object[]{0,null,null,75},new object[]{0,"relative",null,75},
+    new object[]{0,protectedApp,"oem1.inf",75},new object[]{1,protectedApp,null,30},new object[]{1,null,"oem1.inf",30},
+    new object[]{3,null,null,45},new object[]{3,null,"oem1.inf /force",45},new object[]{3,null,"../oem1.inf",45},
+    new object[]{3,null,"oem1234567.inf",45},new object[]{3,null,"OEM1.inf",45},new object[]{2,null,null,4},new object[]{2,null,null,121}
+   };
+   foreach(var item in invalid){bool refused=false;try{driver((int)item[0],(string)item[1],(string)item[2],(int)item[3]);}catch(TargetInvocationException e){refused=e.InnerException is InvalidOperationException;}Assert(refused,"Open driver command or deadline accepted");}
    Console.WriteLine("FIXED_EFFECT_MANAGED_PASS assertions="+count);return 0;
   }
  }

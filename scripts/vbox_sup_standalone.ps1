@@ -112,22 +112,37 @@ $exitCode = $null
 $exception = ''
 $process = $null
 try {
-    $process = Start-Process -FilePath $pnputil -ArgumentList $arguments -WorkingDirectory $driverRoot -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -NoNewWindow -ErrorAction Stop
-    # Cache the exact process handle before waiting. Start-Process with
-    # -NoNewWindow and redirected output can lose ExitCode on Windows PowerShell.
-    $ownedHandle = $process.Handle
-    if ($ownedHandle -eq [IntPtr]::Zero) { throw 'PnPUtil process handle unavailable' }
-    if ($process.WaitForExit($TimeoutSeconds * 1000)) {
-        $status = 'EXITED'
-        $exitCode = $process.ExitCode
+    if ($env:PVBOX_FIXED_HELPER_MODE) {
+        $status='UNKNOWN'
+        if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+        $fixed=Invoke-ProtectedDriver -Operation AddSupPackage -TimeoutSeconds $TimeoutSeconds
+        if (-not $fixed.WithinDeadline) {
+            $status='TIMEOUT'
+            if ($fixed.ExitCodeKnown) { $exitCode=[int]$fixed.ExitCode }
+            $exception='PnPUtil completed only after the safety deadline; effects need inspection'
+        } elseif (-not $fixed.ExitCodeKnown) {
+            throw 'Driver package exit code unavailable'
+        } else {
+            $status='EXITED';$exitCode=[int]$fixed.ExitCode
+        }
     } else {
-        # PnP driver mutation must NEVER continue beyond its tracked helper.
-        # Retain the exact handle and wait for its real exit, even after the
-        # ordinary deadline. TIMEOUT evidence still refuses advancement.
-        $status = 'TIMEOUT'
-        $process.WaitForExit()
-        $exitCode = $process.ExitCode
-        $exception = 'PnPUtil completed only after the safety deadline; effects need inspection'
+        $process = Start-Process -FilePath $pnputil -ArgumentList $arguments -WorkingDirectory $driverRoot -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -NoNewWindow -ErrorAction Stop
+        # Cache the exact process handle before waiting. Start-Process with
+        # -NoNewWindow and redirected output can lose ExitCode on Windows PowerShell.
+        $ownedHandle = $process.Handle
+        if ($ownedHandle -eq [IntPtr]::Zero) { throw 'PnPUtil process handle unavailable' }
+        if ($process.WaitForExit($TimeoutSeconds * 1000)) {
+            $status = 'EXITED'
+            $exitCode = $process.ExitCode
+        } else {
+            # PnP driver mutation must NEVER continue beyond its tracked helper.
+            # Retain the exact handle and wait for its real exit, even after the
+            # ordinary deadline. TIMEOUT evidence still refuses advancement.
+            $status = 'TIMEOUT'
+            $process.WaitForExit()
+            $exitCode = $process.ExitCode
+            $exception = 'PnPUtil completed only after the safety deadline; effects need inspection'
+        }
     }
 } catch {
     $exception = $_.Exception.Message

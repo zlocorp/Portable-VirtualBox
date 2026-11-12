@@ -15,7 +15,7 @@ class FixedEffectWorker(unittest.TestCase):
         result = subprocess.run([PWSH, "-NoProfile", "-File", str(ROOT / "tests/windows/check_fixed_effect_worker_managed.ps1")],
                                 cwd=ROOT, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("FIXED_EFFECT_MANAGED_PASS assertions=94", result.stdout)
+        self.assertIn("FIXED_EFFECT_MANAGED_PASS assertions=121", result.stdout)
 
     @unittest.skipUnless(PWSH and os.environ.get("PVBOX_TEST_NET48_REFERENCES"), "net48 compiler references unavailable")
     def test_exact_native_fixture_compiles_against_net48(self):

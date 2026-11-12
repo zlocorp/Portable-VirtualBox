@@ -18,6 +18,14 @@ using System.Web.Script.Serialization;
 using Microsoft.Win32.SafeHandles;
 namespace PortableVBox {
  public enum SdsOperation { Register, UnregisterFull, UnregisterPartial }
+ public enum EffectPurpose { Preparation, FullCleanup, PartialCleanup }
+ public enum DriverOperation { AddSupPackage, StartSup, StopSup, RemoveSupPackage, DeleteSupService }
+ public sealed class FixedEffectContext {
+  readonly SdsBridge.ContextState state;
+  internal FixedEffectContext(SdsBridge.ContextState value){state=value;}
+  public SdsResult RunSds(SdsOperation operation,int timeoutSeconds){return SdsBridge.RunSds(state,operation,timeoutSeconds);}
+  public SdsResult RunDriver(DriverOperation operation,int timeoutSeconds){return SdsBridge.RunDriver(state,operation,timeoutSeconds);}
+ }
  public sealed class SdsResult {
   public bool WithinDeadline {get;private set;}
   public bool ExitCodeKnown {get;private set;}
@@ -134,7 +142,7 @@ namespace PortableVBox {
     var file=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read);
     Hold(file);CheckFinal(file.SafeFileHandle,path);return file;
    }
-   static void CheckFinal(SafeFileHandle handle,string expected){
+   internal static void CheckFinal(SafeFileHandle handle,string expected){
     var actual=new StringBuilder(32768);uint count=GetFinalPathNameByHandle(handle,actual,(uint)actual.Capacity,0);
     if(count==0||count>=actual.Capacity||!Equal(actual.ToString().Replace("\\\\?\\",""),expected))throw new InvalidOperationException("Changed SDS input identity");
    }
@@ -152,13 +160,13 @@ namespace PortableVBox {
       Hash(Encoding.UTF8.GetBytes(String.Concat(rows)))!=PinnedBuild.InventorySha256)throw new InvalidOperationException("Forged or changed fixed SDS inventory");
    return manifest;
   }
-  static void HoldPayload(Admission admission,string app,string sid){
+  static string HoldPayload(Admission admission,string app,string sid){
    var manifestFile=admission.File(Path.Combine(app,".prepared.json"));
    if(manifestFile.Length<1||manifestFile.Length>131072)throw new InvalidOperationException("Invalid SDS inventory size");
    Dictionary<string,object> manifest;
    using(var reader=new StreamReader(manifestFile,Encoding.UTF8,true,4096,true))
     manifest=ValidateManifest(new JavaScriptSerializer {MaxJsonLength=262144}.Deserialize<Dictionary<string,object>>(reader.ReadToEnd()));
-   bool sds=false;
+   bool sds=false;string infHash=null;
    foreach(Dictionary<string,object> row in (IEnumerable)manifest["files"]){
     string relative=((string)row["path"]).Replace('/','\\');
     if(Path.IsPathRooted(relative)||relative.Contains("..")||relative.IndexOfAny(new[]{':','"','\r','\n','\0'})>=0)throw new InvalidOperationException("Invalid SDS inventory path");
@@ -169,48 +177,168 @@ namespace PortableVBox {
     var file=admission.File(path);
     if(file.Length!=Convert.ToInt64(row["size"])||Hash(file)!=(string)row["sha256"])throw new InvalidOperationException("Changed fixed SDS payload");
     if(Equal(relative,"VBoxSDS.exe"))sds=true;
+    if(Equal(relative,@"drivers\vboxsup\VBoxSup.inf"))infHash=(string)row["sha256"];
    }
-   if(!sds)throw new InvalidOperationException("Missing pinned SDS image");
+   if(!sds||infHash==null)throw new InvalidOperationException("Missing pinned SDS/SUP image");
+   return infHash;
   }
-  public static SdsResult Run(SdsOperation operation,int timeoutSeconds){
-   ValidateDeadline(operation,timeoutSeconds);
-   if(Environment.OSVersion.Platform!=PlatformID.Win32NT||!Environment.Is64BitProcess)throw new InvalidOperationException("Fixed SDS bridge requires Windows x64");
+  internal sealed class AttemptLedger {
+   int attempts;bool failed;
+   internal void Begin(int bit){
+    if(failed||bit<0||bit>5||(attempts&(1<<bit))!=0)throw new InvalidOperationException("Fixed effect context is exhausted");
+    attempts|=1<<bit;
+   }
+   internal void Observe(SdsResult result){if(!result.WithinDeadline||!result.ExitCodeKnown||result.ExitCode!=0)failed=true;}
+   internal void Fail(){failed=true;}
+  }
+  internal sealed class ContextState {
+   internal readonly object Sync=new object();
+   internal readonly AttemptLedger Attempts=new AttemptLedger();
+   internal readonly EffectPurpose Purpose;
+   internal readonly string Bridge,Code,Session,Store,App,Sid,Mode,ProcessImage;
+   internal readonly int ProcessId;
+   internal readonly long ProcessCreated;
+   internal ContextState(EffectPurpose purpose,string bridge,string code,string session,string store,string sid,string mode,int pid,long created,string processImage){
+    Purpose=purpose;Bridge=bridge;Code=code;Session=session;Store=store;App=Path.Combine(session,"app64");Sid=sid;Mode=mode;ProcessId=pid;ProcessCreated=created;ProcessImage=processImage;
+   }
+  }
+  static void ValidatePurpose(EffectPurpose purpose){
+   if(purpose!=EffectPurpose.Preparation&&purpose!=EffectPurpose.FullCleanup&&purpose!=EffectPurpose.PartialCleanup)throw new InvalidOperationException("Unknown fixed effect purpose");
+  }
+  static void ValidateDriver(EffectPurpose purpose,DriverOperation operation,int seconds){
+   ValidatePurpose(purpose);
+   if(purpose==EffectPurpose.Preparation){
+    if(operation==DriverOperation.AddSupPackage&&seconds>=15&&seconds<=120)return;
+    if(operation==DriverOperation.StartSup&&seconds>=5&&seconds<=60)return;
+   } else if(operation==DriverOperation.StopSup||operation==DriverOperation.RemoveSupPackage||operation==DriverOperation.DeleteSupService){
+    if(seconds>=(purpose==EffectPurpose.FullCleanup?5:10)&&seconds<=(purpose==EffectPurpose.FullCleanup?90:75))return;
+   }
+   throw new InvalidOperationException("Driver operation/purpose/deadline mismatch");
+  }
+  static void ValidateSds(EffectPurpose purpose,SdsOperation operation,int seconds){
+   ValidateDeadline(operation,seconds);
+   if((purpose==EffectPurpose.Preparation&&operation==SdsOperation.Register)||
+      (purpose==EffectPurpose.FullCleanup&&operation==SdsOperation.UnregisterFull)||
+      (purpose==EffectPurpose.PartialCleanup&&operation==SdsOperation.UnregisterPartial))return;
+   throw new InvalidOperationException("SDS operation/purpose mismatch");
+  }
+  public static FixedEffectContext Open(EffectPurpose purpose){
+   ValidatePurpose(purpose);
+   if(Environment.OSVersion.Platform!=PlatformID.Win32NT||!Environment.Is64BitProcess)throw new InvalidOperationException("Fixed effect bridge requires Windows x64");
    using(var identity=WindowsIdentity.GetCurrent()){
-    if(!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))throw new InvalidOperationException("Fixed SDS bridge requires elevation");
+    if(!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))throw new InvalidOperationException("Fixed effect bridge requires elevation");
     string sid=identity.User.Value;
-    if(PinnedBuild.Mode!="CI"&&PinnedBuild.Mode!="ALPHA")throw new InvalidOperationException("Unknown fixed SDS build mode");
-    if(Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE")!=PinnedBuild.Mode)throw new InvalidOperationException("Fixed SDS build mode mismatch");
+    if(PinnedBuild.Mode!="CI"&&PinnedBuild.Mode!="ALPHA")throw new InvalidOperationException("Unknown fixed effect build mode");
+    if(Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE")!=PinnedBuild.Mode)throw new InvalidOperationException("Fixed effect build mode mismatch");
     string bridge=Full(typeof(SdsBridge).Assembly.Location),code=Path.GetDirectoryName(bridge),session=Path.GetDirectoryName(code);
-    // The fixed parent clears the environment, validates its store and supplies
-    // that exact locator in RUNNER_TEMP. This is not environment-based authority:
-    // assembly/session equality, protected ACLs, leases and payload pins still gate
-    // admission. Do not fall back to child shell/known-folder resolution, whose
-    // unavailable result in the protected worker remains separately unexplained.
+    // The parent clears the environment and supplies its already validated store.
+    // This locator is not authority; exact namespace/ACL/lease/pin checks remain.
+    // Child known-folder lookup remains unresolved and is not a fallback.
     string store=ValidateStoreLocator(Environment.GetEnvironmentVariable("RUNNER_TEMP"),PinnedBuild.Mode);
-    string originFailure=OriginFailure(Path.GetFileName(bridge),Path.GetFileName(code),Path.GetDirectoryName(session),Path.GetFileName(session),store,
-     PinnedBuild.Mode,Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE"));
-    if(originFailure!=null)throw new InvalidOperationException(originFailure);
-    using(var process=Process.GetCurrentProcess())
-     if(!Equal(process.MainModule.FileName,Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe")))throw new InvalidOperationException("Fixed SDS bridge requires fixed PowerShell worker");
-    string app=Path.Combine(session,"app64"),output=operation==SdsOperation.Register?session:Path.Combine(session,"cleanup");
-    using(var admission=new Admission()){
-     admission.Parents(code);
-     foreach(string path in new[]{store,session,code,app}){admission.Directory(path);CheckProtected(path,sid);}
-     admission.File(bridge);
-     HoldPayload(admission,app,sid);
-     if(operation!=SdsOperation.Register){admission.Directory(output);CheckInheritedCleanup(output,sid);}
-     // Empty durable files are prelaunch attempt evidence, not disposable logs.
-     using(var files=new SdsDiagnosticFiles(output,operation==SdsOperation.Register?"sds-register":"sds-unregister")){
-      var timer=Stopwatch.StartNew();
-      using(var child=FixedEffectWorker.RunSds(Path.Combine(app,"VBoxSDS.exe"),operation!=SdsOperation.Register,timeoutSeconds)){
-       long elapsed=timer.ElapsedMilliseconds;
-       string stdout=child.StandardOutput.GetAwaiter().GetResult(),stderr=child.StandardError.GetAwaiter().GetResult();
-       files.WriteCompleted(stdout,stderr);
-       child.VerifyImageObservation();
-       return new SdsResult(child.WithinDeadline,child.ExitCodeKnown,child.ExitCode,elapsed);
+    string failure=OriginFailure(Path.GetFileName(bridge),Path.GetFileName(code),Path.GetDirectoryName(session),Path.GetFileName(session),store,PinnedBuild.Mode,Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE"));
+    if(failure!=null)throw new InvalidOperationException(failure);
+    using(var process=Process.GetCurrentProcess()){
+     string image=process.MainModule.FileName;
+     if(!Equal(image,Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe")))throw new InvalidOperationException("Fixed effect bridge requires fixed PowerShell");
+     var state=new ContextState(purpose,bridge,code,session,store,sid,PinnedBuild.Mode,process.Id,process.StartTime.ToFileTimeUtc(),image);
+     using(var admission=new Admission()){Admit(state,admission);}
+     return new FixedEffectContext(state);
+    }
+   }
+  }
+  static string Admit(ContextState state,Admission admission){
+   using(var identity=WindowsIdentity.GetCurrent()){
+    if(identity.User.Value!=state.Sid||!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))throw new InvalidOperationException("Fixed effect token changed");
+   }
+   if(Environment.GetEnvironmentVariable("PVBOX_FIXED_HELPER_MODE")!=state.Mode||
+      !Equal(ValidateStoreLocator(Environment.GetEnvironmentVariable("RUNNER_TEMP"),state.Mode),state.Store)||
+      !Equal(Full(typeof(SdsBridge).Assembly.Location),state.Bridge))throw new InvalidOperationException("Fixed effect context origin changed");
+   using(var process=Process.GetCurrentProcess())
+    if(process.Id!=state.ProcessId||process.StartTime.ToFileTimeUtc()!=state.ProcessCreated||!Equal(process.MainModule.FileName,state.ProcessImage))throw new InvalidOperationException("Fixed effect process changed");
+   admission.Parents(state.Code);
+   foreach(string path in new[]{state.Store,state.Session,state.Code,state.App}){admission.Directory(path);CheckProtected(path,state.Sid);}
+   admission.File(state.Bridge);
+   return HoldPayload(admission,state.App,state.Sid);
+  }
+  static SdsResult Complete(FixedEffectWorker child,SdsDiagnosticFiles files,Stopwatch timer){
+   long elapsed=timer.ElapsedMilliseconds;
+   string output=child.StandardOutput.GetAwaiter().GetResult(),errors=child.StandardError.GetAwaiter().GetResult();
+   files.WriteCompleted(output,errors);child.VerifyImageObservation();
+   return new SdsResult(child.WithinDeadline,child.ExitCodeKnown,child.ExitCode,elapsed);
+  }
+  internal static SdsResult RunSds(ContextState state,SdsOperation operation,int seconds){
+   lock(state.Sync){
+    try {
+     ValidateSds(state.Purpose,operation,seconds);state.Attempts.Begin(5);
+     using(var admission=new Admission()){
+      Admit(state,admission);
+      string output=operation==SdsOperation.Register?state.Session:Path.Combine(state.Session,"cleanup");
+      if(operation!=SdsOperation.Register){admission.Directory(output);CheckInheritedCleanup(output,state.Sid);}
+      using(var files=new SdsDiagnosticFiles(output,operation==SdsOperation.Register?"sds-register":"sds-unregister")){
+       var timer=Stopwatch.StartNew();
+       using(var child=FixedEffectWorker.RunSds(Path.Combine(state.App,"VBoxSDS.exe"),operation!=SdsOperation.Register,seconds)){
+        var result=Complete(child,files,timer);state.Attempts.Observe(result);return result;
+       }
       }
      }
-    }
+    }catch{state.Attempts.Fail();throw;}
+   }
+  }
+  static string ValidatePublishedReceipt(Dictionary<string,object> receipt,string pinnedInf){
+   object schema,name,absent,hash;
+   if(!receipt.TryGetValue("published_inf_schema",out schema)||!((schema is int&&(int)schema==1)||(schema is long&&(long)schema==1))||
+      !receipt.TryGetValue("published_inf",out name)||!(name is string)||!Regex.IsMatch((string)name,@"\Aoem[0-9]{1,6}\.inf\z")||
+      !receipt.TryGetValue("published_inf_was_absent",out absent)||!(absent is bool)||!(bool)absent||
+      !receipt.TryGetValue("published_inf_sha256",out hash)||!(hash is string)||(string)hash!=pinnedInf)
+    throw new InvalidOperationException("Untrusted fixed published-INF selector");
+   return (string)name;
+  }
+  static string PublishedInf(ContextState state,Admission admission,string pinnedInf){
+   string stage=Path.Combine(state.Session,"stage");admission.Directory(stage);CheckInheritedCleanup(stage,state.Sid);
+   var receipt=admission.File(Path.Combine(stage,"sup-standalone.json"));
+   if(receipt.Length<1||receipt.Length>131072)throw new InvalidOperationException("Invalid fixed published-INF receipt size");
+   Dictionary<string,object> row;
+   using(var reader=new StreamReader(receipt,Encoding.UTF8,true,4096,true))
+    row=new JavaScriptSerializer {MaxJsonLength=262144}.Deserialize<Dictionary<string,object>>(reader.ReadToEnd());
+   string name=ValidatePublishedReceipt(row,pinnedInf);
+   string directory=Path.Combine(Path.GetDirectoryName(Environment.SystemDirectory),"INF");
+   // Parent namespace leases persist, but release this exact INF file after
+   // checking bytes so pnputil may delete it. Existing PS unique-inventory and
+   // ownership checks still authorize removal; this is not new cleanup authority.
+   admission.Parents(directory);
+   string path=Full(Path.Combine(directory,name));
+   using(var file=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read)){
+    if((File.GetAttributes(path)&(FileAttributes.ReparsePoint|FileAttributes.Directory))!=0)throw new InvalidOperationException("Unsafe installed INF");
+    Admission.CheckFinal(file.SafeFileHandle,path);
+    if(Hash(file)!=pinnedInf)throw new InvalidOperationException("Installed INF hash changed");
+   }
+   return name;
+  }
+  internal static SdsResult RunDriver(ContextState state,DriverOperation operation,int seconds){
+   lock(state.Sync){
+    try {
+     ValidateDriver(state.Purpose,operation,seconds);state.Attempts.Begin((int)operation);
+     using(var admission=new Admission()){
+      string infHash=Admit(state,admission),label,folder,published=null;FixedDriverOperation fixedOperation;
+      switch(operation){
+       case DriverOperation.AddSupPackage: fixedOperation=FixedDriverOperation.AddSupPackage;folder="stage";label="pnputil";break;
+       case DriverOperation.StartSup: fixedOperation=FixedDriverOperation.StartSup;folder="start";label="driver-start";break;
+       case DriverOperation.StopSup: fixedOperation=FixedDriverOperation.StopSup;folder="cleanup";label="sup-stop";break;
+       case DriverOperation.RemoveSupPackage: fixedOperation=FixedDriverOperation.RemoveSupPackage;folder="cleanup";label="sup-package-remove";published=PublishedInf(state,admission,infHash);break;
+       case DriverOperation.DeleteSupService: fixedOperation=FixedDriverOperation.DeleteSupService;folder="cleanup";label="sup-service-delete";break;
+       default:throw new InvalidOperationException("Unknown fixed driver operation");
+      }
+      string output=Path.Combine(state.Session,folder);admission.Directory(output);CheckInheritedCleanup(output,state.Sid);
+      string systemImage=Path.Combine(Environment.SystemDirectory,operation==DriverOperation.AddSupPackage||operation==DriverOperation.RemoveSupPackage?"pnputil.exe":"sc.exe");
+      admission.Parents(Path.GetDirectoryName(systemImage));admission.File(systemImage);
+      using(var files=new SdsDiagnosticFiles(output,label)){
+       var timer=Stopwatch.StartNew();
+       using(var child=FixedEffectWorker.RunDriver(fixedOperation,operation==DriverOperation.AddSupPackage?state.App:null,published,seconds)){
+        var result=Complete(child,files,timer);state.Attempts.Observe(result);return result;
+       }
+      }
+     }
+    }catch{state.Attempts.Fail();throw;}
    }
   }
  }

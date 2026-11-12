@@ -21,6 +21,12 @@ namespace PortableVBox {
     refused=false;try{using(var files=new SdsDiagnosticFiles(root,"sds-register")){}}catch(IOException){refused=true;}
     Require(refused&&File.Exists(stdout)&&new FileInfo(stdout).Length==0,"Second create failure removed first intent");
     Require(File.ReadAllText(stderr,Encoding.UTF8)=="Ошибка\n","Second-create failure truncated old stderr");
+    foreach(string label in new[]{"pnputil","driver-start","sup-stop","sup-package-remove","sup-service-delete"})
+     using(var files=new SdsDiagnosticFiles(root,label)){files.WriteCompleted("full "+label,"error "+label);}
+    foreach(string label in new[]{"../escape","arbitrary","pnputil/../bad"}){
+     bool unknown=false;try{using(var files=new SdsDiagnosticFiles(root,label)){}}catch(InvalidOperationException){unknown=true;}
+     Require(unknown,"Arbitrary evidence label accepted");
+    }
     Console.WriteLine("SDS_DIAGNOSTIC_FILES_PASS");return 0;
    }finally{Directory.Delete(root,true);}
   }

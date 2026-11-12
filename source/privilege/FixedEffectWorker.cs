@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 namespace PortableVBox {
+ internal enum FixedDriverOperation { AddSupPackage,StartSup,StopSup,RemoveSupPackage,DeleteSupService }
  internal sealed class FixedEffectWorker : IDisposable {
   [StructLayout(LayoutKind.Sequential)] struct Security { internal int Length;internal IntPtr Descriptor;internal int Inherit; }
   [StructLayout(LayoutKind.Sequential)] struct Startup {
@@ -247,6 +248,43 @@ namespace PortableVBox {
    // SDS inherits the existing protected PowerShell environment, as before.
    // A null native environment pointer preserves it without a caller selector.
    return RunCore(info,image,checked((uint)timeoutSeconds*1000),true);
+  }
+  // Only fixed protected operations can reach the shared native owner. The
+  // facade supplies admitted app/receipt identities, never user command text.
+  static ProcessStartInfo BuildDriverStartInfo(FixedDriverOperation operation,string protectedApp,string publishedInf,int timeoutSeconds) {
+   if(timeoutSeconds<5||timeoutSeconds>120)throw new InvalidOperationException("Invalid fixed driver deadline");
+   string executable,arguments,working=Environment.SystemDirectory;
+   if(operation==FixedDriverOperation.AddSupPackage) {
+    if(String.IsNullOrEmpty(protectedApp)||!Path.IsPathRooted(protectedApp)||publishedInf!=null||
+       protectedApp.IndexOfAny(new[]{'"','\0','\r','\n'})>=0)
+     throw new InvalidOperationException("Invalid fixed driver source");
+    working=Path.Combine(protectedApp,"drivers","vboxsup");
+    executable="pnputil.exe";arguments="/add-driver \""+Path.Combine(working,"VBoxSup.inf")+"\" /install";
+   } else {
+    if(protectedApp!=null)throw new InvalidOperationException("Unexpected driver source selector");
+    if(operation==FixedDriverOperation.RemoveSupPackage) {
+     if(String.IsNullOrEmpty(publishedInf)||publishedInf.Length<8||publishedInf.Length>13||
+        !publishedInf.StartsWith("oem",StringComparison.Ordinal)||!publishedInf.EndsWith(".inf",StringComparison.Ordinal))
+      throw new InvalidOperationException("Invalid fixed published INF");
+     for(int i=3;i<publishedInf.Length-4;i++)if(publishedInf[i]<'0'||publishedInf[i]>'9')throw new InvalidOperationException("Invalid fixed published INF");
+     executable="pnputil.exe";arguments="/delete-driver "+publishedInf+" /uninstall";
+    } else {
+     if(publishedInf!=null)throw new InvalidOperationException("Unexpected published INF selector");
+     executable="sc.exe";
+     if(operation==FixedDriverOperation.StartSup)arguments="start VBoxSup";
+     else if(operation==FixedDriverOperation.StopSup)arguments="stop VBoxSup";
+     else if(operation==FixedDriverOperation.DeleteSupService)arguments="delete VBoxSup";
+     else throw new InvalidOperationException("Unknown fixed driver operation");
+    }
+   }
+   var info=new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,executable),arguments);
+   info.WorkingDirectory=working;info.UseShellExecute=false;info.CreateNoWindow=true;
+   info.RedirectStandardOutput=true;info.RedirectStandardError=true;return info;
+  }
+  internal static FixedEffectWorker RunDriver(FixedDriverOperation operation,string protectedApp,string publishedInf,int timeoutSeconds) {
+   var info=BuildDriverStartInfo(operation,protectedApp,publishedInf,timeoutSeconds);
+   // Inherit only the already sanitized protected PowerShell environment.
+   return RunCore(info,info.FileName,checked((uint)timeoutSeconds*1000),true);
   }
   static FixedEffectWorker RunCore(ProcessStartInfo info,string image,uint deadline,bool inheritEnvironment) {
    var owner=new FixedEffectWorker();
