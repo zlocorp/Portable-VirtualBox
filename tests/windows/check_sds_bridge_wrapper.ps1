@@ -1,11 +1,15 @@
-# Managed PowerShell wrapper behavior only. No assembly, native process, service,
-# driver or registry is loaded/touched by this fixture.
+# PowerShell wrapper behavior with substituted effects and one isolated loader
+# process using a harmless managed fixture DLL. No service/driver/registry effects.
 param([string]$Repository=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Require([bool]$Ok,[string]$Message) { if (-not $Ok) { throw $Message } }
 $tokens=$null;$errors=$null
 $source=Join-Path $Repository 'scripts/privileged_session_worker.ps1'
+# Windows PowerShell 5.1 treats BOM-less script files as ANSI. Keep this
+# production guard and its fixture ASCII; construct tested Unicode at runtime.
+Require ([IO.File]::ReadAllText($source,[Text.Encoding]::UTF8) -cnotmatch '[^\x00-\x7f]') 'Protected script must remain ASCII for Windows PowerShell 5.1'
+Require ([IO.File]::ReadAllText($PSCommandPath,[Text.Encoding]::UTF8) -cnotmatch '[^\x00-\x7f]') 'Wrapper fixture must remain ASCII for Windows PowerShell 5.1'
 $ast=[Management.Automation.Language.Parser]::ParseFile($source,[ref]$tokens,[ref]$errors)
 Require ($errors.Count -eq 0) 'Protected source parse failed'
 $functions=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Run-Sds'},$true))
@@ -25,9 +29,12 @@ try {
  }
  $validStore='C:\ProgramData\PortableVirtualBox.Alpha'
  $validSession=$validStore+'\pvbox-manager-123-1'
+ $unicodeSegment=-join ([char[]]@(0x0414,0x0430,0x043d,0x043d,0x044b,0x0435,0x20,0x4e16,0x754c))
+ $unicodeStore='D:\'+$unicodeSegment+'\PortableVirtualBox.Alpha'
+ Require ($unicodeSegment.Length -eq 9 -and [int]$unicodeSegment[0] -eq 0x0414 -and [int]$unicodeSegment[7] -eq 0x4e16 -and [int]$unicodeSegment[8] -eq 0x754c) 'Unicode fixture codepoints changed'
  $locatorCases=@(
   @{Name='Valid';Store=$validStore;Session=$validSession;Ok=$true},
-  @{Name='Unicode';Store='D:\Данные 世界\PortableVirtualBox.Alpha';Session='D:\Данные 世界\PortableVirtualBox.Alpha\pvbox-manager-123-1';Ok=$true},
+  @{Name='Unicode';Store=$unicodeStore;Session=$unicodeStore+'\pvbox-manager-123-1';Ok=$true},
   @{Name='Missing';Store=$null;Session=$validSession},
   @{Name='Relative';Store='PortableVirtualBox.Alpha';Session=$validSession},
   @{Name='DriveRelative';Store='C:PortableVirtualBox.Alpha';Session=$validSession},
@@ -52,7 +59,7 @@ try {
   @{Name='UnicodeWhitespace';Store=('C:\Data'+[char]0xa0+'\PortableVirtualBox.Alpha');Session=$validSession},
   @{Name='Reserved';Store='C:\NUL.txt\PortableVirtualBox.Alpha';Session=$validSession},
   @{Name='ReservedConsole';Store='C:\CONIN$\PortableVirtualBox.Alpha';Session=$validSession},
-  @{Name='ReservedSuperscript';Store='C:\COM¹\PortableVirtualBox.Alpha';Session=$validSession},
+  @{Name='ReservedSuperscript';Store=('C:\COM'+[char]0x00b9+'\PortableVirtualBox.Alpha');Session=$validSession},
   @{Name='Wildcard';Store='C:\Data*\PortableVirtualBox.Alpha';Session=$validSession},
   @{Name='Control';Store=('C:\Data'+[char]0x1f+'\PortableVirtualBox.Alpha');Session=$validSession},
   @{Name='C1Control';Store=('C:\Data'+[char]0x85+'\PortableVirtualBox.Alpha');Session=$validSession},
@@ -187,5 +194,82 @@ try {
   }
   }
  }
+ # Real nested '& child.ps1' call across distinct defining/caller directories.
+ # Production loader, harmless fixed DLL, isolated PowerShell; no system effects.
+ if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -or $env:PVBOX_TEST_NET48_REFERENCES) {
+  $loader=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Invoke-ProtectedSds'},$true))
+  Require ($loader.Count -eq 1) 'Exactly one production protected loader required'
+  $fixtureRoot=Join-Path ([IO.Path]::GetTempPath()) ('pvbox-sds-nested-'+[guid]::NewGuid().ToString('N'))
+  $defining=Join-Path $fixtureRoot 'defining';$calling=Join-Path $fixtureRoot 'calling'
+  New-Item -ItemType Directory -Path $defining,$calling | Out-Null
+  try {
+   $fixtureSource=Join-Path $fixtureRoot 'HarmlessSdsBridge.cs'
+   [IO.File]::WriteAllText($fixtureSource,@'
+namespace PortableVBox {
+ public enum SdsOperation { Register, UnregisterFull, UnregisterPartial }
+ public sealed class HarmlessResult {
+  public string Kind { get { return "TEST_ONLY_NO_EFFECTS"; } }
+  public string Operation { get; internal set; }
+  public int TimeoutSeconds { get; internal set; }
+  public string Location { get; internal set; }
+ }
+ public static class SdsBridge {
+  public static HarmlessResult Run(SdsOperation operation,int timeoutSeconds) {
+   return new HarmlessResult {
+    Operation=operation.ToString(),TimeoutSeconds=timeoutSeconds,
+    Location=typeof(SdsBridge).Assembly.Location
+   };
+  }
+ }
+}
+'@,[Text.UTF8Encoding]::new($false))
+   $fixtureDll=Join-Path $defining 'PortableVBox.SdsBridge.dll'
+   . (Join-Path $PSScriptRoot 'NativeFixedFixtureBuild.ps1')
+   Compile-FixedFixtureSources @($fixtureSource) $fixtureDll $null
+   Require ([Reflection.AssemblyName]::GetAssemblyName($fixtureDll).Name -ceq 'PortableVBox.SdsBridge') 'Harmless assembly simple name changed'
+   Require (@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object {$_.GetName().Name -ceq 'PortableVBox.SdsBridge'}).Count -eq 0) 'Compiler loaded the harmless fixture before real loader'
+   Require (-not (Test-Path -LiteralPath (Join-Path $calling 'PortableVBox.SdsBridge.dll'))) 'Calling directory must not contain a bridge'
+   $child=Join-Path $calling 'child.ps1'
+   [IO.File]::WriteAllText($child,@'
+param([string]$ExpectedDll)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+# Recreate the actual loader body without a defining file in a nested scope.
+# It must refuse before loading any assembly, then leave the file-defined
+# function intact for the real child-call regression below.
+$memoryDefinition=[scriptblock]::Create('function Invoke-ProtectedSds {'+(Get-Command Invoke-ProtectedSds -CommandType Function).Definition+'}')
+& {
+ . $memoryDefinition
+ if (-not [string]::IsNullOrEmpty((Get-Command Invoke-ProtectedSds -CommandType Function).ScriptBlock.File)) { throw 'Expected in-memory function definition' }
+ $refused=$false
+ try { Invoke-ProtectedSds -Operation UnregisterPartial -TimeoutSeconds 45 | Out-Null }
+ catch { if ($_.Exception.Message -ceq 'Unknown protected SDS function definition') { $refused=$true } else { throw } }
+ if (-not $refused) { throw 'Loader accepted a function without a defining file' }
+ if (@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object {$_.GetName().Name -ceq 'PortableVBox.SdsBridge'}).Count -ne 0) { throw 'No-file refusal loaded an assembly' }
+ Write-Host 'SDS_NOFILE_LOADER_REFUSAL_PASS'
+}
+$result=Invoke-ProtectedSds -Operation UnregisterPartial -TimeoutSeconds 45
+if ($result.Kind -cne 'TEST_ONLY_NO_EFFECTS' -or
+    $result.Operation -cne 'UnregisterPartial' -or $result.TimeoutSeconds -ne 45 -or
+    $result.Location -cne $ExpectedDll) { throw 'Nested loader did not execute exact defining-directory harmless bridge' }
+$refused=$false
+try { Invoke-ProtectedSds -Operation UnregisterPartial -TimeoutSeconds 45 | Out-Null }
+catch { if ($_.Exception.Message -ceq 'Unexpected preloaded SDS bridge assembly') { $refused=$true } else { throw } }
+if (-not $refused) { throw 'Second loader call did not refuse preloaded bridge' }
+Write-Host 'SDS_NESTED_LOADER_PASS'
+'@,[Text.UTF8Encoding]::new($false))
+   # Preserve old top-level cache initializers for red regression. They belong
+   # to the defining script, not the nested calling script.
+   $initializers=@([regex]::Matches([IO.File]::ReadAllText($source),'(?m)^\$script:Sds(?:BridgeType|OperationType)=\$null\r?$') | ForEach-Object {$_.Value})
+   $worker=Join-Path $defining 'privileged_session_worker.ps1'
+   $nl=[Environment]::NewLine
+   $workerText='Set-StrictMode -Version Latest'+$nl+'$ErrorActionPreference=''Stop'''+$nl+($initializers -join $nl)+$nl+$loader[0].Extent.Text+$nl+"& '"+$child.Replace("'","''")+"' '"+$fixtureDll.Replace("'","''")+"'"+$nl
+   [IO.File]::WriteAllText($worker,$workerText,[Text.UTF8Encoding]::new($false))
+   $env:PVBOX_FIXED_HELPER_MODE='CI'
+   $engine=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+   & $engine -NoProfile -NonInteractive -File $worker
+   Require ($LASTEXITCODE -eq 0) 'Actual nested protected loader child failed'
+  } finally { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force }
+ } else { Write-Host 'SKIP SDS nested loader: net48 reference toolchain unavailable on non-Windows' }
 } finally { $env:PVBOX_FIXED_HELPER_MODE=$savedMode; $env:RUNNER_TEMP=$savedRunnerTemp }
 Write-Host 'SDS_BRIDGE_WRAPPER_PASS'

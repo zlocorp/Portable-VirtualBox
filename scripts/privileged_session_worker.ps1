@@ -37,7 +37,7 @@ function Assert-CanonicalAlphaLocator([string]$Store,[string]$Session) {
         foreach ($part in $value.Substring(3).Split([char]'\')) {
             if ($part.Length -eq 0 -or $part -eq '.' -or $part -eq '..' -or
                 $part.EndsWith('.') -or $part.Trim() -cne $part -or
-                $part -match '\A(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|\z)') {
+                $part -match '\A(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9\u00b9\u00b2\u00b3]|LPT[1-9\u00b9\u00b2\u00b3])(?:\.|\z)') {
                 throw 'Protected alpha locator is not canonical'
             }
         }
@@ -236,24 +236,26 @@ function Write-SdsRegistrationDiagnostics([hashtable]$Facts) {
 }
 # Loaded only from the exact embedded resource installed and hash-leased by
 # the parent helper. Never load the mutable portable-root helper assembly.
-$script:SdsBridgeType=$null
-$script:SdsOperationType=$null
 function Invoke-ProtectedSds {
     param([ValidateSet('Register','UnregisterFull','UnregisterPartial')][string]$Operation,[int]$TimeoutSeconds)
     if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
-    if ($null -eq $script:SdsBridgeType) {
-        $bridgePath=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'PortableVBox.SdsBridge.dll'))
-        $existing=@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'PortableVBox.SdsBridge' })
-        if ($existing.Count -ne 0) { throw 'Unexpected preloaded SDS bridge assembly' }
-        $assembly=[Reflection.Assembly]::LoadFrom($bridgePath)
-        if ($assembly.Location -cne $bridgePath) { throw 'SDS bridge assembly origin changed' }
-        $facade=$assembly.GetType('PortableVBox.SdsBridge',$true,$false)
-        $operationType=$assembly.GetType('PortableVBox.SdsOperation',$true,$false)
-        if ($facade.Assembly -ne $assembly -or $operationType.Assembly -ne $assembly) { throw 'SDS bridge type origin changed' }
-        $script:SdsOperationType=$operationType
-        $script:SdsBridgeType=$facade
+    # One SDS operation per worker. Do not cache in caller-dependent script scope.
+    # Nested cleanup invokes this function from a separate script; bind the DLL
+    # to this function's actual protected defining file, never the caller or cwd.
+    $definition=$MyInvocation.MyCommand.ScriptBlock.File
+    if ([string]::IsNullOrEmpty($definition) -or -not [IO.Path]::IsPathRooted($definition) -or
+        [IO.Path]::GetFileName($definition) -cne 'privileged_session_worker.ps1') {
+        throw 'Unknown protected SDS function definition'
     }
-    return $script:SdsBridgeType::Run([Enum]::Parse($script:SdsOperationType,$Operation,$false),$TimeoutSeconds)
+    $bridgePath=[IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetDirectoryName($definition)) 'PortableVBox.SdsBridge.dll'))
+    $existing=@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'PortableVBox.SdsBridge' })
+    if ($existing.Count -ne 0) { throw 'Unexpected preloaded SDS bridge assembly' }
+    $assembly=[Reflection.Assembly]::LoadFrom($bridgePath)
+    if ($assembly.Location -cne $bridgePath) { throw 'SDS bridge assembly origin changed' }
+    $facade=$assembly.GetType('PortableVBox.SdsBridge',$true,$false)
+    $operationType=$assembly.GetType('PortableVBox.SdsOperation',$true,$false)
+    if ($facade.Assembly -ne $assembly -or $operationType.Assembly -ne $assembly) { throw 'SDS bridge type origin changed' }
+    return $facade::Run([Enum]::Parse($operationType,$Operation,$false),$TimeoutSeconds)
 }
 function Run-Sds([string]$Argument,[string]$Label,[hashtable]$DiagnosticFacts=$null) {
     if ($Argument -cne '--regservice' -or $Label -cne 'sds-register') { throw 'Unknown fixed SDS registration selector' }
