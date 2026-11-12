@@ -17,7 +17,7 @@ class InterruptedPreparation(unittest.TestCase):
         self.assertIn('prepare-intent.json', s)
         self.assertIn('VerifyInterruptedSession', s)
         self.assertIn('"pre-system-effects"', s)
-        self.assertLess(s.index('WriteNew(intent'), s.index('process.Start()'))
+        self.assertLess(s.index('WriteNew(intent'), s.index('FixedEffectWorker.Run(info)'))
         self.assertIn('VerifyInterruptedSession(session,root,caller.Sid,oldPid,cycle)', s)
         self.assertIn(' -IncompletePreparation', s)
         self.assertIn('OrphanControllerAbsent', s)

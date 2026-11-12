@@ -77,12 +77,11 @@ class SdsDiagnosticSourceContracts(unittest.TestCase):
     def test_prepare_streams_persist_before_rejection_after_worker_completion(self):
         main = self.source("source/privilege/SessionHelper.Main.cs")
         # This ordering is conditional on worker completion and successful
-        # drains/writes. The parameterless wait can still delay all persistence.
-        region = self.unique_region(main, "using(var process=new Process {StartInfo=info}) {", "CompleteCleanupWorker(")
+        # drains/writes. The native owner retains the exact child past deadline.
+        region = self.unique_region(main, "using(var process=FixedEffectWorker.Run(info)) {", "CompleteCleanupWorker(")
         ordered = [
-            "process.Start();var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();",
-            "bool withinDeadline=process.WaitForExit(150000);",
-            "if(!withinDeadline) process.WaitForExit();",
+            "var stdout=process.StandardOutput;var stderr=process.StandardError;",
+            "bool withinDeadline=process.WithinDeadline;",
             "if(prepare) {",
             "journal.WorkerExited(",
             'WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(stdout.GetAwaiter().GetResult()));',
@@ -90,6 +89,9 @@ class SdsDiagnosticSourceContracts(unittest.TestCase):
             'if(!withinDeadline) throw new InvalidOperationException("Fixed effect exceeded deadline (child completed); inspect protected receipts");',
             'if(process.ExitCode!=0) throw new InvalidOperationException("Fixed effect worker rejected operation");',
         ]
+        owner = self.source("source/privilege/FixedEffectWorker.cs")
+        self.assertIn("WaitForSingleObject(original.Process,150000)", owner)
+        self.assertIn("if(wait==258)wait=WaitForSingleObject(original.Process,0xffffffff)", owner)
         positions = []
         for fragment in ordered:
             self.assertEqual(region.count(fragment), 1, fragment)

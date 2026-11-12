@@ -1,0 +1,73 @@
+// TEST ONLY: exact production owner, closed harmless fixtures, no CLI command selector.
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Threading;
+namespace PortableVBox {
+ public static class FixedEffectWorkerNativeTests {
+  static int assertions;
+  static void Assert(bool ok,string message){assertions++;if(!ok)throw new Exception(message);}
+  static ProcessStartInfo Fixture(string script) {
+   string image=Path.Combine(Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe");
+   var info=new ProcessStartInfo(image,"-NoLogo -NoProfile -NonInteractive -EncodedCommand "+Convert.ToBase64String(Encoding.Unicode.GetBytes(script)));
+   info.UseShellExecute=false;info.CreateNoWindow=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
+   info.WorkingDirectory=Environment.SystemDirectory;info.EnvironmentVariables.Clear();
+   info.EnvironmentVariables["SystemRoot"]=Environment.GetEnvironmentVariable("SystemRoot");
+   info.EnvironmentVariables["WINDIR"]=Environment.GetEnvironmentVariable("WINDIR");
+   info.EnvironmentVariables["TEMP"]=Path.GetTempPath();info.EnvironmentVariables["TMP"]=Path.GetTempPath();
+   return info;
+  }
+  public static int Main() {
+   Assert(Environment.OSVersion.Platform==PlatformID.Win32NT&&IntPtr.Size==8,"Windows x64 required");
+   Console.OutputEncoding=new UTF8Encoding(false);
+   const string encoding="[Console]::OutputEncoding=New-Object Text.UTF8Encoding($false);";
+   const string large=encoding+"[Console]::Out.Write(('a'*180000)+'Привет 世界');[Console]::Error.Write(('b'*190000)+'Ошибка 世界');exit 259";
+   using(var owner=FixedEffectWorker.Run(Fixture(large))) {
+    Assert(owner.WithinDeadline&&owner.ExitCodeKnown&&owner.ExitCode==259,"Measured exit 259 is not STILL_ACTIVE");owner.VerifyImageObservation();
+    Assert(owner.StandardOutput.GetAwaiter().GetResult()==new string('a',180000)+"Привет 世界","Full stdout/Unicode changed");
+    Assert(owner.StandardError.GetAwaiter().GetResult()==new string('b',190000)+"Ошибка 世界","Full stderr/Unicode changed");
+   }
+   Console.WriteLine("NATIVE full-output Unicode both-streams exit-259 PASS");
+   var invalid=Fixture("exit 0");invalid.WorkingDirectory=Path.Combine(Path.GetTempPath(),"pvbox-missing-"+Guid.NewGuid().ToString("N"));
+   bool refused=false;try{using(var owner=FixedEffectWorker.Run(invalid)) { }}catch(System.ComponentModel.Win32Exception error){refused=error.NativeErrorCode==267||error.NativeErrorCode==3;}
+   Assert(refused,"Invalid native working directory not refused");
+   using(var owner=FixedEffectWorker.Run(Fixture("[Console]::Out.Write('after-false');exit 0"))) {
+    owner.VerifyImageObservation();Assert(owner.ExitCodeKnown&&owner.ExitCode==0&&owner.StandardOutput.Result=="after-false","Create FALSE poisoned next independent owner");
+   }
+   Console.WriteLine("NATIVE normal-CreateProcess-FALSE and subsequent independent owner PASS");
+   string gate=Path.Combine(Path.GetTempPath(),"pvbox-eof-gate-"+Guid.NewGuid().ToString("N"));
+   string child=Convert.ToBase64String(Encoding.Unicode.GetBytes(encoding+"while(-not [IO.File]::Exists('"+gate.Replace("'","''")+"')){Start-Sleep -Milliseconds 50};[Console]::Out.Write('descendant-eof');[Console]::Error.Write('descendant-error');exit 0"));
+   string parent="$p=Start-Process -FilePath ([IO.Path]::Combine([Environment]::SystemDirectory,'WindowsPowerShell','v1.0','powershell.exe')) -ArgumentList '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand','"+child+"' -NoNewWindow -PassThru;[Console]::Out.Write('parent-exit;');exit 0";
+   FixedEffectWorker inherited=null;Thread disposer=null;Exception disposeError=null;
+   var disposed=new ManualResetEvent(false);var disposeEntered=new ManualResetEvent(false);
+   try {
+    inherited=FixedEffectWorker.Run(Fixture(parent));
+    Assert(inherited.ExitCodeKnown&&inherited.ExitCode==0,"Parent exit not measured");inherited.VerifyImageObservation();
+    Assert(!inherited.StandardOutput.IsCompleted,"Inherited output reached EOF before gate");
+    disposer=new Thread(()=>{disposeEntered.Set();try{inherited.Dispose();}catch(Exception e){disposeError=e;}finally{disposed.Set();}});
+    disposer.Start();
+    Assert(disposeEntered.WaitOne(10000),"Disposer did not enter");
+    Assert(!disposed.WaitOne(250),"Dispose released while descendant gate closed");
+   } finally {
+    File.WriteAllText(gate,"release");
+    if(disposer!=null)disposer.Join();
+    else if(inherited!=null)inherited.Dispose();
+   }
+   Assert(disposeError==null,"Dispose failed after real descendant EOF");
+   Assert(inherited.StandardOutput.Result=="parent-exit;descendant-eof","Descendant stdout lost");
+   Assert(inherited.StandardError.Result=="descendant-error","Descendant stderr lost");
+   File.Delete(gate);
+   Console.WriteLine("NATIVE exit-before-descendant-EOF and disposal-retention PASS");
+   var timer=Stopwatch.StartNew();
+   timer.Restart();
+   using(var owner=FixedEffectWorker.Run(Fixture("[Console]::Out.Write('before;');Start-Sleep -Seconds 153;[Console]::Out.Write('after');[Console]::Error.Write('alive-after-deadline');exit 0"))) {
+    Assert(!owner.WithinDeadline&&owner.ExitCodeKnown&&owner.ExitCode==0,"Deadline did not retain exact child to exit");owner.VerifyImageObservation();
+    Assert(timer.Elapsed.TotalSeconds>=152,"Owner returned before fixed child completion");
+    Assert(owner.StandardOutput.Result=="before;after"&&owner.StandardError.Result=="alive-after-deadline","Deadline lost output or killed worker");
+   }
+   Console.WriteLine("NATIVE real-150s-deadline-retention PASS");
+   Console.WriteLine("FIXED_EFFECT_NATIVE_PASS assertions="+assertions);return 0;
+  }
+ }
+}

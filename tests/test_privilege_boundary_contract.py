@@ -135,8 +135,12 @@ class PrivilegeBoundaryContract(unittest.TestCase):
 
     def test_no_orphaned_privileged_child_on_elapsed_timeout(self):
         helper=self.text('source/privilege/SessionHelper.Main.cs')
-        self.assertIn('bool withinDeadline=process.WaitForExit(150000)', helper)
-        self.assertIn('if(!withinDeadline) process.WaitForExit()', helper)
+        self.assertIn('using(var process=FixedEffectWorker.Run(info))', helper)
+        owner=self.text('source/privilege/FixedEffectWorker.cs')
+        self.assertIn('WaitForSingleObject(original.Process,150000)', owner)
+        self.assertIn('if(wait==258)wait=WaitForSingleObject(original.Process,0xffffffff)', owner)
+        self.assertIn('if(wait!=0)RetainUnknown()', owner)
+        self.assertNotIn('TerminateProcess', owner)
         self.assertIn('if(!withinDeadline) throw new InvalidOperationException', helper)
         self.assertIn('Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe"', helper)
         self.assertNotIn('"PowerShell","7","pwsh.exe"', helper)

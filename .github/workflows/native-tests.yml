@@ -5,6 +5,9 @@ on:
     paths:
       - 'source/**'
       - 'tests/native/**'
+      - 'tests/windows/*FixedEffectWorker*'
+      - 'tests/windows/check_fixed_effect_worker_*.ps1'
+      - tests/test_fixed_effect_worker.py
       - tests/windows/check_portable_cli.ps1
       - tests/windows/check_durable_journal.ps1
       - tests/windows/DurableJournalTests.cs
@@ -215,3 +218,17 @@ jobs:
           path: ${{ runner.temp }}/pvbox-native-fixed-composition-evidence/native-fixed-image-observation.jsonl
           if-no-files-found: error
           retention-days: 7
+
+  fixed-effect-production-owner:
+    runs-on: windows-2022
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Managed actual reader and interrupted join contracts
+        shell: powershell
+        run: ./tests/windows/check_fixed_effect_worker_managed.ps1
+      - name: Real production owner with closed harmless PowerShell fixtures
+        shell: powershell
+        run: ./tests/windows/check_fixed_effect_worker_native.ps1

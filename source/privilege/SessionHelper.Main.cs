@@ -254,27 +254,26 @@ namespace PortableVBox {
                 // owner implicit WRITE_DAC; normalize owner as for other receipts.
                 var journalSecurity=File.GetAccessControl(journalPath);
                 journalSecurity.SetOwner(Admins);File.SetAccessControl(journalPath,journalSecurity);
-                using(var process=new Process {StartInfo=info}) {
-                    process.Start();var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
-                    // If a system operation outlives the expected deadline,
-                    // never discard a still-live child. Otherwise the helper
-                    // could finish after we reported FAILED and removed locks.
-                    // The non-admin GUI remains responsive while this waits.
-                    bool withinDeadline=process.WaitForExit(150000);
-                    if(!withinDeadline) process.WaitForExit();
+                using(var process=FixedEffectWorker.Run(info)) {
+                    var stdout=process.StandardOutput;var stderr=process.StandardError;
+                    // Original native handles are retained through measured exit;
+                    // capture Tasks were created before launch. Persist exit before
+                    // awaiting descendant-held output; Dispose requires actual EOF.
+                    bool withinDeadline=process.WithinDeadline;
                     if(prepare) {
-                        journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,within_deadline=withinDeadline}));
+                        journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,exit_code_known=process.ExitCodeKnown,within_deadline=withinDeadline}));
                         WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(stdout.GetAwaiter().GetResult()));
                         WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(stderr.GetAwaiter().GetResult()));
                         var helper=TokenFacts.Read(Process.GetCurrentProcess().Id);
                         WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".json"),Encoding.UTF8.GetBytes(Json.Serialize(new{action=args[0],helper=helper,controller=caller,childExit=process.ExitCode})));
+                        process.VerifyImageObservation();
                         if(!withinDeadline) throw new InvalidOperationException("Fixed effect exceeded deadline (child completed); inspect protected receipts");
                         if(process.ExitCode!=0) throw new InvalidOperationException("Fixed effect worker rejected operation");
                     } else {
                         CompleteCleanupWorker(withinDeadline,process.ExitCode,
-                            ()=>journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,within_deadline=withinDeadline})),
+                            ()=>journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,exit_code_known=process.ExitCodeKnown,within_deadline=withinDeadline})),
                             stdout,stderr,
-                            ()=>{if(TokenFacts.WaitForSingleObject(controller,0)!=258) throw new InvalidOperationException("Controller exited during privileged operation");},
+                            ()=>{process.VerifyImageObservation();if(TokenFacts.WaitForSingleObject(controller,0)!=258) throw new InvalidOperationException("Controller exited during privileged operation");},
                             ()=>CreatePayloadCheckpoint(session,root,caller,recovery?oldPid:pid,cycle,recovery,helperHash,journalPath,journalBinding),
                             output=>{PayloadBreak("BeforeStdout");WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(output));},
                             errors=>{PayloadBreak("BeforeStderr");WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(errors));},
