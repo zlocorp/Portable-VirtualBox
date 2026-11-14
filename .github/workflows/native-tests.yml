@@ -62,6 +62,9 @@ on:
       - tests/windows/NativeFixedImageIdentityNativeTests.cs
       - tests/windows/check_native_fixed_image_observation.ps1
       - tests/test_native_fixed_image_observation_contract.py
+      - scripts/vbox_sup_cleanup.ps1
+      - tests/windows/check_cleanup_report_finalization.ps1
+      - tests/test_cleanup_report_finalization.py
       - scripts/vbox_sup_package_identity.ps1
       - tests/windows/check_driver_package_identity.ps1
       - tests/windows/check_driver_start_gate.ps1
@@ -109,6 +112,9 @@ jobs:
       - name: Execute locale-independent OEM INF identity contracts (no system effects)
         shell: powershell
         run: ./tests/windows/check_driver_package_identity.ps1
+      - name: Preserve cleanup evidence on failed final observation (no system effects)
+        shell: powershell
+        run: ./tests/windows/check_cleanup_report_finalization.ps1
       - name: Execute failed driver-start gate contracts (no system effects)
         shell: powershell
         run: |

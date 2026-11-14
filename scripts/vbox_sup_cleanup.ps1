@@ -355,7 +355,24 @@ try {
 } catch {
     $report.errors+= $_.Exception.Message
 } finally {
-    $report.final_vbox_services=@(Get-VBoxNames)
+    # A failed final observation must not suppress the original error/step
+    # evidence, or make an unreadable service namespace look empty. This is
+    # diagnostic evidence only: it grants no retry or cleanup authority.
+    $report.final_vbox_services=$null
+    $report.final_vbox_services_observation='UNKNOWN'
+    try {
+        $observedServices=@(Get-VBoxNames)
+        $report.final_vbox_services=$observedServices
+        $report.final_vbox_services_observation='OBSERVED'
+        if ($observedServices.Count -ne 0) {
+            $report.cleanup_verified=$false
+            $report.errors+='VirtualBox services remain at final observation'
+        }
+    } catch {
+        $report.cleanup_verified=$false
+        $report.errors+='Final VirtualBox service observation failed; state UNKNOWN'
+    }
+    # Write failures remain fatal. Never claim that evidence was saved if not.
     $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'cleanup-results.json') -Encoding utf8
 }
 Write-Host "VBoxSup cleanup: SDS=$($report.sds_cleanup), stop=$($report.service_stop), PnP=$($report.driver_package_removal), removed=$($report.driver_package_removed)"
