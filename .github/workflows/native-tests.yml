@@ -1,0 +1,267 @@
+name: Native AutoIt policy regressions
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - 'source/**'
+      - 'tests/native/**'
+      - 'tests/windows/*FixedEffectWorker*'
+      - 'tests/windows/check_fixed_effect_worker_*.ps1'
+      - tests/test_fixed_effect_worker.py
+      - tests/test_fixed_effect_worker_retention.py
+      - tests/windows/FixedEffectAcquiredChildProbe.cs
+      - tests/windows/check_fixed_effect_acquired_child.ps1
+      - tests/test_fixed_effect_acquired_child.py
+      - tests/test_acquired_child_runner_exit.py
+      - tests/windows/check_acquired_child_runner_contract.ps1
+      - 'tests/windows/*SdsBridge*'
+      - tests/windows/SdsDiagnosticFilesTests.cs
+      - 'tests/windows/check_sds_bridge_*.ps1'
+      - tests/test_sds_bridge_contract.py
+      - tests/test_sds_build_contract.py
+      - tests/windows/check_portable_cli.ps1
+      - tests/windows/check_durable_journal.ps1
+      - tests/windows/DurableJournalTests.cs
+      - tests/windows/NativeLaunchFixtureChild.cs
+      - tests/windows/NativeLaunchObservation.cs
+      - tests/windows/NativeLaunchObservationNative.cs
+      - tests/windows/NativeLaunchObservationNativeTests.cs
+      - tests/windows/NativeLaunchObservationTests.cs
+      - tests/windows/NativeProcessRuntimeInspection.cs
+      - tests/windows/check_native_launch_observation.ps1
+      - tests/test_native_launch_observation_contract.py
+      - tests/windows/NativePipeTransport.cs
+      - tests/windows/NativePipeTransportTests.cs
+      - tests/windows/NativePipeTransportNative.cs
+      - tests/windows/NativePipeTransportNativeTests.cs
+      - tests/windows/check_native_pipe_transport.ps1
+      - tests/test_native_pipe_transport_contract.py
+      - tests/windows/NativeSentinelObservation.cs
+      - tests/windows/NativeSentinelObservationNative.cs
+      - tests/windows/NativeSentinelObservationNativeTests.cs
+      - tests/windows/NativeCaptureFixtureChild.cs
+      - tests/windows/NativeChildCapture.cs
+      - tests/windows/NativeChildCaptureTests.cs
+      - tests/windows/NativeChildCaptureNative.cs
+      - tests/windows/NativeChildCaptureNativeTests.cs
+      - tests/windows/check_native_child_capture.ps1
+      - tests/test_native_child_capture_contract.py
+      - tests/windows/NativeLaunchEnvironment.cs
+      - tests/windows/NativeLaunchEnvironmentTests.cs
+      - tests/windows/NativeLaunchEnvironmentNative.cs
+      - tests/windows/NativeLaunchEnvironmentPolicyTests.cs
+      - tests/windows/NativeLaunchEnvironmentObservation.cs
+      - tests/windows/NativeLaunchEnvironmentObservationTests.cs
+      - tests/windows/NativeLaunchEnvironmentNativeTests.cs
+      - tests/windows/check_native_launch_environment.ps1
+      - tests/test_native_launch_environment_contract.py
+      - tests/windows/NativeFixedFixtureBuild.ps1
+      - tests/windows/NativeFixedImageIdentity.cs
+      - tests/windows/NativeFixedFixtureCommand.cs
+      - tests/windows/NativeFixedImageComposition.cs
+      - tests/windows/NativeFixedImageCompositionTests.cs
+      - tests/windows/NativeFixedImageCompositionNativeTests.cs
+      - tests/windows/check_native_fixed_image_composition.ps1
+      - tests/windows/NativeFixedImagePath.cs
+      - tests/windows/check_native_fixed_image_paths.ps1
+      - tests/windows/NativeFixedImageIdentityTests.cs
+      - tests/windows/NativeFixedImageIdentityNativeTests.cs
+      - tests/windows/check_native_fixed_image_observation.ps1
+      - tests/test_native_fixed_image_observation_contract.py
+      - scripts/vbox_sup_cleanup.ps1
+      - tests/windows/check_cleanup_report_finalization.ps1
+      - tests/test_cleanup_report_finalization.py
+      - scripts/vbox_sup_package_identity.ps1
+      - tests/windows/check_driver_package_identity.ps1
+      - tests/windows/check_driver_start_gate.ps1
+      - tests/windows/check_failed_start_recovery.ps1
+      - scripts/vbox_sup_partial_cleanup.ps1
+      - scripts/vbox_sup_start_owned.ps1
+      - scripts/privileged_session_worker.ps1
+      - scripts/manager_session_worker.ps1
+      - scripts/test-native.ps1
+      - .github/workflows/native-tests.yml
+  pull_request:
+    branches: [work/upstream-baseline-2026]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: windows-2022
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Official signed test toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest 'https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.18.0.zip' -OutFile "$env:RUNNER_TEMP/autoit.zip"
+          Expand-Archive "$env:RUNNER_TEMP/autoit.zip" "$env:RUNNER_TEMP/autoit"
+          $compilers = @(Get-ChildItem "$env:RUNNER_TEMP/autoit" -Recurse -Filter Aut2exe_x64.exe -File)
+          if ($compilers.Count -ne 1) { throw 'Ambiguous compiler path' }
+          $sig = Get-AuthenticodeSignature -LiteralPath $compilers[0].FullName
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'Invalid compiler signature' }
+          $root = Split-Path (Split-Path $compilers[0].FullName -Parent) -Parent
+          "AUTOIT_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Execute native policies, not VirtualBox
+        shell: pwsh
+        run: ./scripts/test-native.ps1 -AutoItRoot $env:AUTOIT_ROOT
+      - name: Execute portable CLI argument and receipt contracts
+        shell: pwsh
+        run: ./tests/windows/check_portable_cli.ps1
+      - name: Execute durable journal storage and interruption contracts
+        shell: pwsh
+        run: ./tests/windows/check_durable_journal.ps1
+      - name: Execute locale-independent OEM INF identity contracts (no system effects)
+        shell: powershell
+        run: ./tests/windows/check_driver_package_identity.ps1
+      - name: Preserve cleanup evidence on failed final observation (no system effects)
+        shell: powershell
+        run: ./tests/windows/check_cleanup_report_finalization.ps1
+      - name: Execute failed driver-start gate contracts (no system effects)
+        shell: powershell
+        run: |
+          foreach ($target in @('Start','Privileged','Manager')) {
+            ./tests/windows/check_driver_start_gate.ps1 -Repository $env:GITHUB_WORKSPACE -Target $target
+          }
+      - name: Execute exact-owned failed-stopped recovery contracts (no system effects)
+        shell: powershell
+        run: ./tests/windows/check_failed_start_recovery.ps1 -Repository $env:GITHUB_WORKSPACE
+      - name: Record exact inherited ACL semantics on owned temporary files
+        shell: powershell
+        run: |
+          $path=Join-Path $env:RUNNER_TEMP ('pvbox-acl-observation-'+[guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $path | Out-Null
+          try {
+            $sid='S-1-5-21-111111111-222222222-333333333-1234'
+            $security=New-Object Security.AccessControl.DirectorySecurity
+            $security.SetSecurityDescriptorSddlForm(('O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;'+$sid+')(A;OICI;RC;;;OW)'))
+            [IO.Directory]::SetAccessControl($path,$security)
+            $file=Join-Path $path 'observed-file'
+            [IO.File]::WriteAllBytes($file,[byte[]](1,2,3))
+            foreach ($phase in @('inherited','owner-normalized')) {
+              if ($phase -eq 'owner-normalized') {
+                $acl=[IO.File]::GetAccessControl($file)
+                $acl.SetOwner((New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')))
+                [IO.File]::SetAccessControl($file,$acl)
+              }
+              $acl=[IO.File]::GetAccessControl($file)
+              $raw=New-Object Security.AccessControl.RawSecurityDescriptor($acl.GetSecurityDescriptorBinaryForm(),0)
+              Write-Host ($phase+': '+$acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Owner,Access'))
+              Write-Host ('flags='+$raw.ControlFlags+'; count='+$raw.DiscretionaryAcl.Count)
+              foreach ($ace in $raw.DiscretionaryAcl) { Write-Host ($ace.SecurityIdentifier.Value+' '+$ace.AceFlags+' '+$ace.AccessMask) }
+            }
+          } finally { Remove-Item -LiteralPath $path -Recurse -Force }
+      - name: Execute owner-bound private payload file-only contracts
+        shell: powershell
+        run: ./tests/windows/check_payload_cleanup_contracts.ps1
+      - name: Observe fixed harmless native child lifetime (file-only, no authority)
+        id: native_launch_observation
+        shell: powershell
+        run: ./tests/windows/check_native_launch_observation.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-launch-evidence')
+      - name: Store bounded native launch and CLR observations (text only)
+        if: always() && steps.native_launch_observation.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-launch-observation
+          path: |
+            ${{ runner.temp }}/pvbox-native-launch-evidence/native-launch-observations.jsonl
+            ${{ runner.temp }}/pvbox-native-launch-evidence/runtime-process-inspection.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Exercise bounded owned pipe transport (file and IPC only, no child or authority)
+        id: native_pipe_transport
+        shell: powershell
+        run: ./tests/windows/check_native_pipe_transport.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-pipe-evidence')
+      - name: Store bounded native pipe transport observations (text only)
+        if: always() && steps.native_pipe_transport.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-pipe-transport-text-only
+          path: ${{ runner.temp }}/pvbox-native-pipe-evidence/native-pipe-transport.jsonl
+          if-no-files-found: error
+          retention-days: 7
+      - name: Capture fixed harmless child output (owned files and pipes, no authority)
+        id: native_child_capture
+        shell: powershell
+        run: ./tests/windows/check_native_child_capture.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-child-evidence')
+      - name: Store bounded native child capture observations (text only)
+        if: always() && steps.native_child_capture.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-child-capture-text-only
+          path: ${{ runner.temp }}/pvbox-native-child-evidence/native-child-capture.jsonl
+          if-no-files-found: error
+          retention-days: 7
+      - name: Observe explicit fixed-child Unicode environment (no authority)
+        id: native_launch_environment
+        shell: powershell
+        run: ./tests/windows/check_native_launch_environment.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-environment-evidence')
+      - name: Store bounded environment observations (text only)
+        if: always() && steps.native_launch_environment.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-launch-environment-text-only
+          path: ${{ runner.temp }}/pvbox-native-environment-evidence/native-launch-environment.jsonl
+          if-no-files-found: error
+          retention-days: 7
+      - name: Verify exact Windows Framework path comparison bridge
+        shell: powershell
+        run: python -X utf8 tests/test_native_fixed_image_observation_contract.py FixedImageWindowsPathBridgeContracts.test_nonascii_bridge_uses_windows_framework -v
+      - name: Observe fixed harmless image bytes (file-only, no fixture child launch)
+        id: native_fixed_image_observation
+        shell: powershell
+        run: ./tests/windows/check_native_fixed_image_observation.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-fixed-image-evidence')
+      - name: Store bounded fixed image observations (text only)
+        if: always() && steps.native_fixed_image_observation.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-fixed-image-observation-text-only
+          path: ${{ runner.temp }}/pvbox-native-fixed-image-evidence/native-fixed-image-observation.jsonl
+          if-no-files-found: error
+          retention-days: 7
+      - name: Compose fixed image proof with full Binary capture (no authority)
+        id: native_fixed_image_composition
+        shell: powershell
+        run: ./tests/windows/check_native_fixed_image_composition.ps1 -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'pvbox-native-fixed-composition-evidence')
+      - name: Store bounded composed fixed image observations (text only)
+        if: always() && steps.native_fixed_image_composition.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-fixed-image-composition-text-only
+          path: ${{ runner.temp }}/pvbox-native-fixed-composition-evidence/native-fixed-image-observation.jsonl
+          if-no-files-found: error
+          retention-days: 7
+
+  fixed-effect-production-owner:
+    runs-on: windows-2022
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Managed actual reader and interrupted join contracts
+        shell: powershell
+        run: ./tests/windows/check_fixed_effect_worker_managed.ps1
+      - name: Closed SDS admission and protected wrapper refusal contracts
+        shell: powershell
+        run: |
+          ./tests/windows/check_sds_bridge_admission.ps1
+          ./tests/windows/check_sds_bridge_wrapper.ps1
+      - name: Childless WAIT_FAILED owner retention (no system effects)
+        shell: powershell
+        run: ./tests/windows/check_fixed_effect_worker_retention.ps1
+      - name: Expected-negative runner exit propagation (no native effects)
+        shell: powershell
+        run: |
+          $env:PVBOX_TEST_POWERSHELL=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          python -X utf8 -m unittest discover -s tests -p test_acquired_child_runner_exit.py -v
+      - name: Actual child restricted-handle wait failure (no system effects)
+        shell: powershell
+        run: ./tests/windows/check_fixed_effect_acquired_child.ps1
+      - name: Real production owner with closed harmless PowerShell fixtures
+        shell: powershell
+        run: ./tests/windows/check_fixed_effect_worker_native.ps1
