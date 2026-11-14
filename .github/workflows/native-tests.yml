@@ -9,6 +9,9 @@ on:
       - 'tests/windows/check_fixed_effect_worker_*.ps1'
       - tests/test_fixed_effect_worker.py
       - tests/test_fixed_effect_worker_retention.py
+      - tests/windows/FixedEffectAcquiredChildProbe.cs
+      - tests/windows/check_fixed_effect_acquired_child.ps1
+      - tests/test_fixed_effect_acquired_child.py
       - 'tests/windows/*SdsBridge*'
       - tests/windows/SdsDiagnosticFilesTests.cs
       - 'tests/windows/check_sds_bridge_*.ps1'
@@ -249,6 +252,9 @@ jobs:
       - name: Childless WAIT_FAILED owner retention (no system effects)
         shell: powershell
         run: ./tests/windows/check_fixed_effect_worker_retention.ps1
+      - name: Actual child restricted-handle wait failure (no system effects)
+        shell: powershell
+        run: ./tests/windows/check_fixed_effect_acquired_child.ps1
       - name: Real production owner with closed harmless PowerShell fixtures
         shell: powershell
         run: ./tests/windows/check_fixed_effect_worker_native.ps1

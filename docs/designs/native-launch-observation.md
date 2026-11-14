@@ -165,3 +165,46 @@ This tests production error-path retention for invalid-handle state and does not
 prove arbitrary-duration retention, actual acquired-child wait failure, unknown
 creation or contradictory native acquisition outputs. Local net48 compilation
 is not Windows execution or workstation acceptance.
+
+## Actual-child restricted-handle fixture (test only)
+
+A separate closed fixture launches its own EXE once per case with native
+CreateProcessW. The child opens only two GUID-bound Local ready/release events,
+announces readiness and exits naturally after release (code 23), with a 30-second
+natural timeout (code 77). It performs no service, driver, Oracle or privileged
+operation. Unknown command modes and noncanonical tokens are rejected.
+
+The parent retains the original full-access process/thread handles. It duplicates
+the process handle with PROCESS_QUERY_LIMITED_INFORMATION (0x1000), no SYNCHRONIZE,
+no inheritance and options 0. Duplication binds the same object, without reopening
+by PID. Actual identity/image queries and WAIT_TIMEOUT on the retained original
+prove the child is live before and after the retention observation. The restricted
+duplicate must return WAIT_FAILED/error 5 in a separately measured sanity call.
+
+The unchanged production ObserveAndWait method is invoked with a synthetic owner
+adopting that duplicate. A private synthetic WithinDeadline=true sentinel is
+replaced by the real method after its native wait returns; no native return is
+injected. Query buffer/image success, owner sleep, held same-thread mutex,
+no exited/disposed promotion and three interruptions are checked. After release,
+the harness observes natural child exit on the original handle and requires 23;
+the production owner must still retain UNKNOWN and the mutex. This is not an
+exercise of production RunCore acquisition, original-handle failure, or system
+recovery. The production native return itself is not instrumented.
+
+Three cases run in separate test hosts: normal retention, a deliberate assertion
+before adoption, and a deliberate assertion after retention. Both negative cases
+must exit 1 only after verified child exit 23 and emit the exact terminal marker.
+Every failure after known creation goes through natural-exit observation. Failed
+release signalling still waits for the child's natural timeout; uncertain native
+waits/creation and failed original-handle closes retain the test host fail-closed.
+Logging failure cannot escape that retention loop. The restricted duplicate is
+not closed under a retained owner; it remains rooted until the harmless test host
+exits, after the child is proven exited. No forced child termination or close/wait
+race is used. These unknown paths are not claimed dynamically fault-injected.
+
+Microsoft documents that [waits require SYNCHRONIZE](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject),
+[CreateProcess returns full-access handles](https://learn.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights),
+and [DuplicateHandle can request different access](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle).
+Thus this is deliberate rights-fault adoption of a genuinely acquired child,
+not evidence that ordinary CreateProcess returns restricted handles. Whole-product
+Windows 10/11, interactive UAC and general SYSTEM retry remain separate gates.
