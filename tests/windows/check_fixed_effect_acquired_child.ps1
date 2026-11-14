@@ -21,3 +21,6 @@ foreach ($mode in @('', '--fail-before-adoption', '--fail-after-retention')) {
     }
 }
 Write-Host 'ACQUIRED_CHILD_CASES_PASS cases=3 expected_failures=2'
+# All expected-negative statuses were checked above. Do not leak the final
+# intentional exit 1 into GitHub's wrapper or a caller's native exit status.
+$global:LASTEXITCODE=0

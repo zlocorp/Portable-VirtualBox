@@ -12,6 +12,8 @@ on:
       - tests/windows/FixedEffectAcquiredChildProbe.cs
       - tests/windows/check_fixed_effect_acquired_child.ps1
       - tests/test_fixed_effect_acquired_child.py
+      - tests/test_acquired_child_runner_exit.py
+      - tests/windows/check_acquired_child_runner_contract.ps1
       - 'tests/windows/*SdsBridge*'
       - tests/windows/SdsDiagnosticFilesTests.cs
       - 'tests/windows/check_sds_bridge_*.ps1'
@@ -252,6 +254,11 @@ jobs:
       - name: Childless WAIT_FAILED owner retention (no system effects)
         shell: powershell
         run: ./tests/windows/check_fixed_effect_worker_retention.ps1
+      - name: Expected-negative runner exit propagation (no native effects)
+        shell: powershell
+        run: |
+          $env:PVBOX_TEST_POWERSHELL=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          python -X utf8 -m unittest discover -s tests -p test_acquired_child_runner_exit.py -v
       - name: Actual child restricted-handle wait failure (no system effects)
         shell: powershell
         run: ./tests/windows/check_fixed_effect_acquired_child.ps1

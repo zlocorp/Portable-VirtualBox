@@ -208,3 +208,11 @@ and [DuplicateHandle can request different access](https://learn.microsoft.com/e
 Thus this is deliberate rights-fault adoption of a genuinely acquired child,
 not evidence that ordinary CreateProcess returns restricted handles. Whole-product
 Windows 10/11, interactive UAC and general SYSTEM retry remain separate gates.
+
+The initial `adc3a69` PUSH/PR native jobs executed all three acquired-child cases
+successfully but failed the step: PowerShell retained exit 1 from the last
+expected-negative child and GitHub propagated it. The runner now clears
+LASTEXITCODE only after every case's original status/marker checks and its final
+summary. An executable contract extracts that actual tail and exercises nested
+invocation plus GitHub wrapper semantics, including six rejected status/marker
+variants. It uses a closed synthetic command, not a replacement native proof.
