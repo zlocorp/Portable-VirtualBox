@@ -139,3 +139,29 @@ future work, not a result of this observer.
 
 No primary Windows run, production repair, merge, release or promotion gate is
 claimed by this prototype.
+
+## Childless production-owner WAIT_FAILED probe
+
+`check_fixed_effect_worker_retention.ps1` builds the unchanged production
+`FixedEffectWorker.cs` together with a separate test-only executable. The probe
+uses no command-line selectors and starts no child. It first records the real
+Windows result of waiting on a NULL handle (`WAIT_FAILED`, error 6), then invokes
+the actual private `ObserveAndWait` method on a synthetic post-creation owner
+whose process handle remains NULL. Minus one is deliberately not used because
+Windows treats it as the current-process pseudo-handle.
+
+The owner thread first acquires an unnamed fixture mutex and completes a two-way
+entry handshake. The observer then requires the production query-failure field
+and a retention sleep, verifies no exit/disposal/completion and no mutex release,
+and repeats the checks after three thread interruptions. Failure to reach the
+observed state within ten seconds fails, not passes. Native results for the
+independent NULL wait are recorded explicitly; the production method itself is
+not instrumented to expose its native return value.
+
+The fixture exits its own childless process after bounded observation. It does
+not release or recover the synthetic unknown owner. No valid native resource was
+acquired by that owner, and no real worker, service, driver or guest is killed.
+This tests production error-path retention for invalid-handle state and does not
+prove arbitrary-duration retention, actual acquired-child wait failure, unknown
+creation or contradictory native acquisition outputs. Local net48 compilation
+is not Windows execution or workstation acceptance.
