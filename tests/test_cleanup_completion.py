@@ -17,8 +17,8 @@ class CleanupCompletion(unittest.TestCase):
         prepare=main[main.index('                    if(prepare) {',main.index('bool withinDeadline=')):main.index('                        CompleteCleanupWorker(')]
         self.assertNotIn('CreatePayloadCheckpoint',prepare)
         self.assertNotIn('PayloadBreak',prepare)
-        self.assertIn('stdout.GetAwaiter().GetResult()',prepare)
-        self.assertIn('stderr.GetAwaiter().GetResult()',prepare)
+        self.assertIn('CompletePrepareWorker(',prepare)
+        self.assertIn('stdout,stderr,()=>process.VerifyImageObservation()',prepare)
         for point in ('BeforeStdout','BeforeStderr','BeforeFacts'):
             self.assertIn('PayloadBreak("'+point+'")',main)
             self.assertIn(point,(ROOT/'tests/windows/check_payload_cleanup_recovery.ps1').read_text())

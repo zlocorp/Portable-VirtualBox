@@ -264,14 +264,15 @@ namespace PortableVBox {
                     // awaiting descendant-held output; Dispose requires actual EOF.
                     bool withinDeadline=process.WithinDeadline;
                     if(prepare) {
-                        journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,exit_code_known=process.ExitCodeKnown,within_deadline=withinDeadline}));
-                        WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(stdout.GetAwaiter().GetResult()));
-                        WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(stderr.GetAwaiter().GetResult()));
-                        var helper=TokenFacts.Read(Process.GetCurrentProcess().Id);
-                        WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".json"),Encoding.UTF8.GetBytes(Json.Serialize(new{action=args[0],helper=helper,controller=caller,childExit=process.ExitCode})));
-                        process.VerifyImageObservation();
-                        if(!withinDeadline) throw new InvalidOperationException("Fixed effect exceeded deadline (child completed); inspect protected receipts");
-                        if(process.ExitCode!=0) throw new InvalidOperationException("Fixed effect worker rejected operation");
+                        CompletePrepareWorker(withinDeadline,process.ExitCode,
+                            ()=>journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,exit_code_known=process.ExitCodeKnown,within_deadline=withinDeadline})),
+                            stdout,stderr,()=>process.VerifyImageObservation(),
+                            output=>WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(output)),
+                            errors=>WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(errors)),
+                            ()=>{
+                                var helper=TokenFacts.Read(Process.GetCurrentProcess().Id);
+                                WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".json"),Encoding.UTF8.GetBytes(Json.Serialize(new{action=args[0],helper=helper,controller=caller,childExit=process.ExitCode})));
+                            });
                     } else {
                         CompleteCleanupWorker(withinDeadline,process.ExitCode,
                             ()=>journal.WorkerExited(Json.Serialize(new {child_exit=process.ExitCode,exit_code_known=process.ExitCodeKnown,within_deadline=withinDeadline})),

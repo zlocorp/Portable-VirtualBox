@@ -42,6 +42,28 @@ namespace PortableVBox {
    else if(fault!="") Check(caught!=null && caught.Message==(fault=="capture-out"?"stdout":fault=="capture-err"?"stderr":fault),"Primary failure changed: "+fault);
    else Check(caught==null,"Unexpected successful-path refusal");
   }
+  static void PrepareCase(string fault,bool timely,int exit,string secondary="") {
+   var events=new List<string>();Exception caught=null;
+   Action<string> step=name=>{events.Add(name);if(fault==name || secondary==name) throw new InvalidOperationException(name);};
+   var method=typeof(SessionHelper).GetMethod("CompletePrepareWorker",BindingFlags.Static|BindingFlags.NonPublic);
+   Check(method!=null,"Missing actual private preparation sequencing");
+   try {
+    method.Invoke(null,new object[]{timely,exit,(Action)(()=>step("persist")),
+     Capture("stdout",fault=="capture-out" || secondary=="capture-out"),Capture("stderr",fault=="capture-err" || secondary=="capture-err"),
+     (Action)(()=>step("image")),
+     (Action<string>)(text=>{Check(text=="stdout","prepare stdout changed");step("write-out");}),
+     (Action<string>)(text=>{Check(text=="stderr","prepare stderr changed");step("write-err");}),
+     (Action)(()=>step("write-facts"))});
+   } catch(TargetInvocationException error) {caught=error.InnerException;}
+   Check(events.Contains("write-out")== (fault!="capture-out" && secondary!="capture-out"),"Prepare available stdout lost");
+   Check(events.Contains("write-err")== (fault!="capture-err" && secondary!="capture-err"),"Prepare available stderr lost");
+   Check(events.Contains("write-facts"),"Prepare facts not attempted");
+   Check(events.Contains("image"),"Prepare image observation not attempted");
+   if(!timely) Check(caught!=null && caught.Message.Contains("deadline"),"Prepare deadline masked");
+   else if(exit!=0) Check(caught!=null && caught.Message.Contains("worker rejected"),"Prepare rejection masked");
+   else if(fault!="") Check(caught!=null && caught.Message==(fault=="capture-out"?"stdout":fault=="capture-err"?"stderr":fault),"Prepare primary failure changed");
+   else Check(caught==null,"Prepare success rejected");
+  }
   public static int Main() {
    foreach(string fault in new[]{"","persist","capture-out","capture-err","controller","checkpoint","write-out","write-err","write-facts"}) {
     Case(fault,true,0);Case(fault,true,70);Case(fault,false,0);Case(fault,false,70);
@@ -49,6 +71,12 @@ namespace PortableVBox {
    foreach(string primary in new[]{"persist","capture-out","capture-err","controller","checkpoint"})
     foreach(string diagnostic in new[]{"write-out","write-err","write-facts"}) Case(primary,true,0,diagnostic);
    Case("capture-out",true,0,"capture-err");
+   foreach(string fault in new[]{"","persist","capture-out","capture-err","image","write-out","write-err","write-facts"}) {
+    PrepareCase(fault,true,0);PrepareCase(fault,true,70);PrepareCase(fault,false,0);PrepareCase(fault,false,70);
+   }
+   foreach(string primary in new[]{"persist","capture-out","capture-err","image"})
+    foreach(string diagnostic in new[]{"write-out","write-err","write-facts"}) PrepareCase(primary,true,0,diagnostic);
+   PrepareCase("capture-out",true,0,"capture-err");
    Console.WriteLine("CLEANUP_COMPLETION_PASS checks="+checks);return 0;
   }
  }

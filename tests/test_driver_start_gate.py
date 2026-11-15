@@ -84,12 +84,16 @@ class SdsDiagnosticSourceContracts(unittest.TestCase):
             "var stdout=process.StandardOutput;var stderr=process.StandardError;",
             "bool withinDeadline=process.WithinDeadline;",
             "if(prepare) {",
+            "CompletePrepareWorker(withinDeadline,process.ExitCode,",
             "journal.WorkerExited(",
-            'WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(stdout.GetAwaiter().GetResult()));',
-            'WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(stderr.GetAwaiter().GetResult()));',
-            'if(!withinDeadline) throw new InvalidOperationException("Fixed effect exceeded deadline (child completed); inspect protected receipts");',
-            'if(process.ExitCode!=0) throw new InvalidOperationException("Fixed effect worker rejected operation");',
+            "stdout,stderr,()=>process.VerifyImageObservation()",
+            'output=>WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stdout.txt"),Encoding.UTF8.GetBytes(output))',
+            'errors=>WriteNew(Path.Combine(session,"helper-"+args[0]+"-"+evidenceId+".stderr.txt"),Encoding.UTF8.GetBytes(errors))',
         ]
+        completion = self.source("source/privilege/SessionHelper.CleanupCompletion.cs")
+        prepare_completion = self.unique_region(completion, "static void CompletePrepareWorker(", "static void CompleteCleanupWorker(")
+        self.assertLess(prepare_completion.index("writeStdout(output)"), prepare_completion.index("ExceptionDispatchInfo.Capture(failure).Throw()"))
+        self.assertLess(prepare_completion.index("writeStderr(errors)"), prepare_completion.index("ExceptionDispatchInfo.Capture(failure).Throw()"))
         owner = self.source("source/privilege/FixedEffectWorker.cs")
         self.assertIn("WaitForSingleObject(original.Process,deadline)", owner)
         self.assertIn("return RunCore(info,image,150000,false)", owner)

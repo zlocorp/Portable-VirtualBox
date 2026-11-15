@@ -52,8 +52,12 @@ class FixedEffectWorker(unittest.TestCase):
         main = (ROOT / "source/privilege/SessionHelper.Main.cs").read_text()
         self.assertIn("exit_code_known=process.ExitCodeKnown", main)
         prepare = main[main.index("using(var process=FixedEffectWorker.Run(info))"):main.index("CompleteCleanupWorker(withinDeadline")]
-        self.assertLess(prepare.index("journal.WorkerExited("), prepare.index("stdout.GetAwaiter().GetResult()"))
-        self.assertLess(prepare.index("process.VerifyImageObservation()"), prepare.index("if(process.ExitCode!=0)"))
+        self.assertIn("CompletePrepareWorker(withinDeadline,process.ExitCode,", prepare)
+        self.assertIn("journal.WorkerExited(", prepare)
+        completion = (ROOT / "source/privilege/SessionHelper.CleanupCompletion.cs").read_text()
+        prepare = completion[:completion.index("static void CompleteCleanupWorker(")]
+        self.assertLess(prepare.index("persistExit();"), prepare.index("stdout.GetAwaiter().GetResult()"))
+        self.assertLess(prepare.index("verifyImage();"), prepare.index("ExceptionDispatchInfo.Capture(failure).Throw()"))
         owner = (ROOT / "source/privilege/FixedEffectWorker.cs").read_text()
         self.assertIn("WaitForSingleObject(original.Process,deadline)", owner)
         self.assertIn("if(wait==258)wait=WaitForSingleObject(original.Process,0xffffffff)", owner)

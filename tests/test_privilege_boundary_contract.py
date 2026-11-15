@@ -142,7 +142,7 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         self.assertIn('if(wait==258)wait=WaitForSingleObject(original.Process,0xffffffff)', owner)
         self.assertIn('if(wait!=0)RetainUnknown()', owner)
         self.assertNotIn('TerminateProcess', owner)
-        self.assertIn('if(!withinDeadline) throw new InvalidOperationException', helper)
+        self.assertIn('if(!withinDeadline) failure=new InvalidOperationException', self.text('source/privilege/SessionHelper.CleanupCompletion.cs'))
         self.assertIn('Environment.SystemDirectory,"WindowsPowerShell","v1.0","powershell.exe"', helper)
         self.assertNotIn('"PowerShell","7","pwsh.exe"', helper)
         worker=self.text('source/PrivilegeBoundary.au3')
