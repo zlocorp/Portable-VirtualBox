@@ -19,7 +19,7 @@ $out=Join-Path $env:RUNNER_TEMP 'orphan-recovery-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 Add-Type -Path @((Join-Path $PSScriptRoot '../../source/privilege/TokenFacts.cs'), (Join-Path $PSScriptRoot 'MediumProcess.cs'))
 $proof=[ordered]@{source_commit=$env:GITHUB_SHA;orphan_recovery_verified=$false;live_owner_refused=$false;live_guest_refused=$false;
-    protected_payload_removed=$false;original_vm_data_preserved=$false;interactive_uac_verified=$false;automatic_cleanup=$false}
+    protected_payload_removed=$false;original_vm_data_preserved=$false;preflight_refusal_then_recovery_verified=$false;interactive_uac_verified=$false;automatic_cleanup=$false}
 $old=$null;$new=$null;$guest=$null
 function Start-Medium([string]$Image,[string]$Arguments,[string]$Label,[string]$Working=$root) {
     $p=[MediumProcess]::Start($Image,$Arguments,$Working,(Join-Path $out ($Label+'.stdout.txt')),(Join-Path $out ($Label+'.stderr.txt')))
@@ -139,9 +139,53 @@ try {
         Start-Sleep -Milliseconds 250
     }
     $before=(Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash
+    # Exercise actual RecoverySession preflight without modifying the owned INF.
+    $stagePath=Join-Path $session 'stage\sup-standalone.json'
+    $stageReceipt=Get-Content -LiteralPath $stagePath -Raw | ConvertFrom-Json
+    if ($stageReceipt.published_inf -cnotmatch '\Aoem[0-9]{1,6}\.inf\z') { throw 'Invalid fixture INF identity' }
+    $publishedPath=Join-Path (Join-Path $env:SystemRoot 'INF') $stageReceipt.published_inf
+    $infBefore=(Get-FileHash -LiteralPath $publishedPath -Algorithm SHA256).Hash
+    $stageBefore=(Get-FileHash -LiteralPath $stagePath -Algorithm SHA256).Hash
+    $admissionNames=@('quiescent-session.json','recovery-quiescent.json',
+        'partial-recovery-quiescent.json','cleanup','payload-cleanup.json','payload-removed.json')
+    $assertNoAdmission={
+        foreach ($name in $admissionNames) {
+            if (Test-Path -LiteralPath (Join-Path $session $name)) { throw ('Recovery preflight admitted cleanup: '+$name) }
+        }
+        Assert-Driver-StillOwned
+        if ((Get-Service -Name VBoxSDS -ErrorAction Stop).Status -ne 'Stopped') { throw 'Recovery preflight changed SDS state' }
+    }
+    & $assertNoAdmission
+    $beforeRefusalJournals=Get-JournalHashes $session
+    $lockedInf=[IO.File]::Open($publishedPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+    try {
+        Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 'preflight-locked-inf'
+        $failedJournals=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.journal' -File |
+            Where-Object { -not $beforeRefusalJournals.ContainsKey($_.Name) })
+        if ($failedJournals.Count -ne 1) { throw 'Missing unique failed preflight journal' }
+        $failedStderrName=[IO.Path]::GetFileNameWithoutExtension($failedJournals[0].Name)+'.stderr.txt'
+        $failedStderr=Get-Content -LiteralPath (Join-Path $session $failedStderrName) -Raw -Encoding UTF8
+        if ($failedStderr -notmatch [regex]::Escape($publishedPath) -or
+            $failedStderr -notmatch 'being used by another process') {
+            throw 'Preflight refusal did not identify the locked owned INF'
+        }
+        & $assertNoAdmission
+    } finally { $lockedInf.Dispose() }
+    $infAfter=(Get-FileHash -LiteralPath $publishedPath -Algorithm SHA256).Hash
+    $stageAfter=(Get-FileHash -LiteralPath $stagePath -Algorithm SHA256).Hash
+    if ($infAfter -ne $infBefore -or $stageAfter -ne $stageBefore) { throw 'Recovery refusal changed original evidence' }
+    $refusalJournals=Get-JournalHashes $session
+    [ordered]@{source_commit=$env:GITHUB_SHA;published_inf=$stageReceipt.published_inf;
+        inf_sha256_before=$infBefore;inf_sha256_after=$infAfter;
+        stage_sha256_before=$stageBefore;stage_sha256_after=$stageAfter;
+        observed_absent_markers=$admissionNames;sup_status='Running';sds_status='Stopped';
+        failed_worker_stderr=$failedStderrName;prior_journal_hashes=$refusalJournals} | ConvertTo-Json -Depth 8 |
+        Set-Content -LiteralPath (Join-Path $out 'preflight-refusal-evidence.json') -Encoding utf8
     # Only this EXPLICIT request with a new bounded medium controller may
     # remove the exclusively owned, now idle orphan resources.
     Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 0 'recover-orphan'
+    Assert-PriorJournals $session $refusalJournals
+    $proof.preflight_refusal_then_recovery_verified=$true
     Assert-Clean
     $result=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw | ConvertFrom-Json
     if ($result.cleanup_basis -ne 'RecoverySession' -or -not $result.cleanup_verified -or -not $result.driver_package_removed) {
@@ -153,6 +197,7 @@ try {
     if ((Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash -ne $before) { throw 'Original VM data changed during recovery' }
     $proof.original_vm_data_preserved=$true
     Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 'replay-refusal'
+    if (-not $proof.preflight_refusal_then_recovery_verified) { throw 'Recovery preflight retry was not verified' }
     $proof.orphan_recovery_verified=$true
     $proof.uuid=$uuid
     $proof.session=$session

@@ -39,6 +39,17 @@ class CleanupAdmissionContract(unittest.TestCase):
         success = text.index("$proof.durable_journal_verified=$true")
         self.assertLess(text.index("if (-not $proof.preflight_refusal_then_cleanup_verified) { throw 'Locked-INF preflight retry was not verified' }"), success)
 
+    def test_real_recover_preflight_retry_is_mandatory_and_retains_evidence(self):
+        text = (ROOT / 'tests/windows/check_orphan_recovery.ps1').read_text()
+        refused = text.index("70 'preflight-locked-inf'")
+        succeeded = text.index("0 'recover-orphan'")
+        self.assertLess(refused, succeeded)
+        self.assertIn('[IO.FileShare]::None', text)
+        self.assertIn('preflight-refusal-evidence.json', text)
+        self.assertIn('Preflight refusal did not identify the locked owned INF', text)
+        self.assertLess(text.index('Assert-PriorJournals $session $refusalJournals', succeeded), text.index('$proof.orphan_recovery_verified=$true'))
+        self.assertIn("if (-not $proof.preflight_refusal_then_recovery_verified) { throw 'Recovery preflight retry was not verified' }", text)
+
 
 if __name__ == '__main__':
     unittest.main()

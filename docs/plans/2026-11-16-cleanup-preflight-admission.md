@@ -62,3 +62,16 @@ cleanup script; immutable proof/output admission follows successful validation.
   failed-then-successful worker evidence; earlier green jobs remain historical.
 
 - Final correction suite: 475 tests, seven expected skips, no failures (136.047 s).
+
+## Real orphan Recover coverage
+
+- Extend the existing disposable orphan fixture with the same exact-owned OEM
+  INF read lock before Recover. Require failure without admission/changed services,
+  unchanged INF/stage hashes, then successful explicit Recover and immutable earlier
+  journals. Export a bounded pre-retry observation/hash snapshot for artifact audit.
+- This is test-only coverage of the already published RecoverySession behavior,
+  not a new retry capability. Source regression was absent/red before the fixture
+  change; five targeted source checks and PowerShell parse checks pass afterward.
+- Independent review and exact-source Windows execution remain required.
+
+- Final exact Recover-test suite: 476 tests, seven expected skips, no failures (134.424 s); independent review accepted the exact-locked-INF refusal cause gate.
