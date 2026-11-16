@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Runtime.ExceptionServices;
+using System.Threading.Tasks;
 namespace PortableVBox {
  // Content is diagnostic; file EXISTENCE conservatively blocks ambiguous recovery.
  // Never remove, replace or truncate these files, including on partial acquisition.
@@ -14,22 +16,44 @@ namespace PortableVBox {
     stdout.Flush(true);
     stderr=new FileStream(Path.Combine(directory,label+".stderr.txt"),FileMode.CreateNew,FileAccess.Write,FileShare.Read);
     stderr.Flush(true);
-   }catch{Dispose();throw;}
+   }catch(Exception error){SdsEvidenceCompletion.Close(error,this);throw;}
   }
-  internal void WriteCompleted(string output,string errors) {
+  internal void WriteCompleted(string output,string errors) { WriteAvailable(output,true,errors,true); }
+  internal void WriteAvailable(string output,bool outputReady,string errors,bool errorsReady) {
    if(written||stdout==null||stderr==null)throw new InvalidOperationException("SDS diagnostics already consumed");
    written=true;
-   // Deliberate migration from Start-Process's line writer: complete decoded
-   // strings in UTF-8, no newline normalization. No byte-equivalence claim.
-   // Interrupted workers retain empty intent files, not partial streamed output.
-   byte[] outBytes=new UTF8Encoding(false,true).GetBytes(output);
-   byte[] errBytes=new UTF8Encoding(false,true).GetBytes(errors);
-   stdout.Write(outBytes,0,outBytes.Length);stdout.Flush(true);
-   stderr.Write(errBytes,0,errBytes.Length);stderr.Flush(true);
+   // Each complete decoded stream is independent. A failed encoding/write/flush
+   // never prevents the other available stream being attempted. No reopening.
+   Exception failure=null;
+   if(outputReady)try{Write(stdout,output);}catch(Exception error){failure=error;}
+   if(errorsReady)try{Write(stderr,errors);}catch(Exception error){if(failure==null)failure=error;}
+   if(failure!=null)ExceptionDispatchInfo.Capture(failure).Throw();
+  }
+  static void Write(Stream stream,string value){
+   byte[] bytes=new UTF8Encoding(false,true).GetBytes(value);
+   stream.Write(bytes,0,bytes.Length);((FileStream)stream).Flush(true);
   }
   public void Dispose(){
-   try{if(stdout!=null){stdout.Dispose();stdout=null;}}
-   finally{if(stderr!=null){stderr.Dispose();stderr=null;}}
+   // Consume references before close: even a failed close cannot be retried by
+   // an enclosing cleanup path or overwrite the original completion exception.
+   var output=stdout;var errors=stderr;stdout=null;stderr=null;
+   SdsEvidenceCompletion.Close(null,output,errors);
+  }
+ }
+ // Internal fixed call sites only. Evidence never authorizes another effect.
+ internal static class SdsEvidenceCompletion {
+  internal static void Capture(Task<string> stdout,Task<string> stderr,Action verifyImage,
+   Action<string,bool,string,bool> persist){
+   Exception failure=null;string output=null,errors=null;bool outputReady=false,errorsReady=false;
+   try{output=stdout.GetAwaiter().GetResult();outputReady=true;}catch(Exception error){failure=error;}
+   try{errors=stderr.GetAwaiter().GetResult();errorsReady=true;}catch(Exception error){if(failure==null)failure=error;}
+   try{verifyImage();}catch(Exception error){if(failure==null)failure=error;}
+   try{persist(output,outputReady,errors,errorsReady);}catch(Exception error){if(failure==null)failure=error;}
+   if(failure!=null)ExceptionDispatchInfo.Capture(failure).Throw();
+  }
+  internal static void Close(Exception failure,params IDisposable[] owners){
+   foreach(var owner in owners)if(owner!=null)try{owner.Dispose();}catch(Exception error){if(failure==null)failure=error;}
+   if(failure!=null)ExceptionDispatchInfo.Capture(failure).Throw();
   }
  }
 }

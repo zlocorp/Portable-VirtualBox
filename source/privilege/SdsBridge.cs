@@ -262,9 +262,17 @@ namespace PortableVBox {
   }
   static SdsResult Complete(FixedEffectWorker child,SdsDiagnosticFiles files,Stopwatch timer){
    long elapsed=timer.ElapsedMilliseconds;
-   string output=child.StandardOutput.GetAwaiter().GetResult(),errors=child.StandardError.GetAwaiter().GetResult();
-   files.WriteCompleted(output,errors);child.VerifyImageObservation();
+   SdsEvidenceCompletion.Capture(child.StandardOutput,child.StandardError,child.VerifyImageObservation,files.WriteAvailable);
    return new SdsResult(child.WithinDeadline,child.ExitCodeKnown,child.ExitCode,elapsed);
+  }
+  static SdsResult CompleteOwned(SdsDiagnosticFiles files,Func<FixedEffectWorker> launch){
+   FixedEffectWorker child=null;SdsResult result=null;Exception failure=null;
+   try{var timer=Stopwatch.StartNew();child=launch();result=Complete(child,files,timer);}
+   catch(Exception error){failure=error;}
+   // Both ownership cleanups are attempted; an existing error remains primary.
+   // FixedEffectWorker retains unresolved child ownership exactly as before.
+   SdsEvidenceCompletion.Close(failure,child,files);
+   return result;
   }
   internal static SdsResult RunSds(ContextState state,SdsOperation operation,int seconds){
    lock(state.Sync){
@@ -274,12 +282,9 @@ namespace PortableVBox {
       Admit(state,admission);
       string output=operation==SdsOperation.Register?state.Session:Path.Combine(state.Session,"cleanup");
       if(operation!=SdsOperation.Register){admission.Directory(output);CheckInheritedCleanup(output,state.Sid);}
-      using(var files=new SdsDiagnosticFiles(output,operation==SdsOperation.Register?"sds-register":"sds-unregister")){
-       var timer=Stopwatch.StartNew();
-       using(var child=FixedEffectWorker.RunSds(Path.Combine(state.App,"VBoxSDS.exe"),operation!=SdsOperation.Register,seconds)){
-        var result=Complete(child,files,timer);state.Attempts.Observe(result);return result;
-       }
-      }
+      var files=new SdsDiagnosticFiles(output,operation==SdsOperation.Register?"sds-register":"sds-unregister");
+      var result=CompleteOwned(files,()=>FixedEffectWorker.RunSds(Path.Combine(state.App,"VBoxSDS.exe"),operation!=SdsOperation.Register,seconds));
+      state.Attempts.Observe(result);return result;
      }
     }catch{state.Attempts.Fail();throw;}
    }
@@ -331,12 +336,9 @@ namespace PortableVBox {
       string output=Path.Combine(state.Session,folder);admission.Directory(output);CheckInheritedCleanup(output,state.Sid);
       string systemImage=Path.Combine(Environment.SystemDirectory,operation==DriverOperation.AddSupPackage||operation==DriverOperation.RemoveSupPackage?"pnputil.exe":"sc.exe");
       admission.Parents(Path.GetDirectoryName(systemImage));admission.File(systemImage);
-      using(var files=new SdsDiagnosticFiles(output,label)){
-       var timer=Stopwatch.StartNew();
-       using(var child=FixedEffectWorker.RunDriver(fixedOperation,operation==DriverOperation.AddSupPackage?state.App:null,published,seconds)){
-        var result=Complete(child,files,timer);state.Attempts.Observe(result);return result;
-       }
-      }
+      var files=new SdsDiagnosticFiles(output,label);
+      var result=CompleteOwned(files,()=>FixedEffectWorker.RunDriver(fixedOperation,operation==DriverOperation.AddSupPackage?state.App:null,published,seconds));
+      state.Attempts.Observe(result);return result;
      }
     }catch{state.Attempts.Fail();throw;}
    }
