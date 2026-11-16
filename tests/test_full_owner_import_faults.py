@@ -51,7 +51,7 @@ class FullOwnerImportFaults(unittest.TestCase):
   self.assertIn('check_full_owner_import_faults.ps1',(R/'.github/workflows/native-tests.yml').read_text())
  @unittest.skipUnless(shutil.which('pwsh'),'PowerShell required')
  def test_actual_runner_tail_checks_every_status_marker(self):
-  for scenario in ['pass']+[f'{mode}-{phase}-{fault}' for mode in ('wait','false') for phase in ('normal','negative') for fault in ('status','marker')]:
+  for scenario in ['pass']+[f'{mode}-{phase}-{fault}' for mode in ('wait','false','alias') for phase in ('normal','negative') for fault in ('status','marker')]+['alias-normal-evidence','alias-negative-evidence']:
    with self.subTest(scenario=scenario):
     p=subprocess.run(['pwsh','-NoProfile','-File','tests/windows/check_full_owner_import_runner_contract.ps1','-Scenario',scenario],cwd=R,text=True,capture_output=True,timeout=30)
     self.assertEqual(p.returncode,0 if scenario=='pass' else 91,p.stdout+p.stderr)
@@ -61,7 +61,7 @@ class FullOwnerImportFaults(unittest.TestCase):
   from tests.generate_owner_fault_fixture import generate
   with tempfile.TemporaryDirectory() as d:
    generated=Path(d)/'owner.cs';generated.write_bytes(generate((R/'source/privilege/FixedEffectWorker.cs').read_bytes())[0])
-   command=f"Add-Type -Path '{generated}','tests/windows/FullOwnerFaultBoundary.cs','tests/windows/FullOwnerFaultProbe.cs'; for($m=0;$m -lt 16;$m++){{$p=[IntPtr]::new(($m -band 1));$t=[IntPtr]::new(($m -band 2));$a=[PortableVBox.FullOwnerFaultProbe]::NativeFalseHasNoOutputs($p,$t,[uint32]($m -band 4),[uint32]($m -band 8));if($a -ne ($m -eq 0)){{throw 'Four-field native FALSE guard'}}}}; 'FALSE_ABSENCE_GUARD_PASS 16'"
+   command=f"Add-Type -Path '{generated}','tests/windows/FullOwnerFaultBoundary.cs','tests/windows/FullOwnerFaultProbe.cs'; for($m=0;$m -lt 16;$m++){{$p=[IntPtr]::new(($m -band 1));$t=[IntPtr]::new(($m -band 2));$a=[PortableVBox.FullOwnerFaultProbe]::NativeFalseHasNoOutputs($p,$t,[uint32]($m -band 4),[uint32]($m -band 8));if($a -ne ($m -eq 0)){{throw 'Four-field native FALSE guard'}}}}; foreach($p in @(0,-1,12,13)){{foreach($t in @(0,-1,12,13)){{$expected=$p -notin @(0,-1) -and $t -notin @(0,-1) -and $p -ne $t;if([PortableVBox.FullOwnerFaultProbe]::GenuineHandlesDistinct([IntPtr]::new($p),[IntPtr]::new($t)) -ne $expected){{throw 'Genuine distinct guard'}}}}}}; 'FALSE_ABSENCE_GUARD_PASS 16'"
    p=subprocess.run(['pwsh','-NoProfile','-Command',command],cwd=R,text=True,capture_output=True,timeout=40)
    self.assertEqual(p.returncode,0,p.stdout+p.stderr)
    self.assertIn('FALSE_ABSENCE_GUARD_PASS 16',p.stdout)
@@ -88,3 +88,18 @@ class FullOwnerImportFaults(unittest.TestCase):
   probe=(R/'tests/windows/FullOwnerFaultProbe.cs').read_text()
   names='CreateEntered|CreateReturned|Created|BoundaryComplete|Injected|WaitCalls|ExitQueries|OriginalCloses|CreateAttempts|DuplicateError|ObserverReady'
   self.assertIsNone(re.search(r'(?<!ref )FixedEffectWorker\.Fault(?:'+names+r')\b',probe))
+
+ def test_true_alias_preserves_genuine_snapshot_and_observer(self):
+  boundary=(R/'tests/windows/FullOwnerFaultBoundary.cs').read_text();probe=(R/'tests/windows/FullOwnerFaultProbe.cs').read_text()
+  assignment='process.Thread=process.Process;'
+  self.assertIn(assignment,boundary)
+  self.assertLess(boundary.index('FaultOriginalThread=process.Thread'),boundary.index(assignment))
+  self.assertLess(boundary.index('DuplicateHandle(GetCurrentProcess(),process.Process'),boundary.index(assignment))
+  self.assertIn('FaultInjectedProcess=process.Process;FaultInjectedThread=process.Thread;',boundary)
+  self.assertIn('GenuineHandlesDistinct(FixedEffectWorker.FaultOriginalProcess,FixedEffectWorker.FaultOriginalThread)',probe)
+  self.assertIn('FixedEffectWorker.FaultInjectedThread==FixedEffectWorker.FaultOriginalProcess',probe)
+  self.assertIn('true-aliased-outputs',probe)
+  self.assertIn('genuine_handles_distinct=true injected_handles_equal=true owner_wait_calls=0',probe)
+  runner=(R/'tests/windows/check_full_owner_import_faults.ps1').read_text()
+  self.assertIn("'true-aliased-outputs'",runner)
+  self.assertIn('fault_modes=3 hosts=6 expected_failures=3',runner)

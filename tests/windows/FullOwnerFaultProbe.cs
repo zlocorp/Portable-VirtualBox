@@ -13,6 +13,7 @@ namespace PortableVBox {
   [DllImport("kernel32.dll",EntryPoint="QueryFullProcessImageNameW",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)] [return:MarshalAs(UnmanagedType.Bool)] static extern bool RawImage(IntPtr handle,uint flags,StringBuilder name,ref uint size);
   // Pure test-harness classification, identical four-field absence requirement.
   public static bool NativeFalseHasNoOutputs(IntPtr process,IntPtr thread,uint pid,uint tid){return process==IntPtr.Zero&&thread==IntPtr.Zero&&pid==0&&tid==0;}
+  public static bool GenuineHandlesDistinct(IntPtr process,IntPtr thread){return process!=IntPtr.Zero&&thread!=IntPtr.Zero&&process!=new IntPtr(-1)&&thread!=new IntPtr(-1)&&process!=thread;}
   static int checks,runReturned,runThrew,runFinally;static Exception ownerFailure;
   static void Check(bool ok,string label){checks++;if(!ok)throw new InvalidOperationException(label);}
   static void Unknown(string reason){try{Console.Error.WriteLine("FULL_OWNER_FAULT_UNKNOWN "+reason);Console.Error.Flush();}catch{}for(;;)try{Thread.Sleep(1000);}catch(ThreadInterruptedException){}}
@@ -30,9 +31,10 @@ namespace PortableVBox {
    bool got=false;try{got=mutex.WaitOne(0);}catch(AbandonedMutexException){throw new InvalidOperationException("fixture mutex abandoned");}finally{if(got)mutex.ReleaseMutex();}
    Check(!got,"fixture mutex reacquired");
    Check(Volatile.Read(ref FixedEffectWorker.FaultCreateAttempts)==1&&Volatile.Read(ref FixedEffectWorker.FaultOriginalCloses)==0&&Volatile.Read(ref FixedEffectWorker.FaultExitQueries)==0,"create/close/exit query counts changed");
+   Check(Volatile.Read(ref FixedEffectWorker.FaultWaitCalls)==(FixedEffectWorker.FaultMode=="wait-failed"?1:0),"owner wait count changed");
   }
   public static int Main(string[] args){
-   if(args.Length<1||args.Length>2||(args[0]!="wait-failed"&&args[0]!="false-outputs")||(args.Length==2&&args[1]!="--fail-after-retention"))return 64;
+   if(args.Length<1||args.Length>2||(args[0]!="wait-failed"&&args[0]!="false-outputs"&&args[0]!="true-aliased-outputs")||(args.Length==2&&args[1]!="--fail-after-retention"))return 64;
    bool expectedNegative=args.Length==2,negativeReached=false,startEntered=false,childExited=false,childExitCodeKnown=false;uint childCode=0;int result=1;
    EventWaitHandle ready=null,release=null;Thread thread=null;Mutex mutex=null;var entered=new ManualResetEvent(false);
    try {
@@ -46,14 +48,20 @@ namespace PortableVBox {
     var timer=Stopwatch.StartNew();while(Volatile.Read(ref FixedEffectWorker.FaultBoundaryComplete)==0&&timer.ElapsedMilliseconds<10000&&Volatile.Read(ref runFinally)==0)Thread.Sleep(10);
     Check(Volatile.Read(ref FixedEffectWorker.FaultBoundaryComplete)==1&&Volatile.Read(ref FixedEffectWorker.FaultCreated)==1,"real native acquisition absent");
     Check(Volatile.Read(ref FixedEffectWorker.FaultObserverReady)==1&&FixedEffectWorker.FaultObserver!=IntPtr.Zero&&FixedEffectWorker.FaultObserver!=FixedEffectWorker.FaultOriginalProcess&&Volatile.Read(ref FixedEffectWorker.FaultDuplicateError)==0,"query/synchronize observer absent");
+    Check(GenuineHandlesDistinct(FixedEffectWorker.FaultOriginalProcess,FixedEffectWorker.FaultOriginalThread),"genuine handles invalid or aliased");
     Check(RawId(FixedEffectWorker.FaultObserver)==FixedEffectWorker.FaultOriginalPid&&String.Equals(Image(FixedEffectWorker.FaultObserver),info.FileName,StringComparison.OrdinalIgnoreCase),"raw original object/image mismatch");
     Check(ready.WaitOne(10000),"closed child readiness absent");
     timer.Restart();while((Volatile.Read(ref FixedEffectWorker.FaultInjected)==0||(thread.ThreadState&System.Threading.ThreadState.WaitSleepJoin)==0)&&timer.ElapsedMilliseconds<10000&&Volatile.Read(ref runFinally)==0)Thread.Sleep(10);
     Check(Volatile.Read(ref FixedEffectWorker.FaultInjected)==1&&(thread.ThreadState&System.Threading.ThreadState.WaitSleepJoin)!=0,"retention not observed");
+    if(args[0]=="true-aliased-outputs") {
+     Check(FixedEffectWorker.FaultInjectedProcess==FixedEffectWorker.FaultOriginalProcess&&FixedEffectWorker.FaultInjectedThread==FixedEffectWorker.FaultOriginalProcess,"injected outputs not exact process alias");
+     Check(FixedEffectWorker.FaultInjectedThread!=FixedEffectWorker.FaultOriginalThread,"genuine thread overwritten");
+    }
     Check(RawWait(FixedEffectWorker.FaultObserver,0)==258,"child not live");
     Retained(mutex,thread);Check(Volatile.Read(ref FixedEffectWorker.FaultWaitCalls)==(args[0]=="wait-failed"?1:0),"wrong owner branch");
     if(args[0]=="wait-failed")Check(FixedEffectWorker.FaultRealWaitProbe==258,"real wait was not timeout");
     Console.WriteLine("FULL_OWNER_NATIVE mode="+args[0]+" create_return=true original_handles_valid=true observer_identity_match=true observer_access=1052672 raw_observer_wait=258 raw_owner_wait_probe="+(args[0]=="wait-failed"?"258":"not_called")+" injected_create_return="+(args[0]=="false-outputs"?"false":"unchanged_true")+" injected_wait_return="+(args[0]=="wait-failed"?"4294967295":"not_called"));
+    if(args[0]=="true-aliased-outputs")Console.WriteLine("FULL_OWNER_ALIAS genuine_handles_distinct=true injected_handles_equal=true owner_wait_calls=0");
     Thread.Sleep(250);Retained(mutex,thread);
     if(expectedNegative){negativeReached=true;throw new InvalidOperationException("EXPECTED retained assertion");}
     result=0;

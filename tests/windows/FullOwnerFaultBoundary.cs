@@ -7,6 +7,7 @@ namespace PortableVBox {
  internal sealed partial class FixedEffectWorker {
   internal static string FaultMode;
   internal static IntPtr FaultOriginalProcess,FaultOriginalThread,FaultObserver;
+  internal static IntPtr FaultInjectedProcess,FaultInjectedThread;
   internal static uint FaultOriginalPid,FaultOriginalTid;
   internal static int FaultCreateEntered,FaultCreateReturned,FaultCreated,FaultBoundaryComplete;
   internal static int FaultInjected,FaultWaitCalls,FaultExitQueries,FaultOriginalCloses,FaultCreateAttempts;
@@ -31,6 +32,12 @@ namespace PortableVBox {
     Volatile.Write(ref FaultObserverReady,1);
    }
    Volatile.Write(ref FaultBoundaryComplete,1);
+   if(result&&FaultMode=="true-aliased-outputs") {
+    // Preserve genuine outputs/observer above; alter only the owner's returned Thread.
+    process.Thread=process.Process;
+    FaultInjectedProcess=process.Process;FaultInjectedThread=process.Thread;
+    Volatile.Write(ref FaultInjected,1);return true;
+   }
    if(result&&FaultMode=="false-outputs") {Volatile.Write(ref FaultInjected,1);return false;}
    return result;
   }

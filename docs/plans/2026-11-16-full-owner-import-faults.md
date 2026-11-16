@@ -24,3 +24,16 @@ coverage outside the two modes, or interactive workstation result is claimed.
 Cross-thread integer observations use explicit Volatile.Read; no reliance on
 Thread.Sleep or ThreadState as a publication barrier. LF and CRLF checkout bytes
 are each preserved exactly, mixed line endings refused.
+
+## Separate TRUE-alias extension (base 2465798)
+
+- [x] Design review: import-only Thread=Process after genuine snapshot/observer.
+- [x] RED alias wiring and runner modes; implement normal and expected-negative hosts.
+- [x] Explicit genuine distinct-valid versus injected equal handle assertions;
+      owner wait/create/close/exit-query and retention checks before/after child exit.
+- [ ] Final local full suite and independent implementation review.
+- [ ] Exact-source disposable Windows execution and evidence audit.
+
+This extension does not claim invalid-output or unknown-return coverage. Its
+Windows result must not be inferred from the preceding two-case CI. Production
+source and reversible declaration transformation are unchanged.

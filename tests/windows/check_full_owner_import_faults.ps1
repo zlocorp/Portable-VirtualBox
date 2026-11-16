@@ -13,10 +13,11 @@ Compile-FixedFixtureSources @((Join-Path $directory 'FixedEffectWorker.instrumen
 $manifest=Get-Content -LiteralPath (Join-Path $directory 'owner-fault-source-manifest.json') -Raw | ConvertFrom-Json
 if ((Get-FileHash -LiteralPath (Join-Path $repo 'source/privilege/FixedEffectWorker.cs') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $manifest.source_sha256 -or
     (Get-FileHash -LiteralPath (Join-Path $directory 'FixedEffectWorker.instrumented.cs') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $manifest.generated_sha256) { throw 'Source changed during fixture compilation' }
-foreach ($mode in @('wait-failed','false-outputs')) {
+foreach ($mode in @('wait-failed','false-outputs','true-aliased-outputs')) {
     foreach ($negative in @($false,$true)) {
         if ($negative) { $lines=@(& $exe $mode --fail-after-retention) } else { $lines=@(& $exe $mode) }
         $status=$LASTEXITCODE;$text=$lines -join "`n";$lines | ForEach-Object { Write-Host $_ }
+        if ($mode -eq 'true-aliased-outputs' -and $text -notmatch '(?m)^FULL_OWNER_ALIAS genuine_handles_distinct=true injected_handles_equal=true owner_wait_calls=0$') { throw 'Alias evidence absent' }
         if ($negative) {
             $expected='FULL_OWNER_FAULT_EXPECTED_FAILURE mode='+$mode+' child_exit=23 natural_exit=true'
             if ($status -ne 1 -or $text -notmatch ('(?m)^'+[regex]::Escape($expected)+'$')) { throw 'Expected negative did not prove natural child exit' }
@@ -27,5 +28,5 @@ foreach ($mode in @('wait-failed','false-outputs')) {
         }
     }
 }
-Write-Host 'FULL_OWNER_IMPORT_CASES_PASS fault_modes=2 hosts=4 expected_failures=2 production_recovery=false'
+Write-Host 'FULL_OWNER_IMPORT_CASES_PASS fault_modes=3 hosts=6 expected_failures=3 production_recovery=false'
 $global:LASTEXITCODE=0

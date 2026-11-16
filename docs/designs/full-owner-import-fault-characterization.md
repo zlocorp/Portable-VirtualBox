@@ -17,7 +17,7 @@ replacement and requires byte identity with the input. Emit source/generated has
 and a bounded manifest. Native wrapper and harness live only under tests; generated
 sources/EXEs remain runner-temp and cannot enter package or helper inventories.
 
-## First two cases
+## Three scoped cases
 
 1. Real CreateProcess TRUE with actual original handles. The wait wrapper probes
    that exact original handle with real zero-time wait (must be WAIT_TIMEOUT),
@@ -26,6 +26,16 @@ sources/EXEs remain runner-temp and cannot enter package or helper inventories.
 2. Real CreateProcess TRUE with actual original handles, but the create wrapper
    reports FALSE without altering those outputs. This reaches RunCore's
    contradictory-FALSE branch, rather than manually constructing an owner.
+
+3. Real CreateProcess TRUE, saved genuine distinct valid process/thread handles,
+   and the independent duplicate acquired from the genuine process. Change only
+   the returned Thread field to the genuine Process handle, preserving TRUE.
+   Both returned handles are valid; RunCore's equality guard retains before
+   originalsOwned/CloseParentWriters/ObserveAndWait. Explicit runtime assertions
+   distinguish genuine distinct handles from injected equal outputs. Owner wait,
+   exit-query and original-close counts remain zero before and after natural exit.
+   The genuine thread handle stays rooted separately in the test boundary until
+   host teardown; it is never confused with the injected Thread or explicitly closed.
 
 An independent immutable snapshot of native returned process/thread handles and
 PID/TID are stored before injecting anything. Native FALSE counts as definite
@@ -61,7 +71,8 @@ there is no watchdog kill, terminate API, handle-close race or forced child exit
 The existing disposable CI job timeout bounds an unresolvable failed experiment,
 not a successful recovery claim.
 
-Original handles stay rooted with the retained production owner. The independent
+Genuine original handles stay rooted in the boundary snapshot; the production
+owner retains its returned outputs (including the synthetic alias in case three). The independent
 observer duplicate is likewise reclaimed only by test-host process exit; no
 explicit observer-handle close result is claimed. The fixture does
 not call its Dispose or close those handles. Only after definite child exit may
@@ -73,6 +84,6 @@ before their expected exit-1 marker is accepted.
 
 ## Still open
 
-TRUE with invalid/aliased outputs, unknown native return, contradictory pipe
+TRUE with invalid outputs, unknown native return, contradictory pipe
 acquisition, all arbitrary native faults, crash/reboot recovery and workstation
-acceptance remain unverified. Two cases cannot close the entire release blocker.
+acceptance remain unverified. Three synthetic cases cannot close the entire release blocker.
