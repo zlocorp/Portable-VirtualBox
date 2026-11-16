@@ -505,21 +505,21 @@ try {
         if ($Action -eq 'Recover') {
             # The new live controller's identity and missing former owner are
             # independently revalidated by the cleanup script before effects.
-            [ordered]@{experiment='orphan-manager-quiescent';portable_root=$root;protected_app=$app;
+            $prospectiveProof=[ordered]@{experiment='orphan-manager-quiescent';portable_root=$root;protected_app=$app;
                 stage_report=(Join-Path $session 'stage\sup-standalone.json');driver_start_report=(Join-Path $session 'start\sup-start-results.json');
                 original_controller_pid=$OriginalControllerPid;original_controller_created_filetime=$OriginalControllerCreated.ToString();
                 controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();controller_image=$controllerImage;
                 no_vbox_processes_verified=$true;source_commit=$env:GITHUB_SHA} |
-                ConvertTo-Json | Set-Content -LiteralPath $proof -Encoding utf8
+                ConvertTo-Json
             if (-not (Test-OriginalControllerAbsent $OriginalControllerPid)) { throw 'Old controller reappeared before cleanup' }
-            & (Join-Path $PSScriptRoot 'vbox_sup_cleanup.ps1') -AppDir $app -StandaloneReport (Join-Path $session 'stage\sup-standalone.json') -DriverStartReport (Join-Path $session 'start\sup-start-results.json') -RecoveryReport $proof -OutputDirectory (Join-Path $session 'cleanup')
+            & (Join-Path $PSScriptRoot 'vbox_sup_cleanup.ps1') -AppDir $app -StandaloneReport (Join-Path $session 'stage\sup-standalone.json') -DriverStartReport (Join-Path $session 'start\sup-start-results.json') -RecoveryReport $proof -OutputDirectory (Join-Path $session 'cleanup') -ProspectiveProofJson $prospectiveProof
         } else {
-            [ordered]@{experiment='privilege-separated-manager-quiescent';portable_root=$root;protected_app=$app;
+            $prospectiveProof=[ordered]@{experiment='privilege-separated-manager-quiescent';portable_root=$root;protected_app=$app;
                 stage_report=(Join-Path $session 'stage\sup-standalone.json');driver_start_report=(Join-Path $session 'start\sup-start-results.json');
                 controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();controller_image=$controllerImage;
                 no_vbox_processes_verified=$true;source_commit=$env:GITHUB_SHA} |
-                ConvertTo-Json | Set-Content -LiteralPath $proof -Encoding utf8
-            & (Join-Path $PSScriptRoot 'vbox_sup_cleanup.ps1') -AppDir $app -StandaloneReport (Join-Path $session 'stage\sup-standalone.json') -DriverStartReport (Join-Path $session 'start\sup-start-results.json') -PrivilegedReport $proof -OutputDirectory (Join-Path $session 'cleanup')
+                ConvertTo-Json
+            & (Join-Path $PSScriptRoot 'vbox_sup_cleanup.ps1') -AppDir $app -StandaloneReport (Join-Path $session 'stage\sup-standalone.json') -DriverStartReport (Join-Path $session 'start\sup-start-results.json') -PrivilegedReport $proof -OutputDirectory (Join-Path $session 'cleanup') -ProspectiveProofJson $prospectiveProof
         }
         $clean=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw -Encoding UTF8 | ConvertFrom-Json
         if (-not $clean.cleanup_verified -or -not $clean.driver_package_removed -or @(VBox-Processes).Count -ne 0) { throw 'Cleanup not confirmed' }

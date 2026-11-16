@@ -128,7 +128,7 @@ function Await-GuestLog([Diagnostics.Process]$Process) {
     }
     throw 'Fresh guest log never reached RUNNING'
 }
-$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';frontend=$(if($MainLauncher){'main-launcher'}else{'separate-experiment'});gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;guest_disk_write_checked=$false;guest_disk_survived_teardown=$false;guest_snapshot_preserved=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true;portable_cli_verified=$false;durable_journal_verified=$false;portable_cli_no_session_refused=$false;portable_cli_cleanup_refused=$false;portable_cli_fixture_gate='test-only-native-gate-host'}
+$proof=[ordered]@{source_commit=$env:GITHUB_SHA;fixture='direct-elevated-test-invoker';frontend=$(if($MainLauncher){'main-launcher'}else{'separate-experiment'});gui_runas_verified=$false;interactive_uac_consent_verified=$false;guest_os_booted=$false;guest_start_method='direct-VBoxHeadless-passive-log-gate';vboxmanage_headless_spawn_verified=$false;guest_disk_write_checked=$false;guest_disk_survived_teardown=$false;guest_snapshot_preserved=$false;tampered_inventory_rejected=$false;protected_write_denied=$false;manager_guest_medium=$false;live_guest_cleanup_refused=$false;two_cycles_clean=$false;runtime_from_protected_copy=$true;portable_cli_verified=$false;durable_journal_verified=$false;preflight_refusal_then_cleanup_verified=$false;portable_cli_no_session_refused=$false;portable_cli_cleanup_refused=$false;portable_cli_fixture_gate='test-only-native-gate-host'}
 $front=$null;$manager=$null;$guest=$null
 try {
     Clean-System
@@ -290,7 +290,40 @@ try {
         Wait-Exit $gateHost 0 ('gate-'+$cycle) 20
         $gateHost.Dispose();$gateHost=$null
         Await-Idle
+        if ($cycle -eq 1) {
+            # A real sharing-denied read on our exact newly staged INF tests the
+            # pre-effect boundary without modifying any registry/service/file.
+            $stagePath=Join-Path $session 'stage\sup-standalone.json'
+            $stageReceipt=Get-Content -LiteralPath $stagePath -Raw | ConvertFrom-Json
+            if ($stageReceipt.published_inf -cnotmatch '\Aoem[0-9]{1,6}\.inf\z') { throw 'Invalid fixture INF identity' }
+            $publishedPath=Join-Path (Join-Path $env:SystemRoot 'INF') $stageReceipt.published_inf
+            $infBefore=(Get-FileHash -LiteralPath $publishedPath -Algorithm SHA256).Hash
+            $stageBefore=(Get-FileHash -LiteralPath $stagePath -Algorithm SHA256).Hash
+            $assertNoCleanupEffects={
+                foreach ($name in @('quiescent-session.json','recovery-quiescent.json',
+                    'partial-recovery-quiescent.json','cleanup','payload-cleanup.json','payload-removed.json',
+                    'sds-unregister.stdout.txt','sds-unregister.stderr.txt',
+                    'sup-stop.stdout.txt','sup-stop.stderr.txt')) {
+                    if (Test-Path -LiteralPath (Join-Path $session $name)) { throw ('Preflight failure created cleanup evidence: '+$name) }
+                }
+                if ((Get-Service -Name VBoxSup).Status -ne 'Running' -or
+                    (Get-Service -Name VBoxSDS).Status -ne 'Stopped') { throw 'Preflight failure changed owned services' }
+            }
+            & $assertNoCleanupEffects
+            $lockedInf=[IO.File]::Open($publishedPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+            try {
+                Helper-Action Finish $cycle 70 'preflight-locked-inf'
+                & $assertNoCleanupEffects
+            } finally { $lockedInf.Dispose() }
+            if ((Get-FileHash -LiteralPath $publishedPath -Algorithm SHA256).Hash -ne $infBefore -or
+                (Get-FileHash -LiteralPath $stagePath -Algorithm SHA256).Hash -ne $stageBefore) { throw 'Preflight refusal changed original evidence' }
+            $refusalJournals=Get-JournalHashes $session
+        }
         Helper-Action Finish $cycle 0 ('finish-'+$cycle)
+        if ($cycle -eq 1) {
+            Assert-PriorJournals $session $refusalJournals
+            $proof.preflight_refusal_then_cleanup_verified=$true
+        }
         Clean-System
         Refuse-Cli 'list vms' ('cli-after-cleanup-'+$cycle)
         $proof.portable_cli_cleanup_refused=$true

@@ -11,6 +11,9 @@ param(
     [Parameter(Mandatory,ParameterSetName="PrivilegedSession")][string]$PrivilegedReport,
     [Parameter(Mandatory,ParameterSetName="RecoverySession")][string]$RecoveryReport,
     [Parameter(Mandatory)][string]$OutputDirectory,
+    [Parameter(ParameterSetName="PrivilegedSession")]
+    [Parameter(ParameterSetName="RecoverySession")]
+    [string]$ProspectiveProofJson,
     [ValidateRange(5,90)][int]$TimeoutSeconds = 45
 )
 Set-StrictMode -Version Latest
@@ -38,7 +41,45 @@ foreach ($candidate in @($AppDir,$StandaloneReport,$DriverStartReport,$proofPath
 $app=(Resolve-Path -LiteralPath $AppDir).Path
 $stage=(Get-Content -LiteralPath $StandaloneReport -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json)
 $started=(Get-Content -LiteralPath $DriverStartReport -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json)
-$proof=(Get-Content -LiteralPath $proofPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json)
+$cleanupParameterSet=$PSCmdlet.ParameterSetName
+$prospective=$PSBoundParameters.ContainsKey('ProspectiveProofJson')
+if ($prospective) {
+    if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA') -or
+        [string]::IsNullOrWhiteSpace($ProspectiveProofJson) -or
+        [Text.Encoding]::UTF8.GetByteCount($ProspectiveProofJson) -gt 16384) {
+        throw 'Invalid protected prospective cleanup proof'
+    }
+    # Snapshot once: validate exactly the JSON bytes that will be committed.
+    $proofBytes=[Text.Encoding]::UTF8.GetBytes($ProspectiveProofJson)
+    $proof=ConvertFrom-Json -InputObject $ProspectiveProofJson -ErrorAction Stop
+    if ($proof -isnot [Management.Automation.PSCustomObject]) { throw 'Invalid prospective proof object' }
+} else {
+    $proof=(Get-Content -LiteralPath $proofPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json)
+}
+function Assert-ProspectiveCleanupAdmission {
+    if (-not $prospective) { return }
+    $sessionPath=Split-Path $app -Parent
+    $expectedName=if ($cleanupParameterSet -eq 'RecoverySession') { 'recovery-quiescent.json' } else { 'quiescent-session.json' }
+    if ([IO.Path]::GetFullPath($proofPath) -ine (Join-Path $sessionPath $expectedName) -or
+        [IO.Path]::GetFullPath($OutputDirectory) -ine (Join-Path $sessionPath 'cleanup')) {
+        throw 'Prospective cleanup proof path mismatch'
+    }
+    foreach ($name in @('quiescent-session.json','recovery-quiescent.json',
+        'partial-recovery-quiescent.json','cleanup','payload-cleanup.json','payload-removed.json')) {
+        if (Test-Path -LiteralPath (Join-Path $sessionPath $name) -ErrorAction Stop) {
+            throw 'Refusing existing cleanup admission'
+        }
+    }
+    $live=[Diagnostics.Process]::GetProcessById([int]$proof.controller_pid)
+    try {
+        if ($live.StartTime.ToFileTimeUtc().ToString() -ne $proof.controller_created_filetime -or
+            $live.MainModule.FileName -ine $proof.controller_image) { throw 'Cleanup controller generation changed' }
+    } finally { $live.Dispose() }
+    if ($cleanupParameterSet -eq 'RecoverySession' -and
+        -not (Test-OriginalControllerAbsent ([int]$proof.original_controller_pid))) {
+        throw 'Original cleanup owner reappeared'
+    }
+}
 $pinSys='4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be'
 $pinInf='2fc48547de7dad96e3ebf0b49c339757317abd0c8a482f5f412a59fb730e05e4'
 if ($stage.experiment -ne 'standalone-VBoxSup-primitive-INF-pnputil' -or
@@ -139,6 +180,7 @@ if ($PSCmdlet.ParameterSetName -eq "RecoverySession") {
         throw 'Activity prohibits abandoned-session recovery'
     }
 }
+Assert-ProspectiveCleanupAdmission
 if ((Test-Path -LiteralPath 'HKLM:\SOFTWARE\Oracle\VirtualBox') -or
     (Test-Path -LiteralPath 'HKLM:\SOFTWARE\WOW6432Node\Oracle\VirtualBox')) {
     throw 'Another VirtualBox installation is present'
@@ -160,25 +202,6 @@ $installedInf=Join-Path (Join-Path $env:SystemRoot 'INF') $published
 if (-not (Test-Path -LiteralPath $installedInf -PathType Leaf) -or
     (Get-FileHash -LiteralPath $installedInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf) {
     throw 'Published driver INF does not match this exact staged Oracle INF'
-}
-if (Test-Path -LiteralPath $OutputDirectory) { throw 'Output evidence directory already exists' }
-$out=(New-Item -ItemType Directory -Path $OutputDirectory -ErrorAction Stop).FullName
-$report=[ordered]@{
-    experiment='disposable-owned-VBoxSup-stop-and-remove'
-    source_commit=$env:GITHUB_SHA
-    oracle_version='7.2.22'
-    published_inf=$published
-    original_service_baseline_empty=$true
-    vm_powered_off_before_cleanup=$bootVerified
-    cleanup_basis=$PSCmdlet.ParameterSetName
-    sds_cleanup='NOT_ATTEMPTED'
-    service_stop='NOT_ATTEMPTED'
-    driver_package_removal='NOT_ATTEMPTED'
-    service_delete='NOT_ATTEMPTED'
-    final_vbox_services=@()
-    cleanup_verified=$false
-    driver_package_removed=$false
-    errors=@()
 }
 function Get-VBoxNames {
     return @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop |
@@ -209,7 +232,6 @@ function Run-Bounded([string]$Executable,[string]$Argv,[string]$Label) {
         if ($null -ne $p) { $p.Dispose() }
     }
 }
-try {
     $expectedSds=Join-Path $app 'VBoxSDS.exe'
     $signed=Get-AuthenticodeSignature -LiteralPath $expectedSds
     if ($signed.Status -ne 'Valid' -or $signed.SignerCertificate.Subject -notmatch 'Oracle') { throw 'Unexpected VBoxSDS publisher signature' }
@@ -234,6 +256,57 @@ try {
     # Revalidate service path immediately before Oracle's supported unregister.
     $sdsConfig=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS'
     if (([string]$sdsConfig.ImagePath).Trim().Trim('"') -ine $expectedSds) { throw 'VBoxSDS changed during idle wait' }
+# Commit cleanup admission only after the read-only preflight.
+# Failure before this boundary leaves no cleanup proof/output. A new explicit
+# call repeats validation. Once a proof exists no uncertain attempt can replay.
+Assert-ProspectiveCleanupAdmission
+if ($prospective) {
+    $proofStream=$null
+    try {
+        $proofStream=[IO.File]::Open($proofPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+        $proofStream.Write($proofBytes,0,$proofBytes.Length)
+        $proofStream.Flush($true)
+    } finally {
+        if ($null -ne $proofStream) { $proofStream.Dispose() }
+    }
+}
+if (Test-Path -LiteralPath $OutputDirectory) { throw 'Output evidence directory already exists' }
+$out=(New-Item -ItemType Directory -Path $OutputDirectory -ErrorAction Stop).FullName
+$report=[ordered]@{
+    experiment='disposable-owned-VBoxSup-stop-and-remove'
+    source_commit=$env:GITHUB_SHA
+    oracle_version='7.2.22'
+    published_inf=$published
+    original_service_baseline_empty=$true
+    vm_powered_off_before_cleanup=$bootVerified
+    cleanup_basis=$PSCmdlet.ParameterSetName
+    sds_cleanup='NOT_ATTEMPTED'
+    service_stop='NOT_ATTEMPTED'
+    driver_package_removal='NOT_ATTEMPTED'
+    service_delete='NOT_ATTEMPTED'
+    final_vbox_services=@()
+    cleanup_verified=$false
+    driver_package_removed=$false
+    errors=@()
+}
+try {
+    # Admission is one-shot even if a late observation now refuses execution.
+    # Never infer ownership from preflight alone or erase committed evidence.
+    if ($prospective) {
+        $live=[Diagnostics.Process]::GetProcessById([int]$proof.controller_pid)
+        try {
+            if ($live.StartTime.ToFileTimeUtc().ToString() -ne $proof.controller_created_filetime -or
+                $live.MainModule.FileName -ine $proof.controller_image) { throw 'Cleanup controller changed after admission' }
+        } finally { $live.Dispose() }
+        if ($cleanupParameterSet -eq 'RecoverySession' -and
+            -not (Test-OriginalControllerAbsent ([int]$proof.original_controller_pid))) { throw 'Original owner returned after admission' }
+    }
+    $sdsConfig=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS' -ErrorAction Stop
+    if (([string]$sdsConfig.ImagePath).Trim().Trim('"') -ine $expectedSds -or
+        [int]$sdsConfig.Type -ne 16 -or [int]$sdsConfig.Start -ne 3 -or
+        [string]$sdsConfig.ObjectName -ne 'LocalSystem' -or
+        (Get-Service -Name VBoxSDS -ErrorAction Stop).Status -ne 'Stopped' -or
+        @(Get-VBoxProcesses).Count -ne 0) { throw 'VBoxSDS changed after cleanup admission' }
     if ($env:PVBOX_FIXED_HELPER_MODE) {
         if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
         $sdsResult=Invoke-ProtectedSds -Operation UnregisterFull -TimeoutSeconds $TimeoutSeconds
