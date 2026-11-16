@@ -284,6 +284,14 @@ $report=[ordered]@{
     service_stop='NOT_ATTEMPTED'
     driver_package_removal='NOT_ATTEMPTED'
     service_delete='NOT_ATTEMPTED'
+    # Diagnostics only: entering a dispatch is not proof that a child launched.
+    # Null result fields mean the protected boundary returned no observation.
+    operation_observations=[ordered]@{
+        sds_cleanup=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+        service_stop=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+        driver_package_removal=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+        service_delete=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+    }
     final_vbox_services=@()
     cleanup_verified=$false
     driver_package_removed=$false
@@ -309,13 +317,27 @@ try {
         @(Get-VBoxProcesses).Count -ne 0) { throw 'VBoxSDS changed after cleanup admission' }
     if ($env:PVBOX_FIXED_HELPER_MODE) {
         if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
+        $report.sds_cleanup='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.sds_cleanup.dispatch_entered=$true
         $sdsResult=Invoke-ProtectedSds -Operation UnregisterFull -TimeoutSeconds $TimeoutSeconds
+        $report.operation_observations.sds_cleanup.within_deadline=[bool]$sdsResult.WithinDeadline
+        $report.operation_observations.sds_cleanup.exit_code_known=[bool]$sdsResult.ExitCodeKnown
+        if ($sdsResult.ExitCodeKnown) {
+            $report.operation_observations.sds_cleanup.exit_code=[int]$sdsResult.ExitCode
+            $report.sds_cleanup="EXIT_$([int]$sdsResult.ExitCode)"
+        }
         if (-not $sdsResult.WithinDeadline) { throw 'SDS unregistration exceeded safety deadline; child exited, retain resources' }
         if (-not $sdsResult.ExitCodeKnown) { throw 'SDS unregistration exit code unavailable' }
         $sdsExit=[int]$sdsResult.ExitCode
     } else {
         # Explicit standalone fixture path, not a fallback on protected failure.
+        $report.sds_cleanup='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.sds_cleanup.dispatch_entered=$true
         $sdsExit=Run-Bounded $expectedSds '--unregservice' 'sds-unregister'
+        $report.operation_observations.sds_cleanup.within_deadline=$true
+        $report.operation_observations.sds_cleanup.exit_code_known=$true
+        $report.operation_observations.sds_cleanup.exit_code=$sdsExit
+        $report.sds_cleanup="EXIT_$sdsExit"
     }
     if ($sdsExit -ne 0 -or (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) {
         throw "Exact VBoxSDS unregistration failed: $sdsExit"
@@ -335,12 +357,26 @@ try {
     $sc=Join-Path $env:SystemRoot 'System32\sc.exe'
     if ($env:PVBOX_FIXED_HELPER_MODE) {
         if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+        $report.service_stop='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.service_stop.dispatch_entered=$true
         $fixed=Invoke-ProtectedDriver -Operation StopSup -TimeoutSeconds $TimeoutSeconds
+        $report.operation_observations.service_stop.within_deadline=[bool]$fixed.WithinDeadline
+        $report.operation_observations.service_stop.exit_code_known=[bool]$fixed.ExitCodeKnown
+        if ($fixed.ExitCodeKnown) {
+            $report.operation_observations.service_stop.exit_code=[int]$fixed.ExitCode
+            $report.service_stop="EXIT_$([int]$fixed.ExitCode)"
+        }
         if (-not $fixed.WithinDeadline) { throw 'sup-stop exceeded safety deadline; native child has exited, ownership must be inspected' }
         if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
         $stopExit=[int]$fixed.ExitCode
     } else {
+        $report.service_stop='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.service_stop.dispatch_entered=$true
         $stopExit=Run-Bounded $sc 'stop VBoxSup' 'sup-stop'
+        $report.operation_observations.service_stop.within_deadline=$true
+        $report.operation_observations.service_stop.exit_code_known=$true
+        $report.operation_observations.service_stop.exit_code=$stopExit
+        $report.service_stop="EXIT_$stopExit"
     }
     $report.service_stop="EXIT_$stopExit"
     if ($stopExit -ne 0) { throw 'VBoxSup stop failed; retain package without deletion' }
@@ -360,12 +396,26 @@ try {
     # No /force and no wildcard; Windows PnP manager owns the package teardown.
     if ($env:PVBOX_FIXED_HELPER_MODE) {
         if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+        $report.driver_package_removal='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.driver_package_removal.dispatch_entered=$true
         $fixed=Invoke-ProtectedDriver -Operation RemoveSupPackage -TimeoutSeconds $TimeoutSeconds
+        $report.operation_observations.driver_package_removal.within_deadline=[bool]$fixed.WithinDeadline
+        $report.operation_observations.driver_package_removal.exit_code_known=[bool]$fixed.ExitCodeKnown
+        if ($fixed.ExitCodeKnown) {
+            $report.operation_observations.driver_package_removal.exit_code=[int]$fixed.ExitCode
+            $report.driver_package_removal="EXIT_$([int]$fixed.ExitCode)"
+        }
         if (-not $fixed.WithinDeadline) { throw 'sup-package-remove exceeded safety deadline; native child has exited, ownership must be inspected' }
         if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
         $removeExit=[int]$fixed.ExitCode
     } else {
+        $report.driver_package_removal='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.driver_package_removal.dispatch_entered=$true
         $removeExit=Run-Bounded $pnputil "/delete-driver $published /uninstall" 'sup-package-remove'
+        $report.operation_observations.driver_package_removal.within_deadline=$true
+        $report.operation_observations.driver_package_removal.exit_code_known=$true
+        $report.operation_observations.driver_package_removal.exit_code=$removeExit
+        $report.driver_package_removal="EXIT_$removeExit"
     }
     $report.driver_package_removal="EXIT_$removeExit"
     if ($removeExit -ne 0) { throw 'PnPUtil refused driver package deletion' }
@@ -403,12 +453,26 @@ try {
         # This is not an unscoped wildcard deletion or production routine.
         if ($env:PVBOX_FIXED_HELPER_MODE) {
             if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+            $report.service_delete='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_delete.dispatch_entered=$true
             $fixed=Invoke-ProtectedDriver -Operation DeleteSupService -TimeoutSeconds $TimeoutSeconds
+            $report.operation_observations.service_delete.within_deadline=[bool]$fixed.WithinDeadline
+            $report.operation_observations.service_delete.exit_code_known=[bool]$fixed.ExitCodeKnown
+            if ($fixed.ExitCodeKnown) {
+                $report.operation_observations.service_delete.exit_code=[int]$fixed.ExitCode
+                $report.service_delete="EXIT_$([int]$fixed.ExitCode)"
+            }
             if (-not $fixed.WithinDeadline) { throw 'sup-service-delete exceeded safety deadline; native child has exited, ownership must be inspected' }
             if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
             $deleteExit=[int]$fixed.ExitCode
         } else {
+            $report.service_delete='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_delete.dispatch_entered=$true
             $deleteExit=Run-Bounded $sc 'delete VBoxSup' 'sup-service-delete'
+            $report.operation_observations.service_delete.within_deadline=$true
+            $report.operation_observations.service_delete.exit_code_known=$true
+            $report.operation_observations.service_delete.exit_code=$deleteExit
+            $report.service_delete="EXIT_$deleteExit"
         }
         $report.service_delete="EXIT_$deleteExit"
         if ($deleteExit -ne 0) { throw 'Exact stopped VBoxSup service delete failed' }

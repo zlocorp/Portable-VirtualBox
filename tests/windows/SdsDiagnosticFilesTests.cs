@@ -6,6 +6,12 @@ using System.Threading.Tasks;
 namespace PortableVBox {
  public static class SdsDiagnosticFilesTests {
   static void Require(bool ok,string message){if(!ok)throw new Exception(message);}
+  // Windows readers must share the already-open writer's access. This is only
+  // a read-only fixture observation; production CreateNew/FileShare.Read stays.
+  static string ReadObserved(string path){
+   using(var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite))
+   using(var reader=new StreamReader(stream,Encoding.UTF8)){return reader.ReadToEnd();}
+  }
   sealed class BadClose : IDisposable {
    internal bool Called;internal readonly Exception Error=new IOException("close");
    public void Dispose(){Called=true;throw Error;}
@@ -28,8 +34,8 @@ namespace PortableVBox {
      var failure=Caught(()=>SdsEvidenceCompletion.Capture(outFail?Failed(primary):Task.FromResult("out 世界"),errFail?Failed(secondary):Task.FromResult("err Привет"),()=>{verified=true;if(imageFail)throw image;},files.WriteAvailable));
      Require(Object.ReferenceEquals(failure,outFail?primary:errFail?secondary:imageFail?image:null),"first capture/image error preserved");
      Require(verified,"image observation suppressed by capture failure");
-     Require(File.ReadAllText(Path.Combine(directory,"sup-stop.stdout.txt"))==(outFail?"":"out 世界"),"available stdout not preserved");
-     Require(File.ReadAllText(Path.Combine(directory,"sup-stop.stderr.txt"))==(errFail?"":"err Привет"),"available stderr not preserved");
+     Require(ReadObserved(Path.Combine(directory,"sup-stop.stdout.txt"))==(outFail?"":"out 世界"),"available stdout not preserved");
+     Require(ReadObserved(Path.Combine(directory,"sup-stop.stderr.txt"))==(errFail?"":"err Привет"),"available stderr not preserved");
      Require(Caught(()=>files.WriteCompleted("overwrite","overwrite")) is InvalidOperationException,"second completion accepted");
     }
    }
@@ -43,7 +49,7 @@ namespace PortableVBox {
     ((FileStream)field.GetValue(files)).Dispose();var injected=new FaultStream(Path.Combine(directory,"injected.txt"),site);field.SetValue(files,injected);
     var failure=Caught(()=>files.WriteCompleted("out","err"));
     Require(site=="close"?failure==null:Object.ReferenceEquals(failure,injected.Fault),"writer fault must preserve exact primary");
-    Require(File.ReadAllText(Path.Combine(directory,"sup-stop.stderr.txt"))=="err","fault suppressed stderr");
+    Require(ReadObserved(Path.Combine(directory,"sup-stop.stderr.txt"))=="err","fault suppressed stderr");
     var closeFailure=Caught(()=>files.Dispose());Require(injected.Closed,"injected stream not closed");
     Require(site=="close"?Object.ReferenceEquals(closeFailure,injected.Fault):closeFailure==null,"close result incorrect");
     Require(Caught(()=>files.Dispose())==null,"failed close retried");
@@ -56,7 +62,7 @@ namespace PortableVBox {
      ((FileStream)typeof(SdsDiagnosticFiles).GetField(field,BindingFlags.NonPublic|BindingFlags.Instance).GetValue(files)).Dispose();
      Require(Caught(()=>files.WriteCompleted("out","err")) is ObjectDisposedException,"closed stream did not fail");
      string other=field=="stdout"?"stderr":"stdout";
-     Require(File.ReadAllText(Path.Combine(directory,"sup-stop."+other+".txt"))==(other=="stdout"?"out":"err"),"one failed write suppressed other channel");
+     Require(ReadObserved(Path.Combine(directory,"sup-stop."+other+".txt"))==(other=="stdout"?"out":"err"),"one failed write suppressed other channel");
     }
    }
   }
@@ -69,14 +75,14 @@ namespace PortableVBox {
      Require(new FileInfo(stdout).Length==0&&new FileInfo(stderr).Length==0,"Intent files must begin empty");
      files.WriteCompleted("Привет 世界\r\nno-final-newline","Ошибка\n");
     }
-    Require(File.ReadAllText(stdout,Encoding.UTF8)=="Привет 世界\r\nno-final-newline","Complete decoded stdout changed");
-    Require(File.ReadAllText(stderr,Encoding.UTF8)=="Ошибка\n","Complete decoded stderr changed");
+    Require(ReadObserved(stdout)=="Привет 世界\r\nno-final-newline","Complete decoded stdout changed");
+    Require(ReadObserved(stderr)=="Ошибка\n","Complete decoded stderr changed");
     bool refused=false;try{using(var files=new SdsDiagnosticFiles(root,"sds-register")){}}catch(IOException){refused=true;}
-    Require(refused&&File.ReadAllText(stdout,Encoding.UTF8)=="Привет 世界\r\nno-final-newline","Existing evidence overwritten");
+    Require(refused&&ReadObserved(stdout)=="Привет 世界\r\nno-final-newline","Existing evidence overwritten");
     File.Delete(stdout);
     refused=false;try{using(var files=new SdsDiagnosticFiles(root,"sds-register")){}}catch(IOException){refused=true;}
     Require(refused&&File.Exists(stdout)&&new FileInfo(stdout).Length==0,"Second create failure removed first intent");
-    Require(File.ReadAllText(stderr,Encoding.UTF8)=="Ошибка\n","Second-create failure truncated old stderr");
+    Require(ReadObserved(stderr)=="Ошибка\n","Second-create failure truncated old stderr");
     foreach(string label in new[]{"pnputil","driver-start","sup-stop","sup-package-remove","sup-service-delete"})
      using(var files=new SdsDiagnosticFiles(root,label)){files.WriteCompleted("full "+label,"error "+label);}
     foreach(string label in new[]{"../escape","arbitrary","pnputil/../bad"}){
@@ -87,7 +93,7 @@ namespace PortableVBox {
     using(var files=new SdsDiagnosticFiles(faultDir,"sup-stop")){
      bool failed=false;try{files.WriteCompleted("\ud800","retained error");}catch(EncoderFallbackException){failed=true;}
      Require(failed,"Invalid stdout must fail strictly");
-     Require(File.ReadAllText(Path.Combine(faultDir,"sup-stop.stderr.txt"))=="retained error","stdout failure suppressed valid stderr");
+     Require(ReadObserved(Path.Combine(faultDir,"sup-stop.stderr.txt"))=="retained error","stdout failure suppressed valid stderr");
     }
     CompletionCases(root);
     Console.WriteLine("SDS_DIAGNOSTIC_FILES_PASS");return 0;

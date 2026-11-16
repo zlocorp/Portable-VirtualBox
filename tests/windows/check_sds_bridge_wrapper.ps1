@@ -165,6 +165,8 @@ try {
    & {
     $env:PVBOX_FIXED_HELPER_MODE=if($case -eq 'UnknownMode'){'OTHER'}elseif($case -eq 'Standalone'){$null}else{$protectedMode}
     $state=@{Bridge=0;Legacy=0};$TimeoutSeconds=45;$expectedSds='fixed-app/VBoxSDS.exe';$sdsExe=$expectedSds
+    # The selected branch now writes diagnostic facts into the caller's report.
+    $report=@{operation_observations=@{sds_cleanup=@{}}}
     function Run-Bounded {
      param($Command,$Argument,$Label)
      $state.Legacy++
@@ -256,6 +258,7 @@ try {
      & {
       $env:PVBOX_FIXED_HELPER_MODE=if($case -eq 'UnknownMode'){'OTHER'}else{$mode}
       $state=@{Legacy=0;Bridge=0};$TimeoutSeconds=45;$wantedOperation=$operation
+      $report=@{operation_observations=@{service_stop=@{};driver_package_removal=@{};service_delete=@{}}}
       function Run-Bounded {$state.Legacy++;throw 'FORBIDDEN_LEGACY_CLEANUP'}
       if($case -ne 'MissingBridge'){
        function Invoke-ProtectedDriver{
