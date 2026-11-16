@@ -37,6 +37,12 @@ Func _MSW_Text($key)
         Case "rebind_confirm"
             If $ru Then Return "ALPHA: выполнить показанный режим исправления регистрации одной перенесенной ВМ после подготовки драйвера с UAC? Диски и снимки не удаляются. После сбоя регистрация может остаться незавершённой; для продолжения потребуется эта исходная резервная копия. Сохраните её отдельно и используйте одноразовый Windows-хост. Продолжить?"
             Return "ALPHA: perform the displayed registration repair mode for this one moved VM after UAC/driver preparation? No virtual disks or snapshots will be deleted. A crash can leave registration incomplete; resuming requires this original backup. Keep it separately and use a disposable Windows host. Continue?"
+        Case "retry_cleanup"
+            If $ru Then Return "Повторить проверку"
+            Return "Retry cleanup checks"
+        Case "retry_cleanup_hint"
+            If $ru Then Return "Можно явно повторить проверку очистки с новым запросом UAC. Это не разрешает повторять системные действия. Если безопасное продолжение не подтверждено, помощник откажет. Исходная ошибка и журналы сохранены."
+            Return "You may explicitly retry cleanup checks with a new UAC request. This does not authorize repeating system operations. The helper refuses if safe continuation cannot be established. The original error and journals are retained."
         Case "reopen"
             If $ru Then Return "Открыть менеджер"
             Return "Reopen Manager"
@@ -209,13 +215,16 @@ Func _MSW_Show($root, $workspace)
             $serviceLast = $serviceText
             $serviceTick = TimerInit()
         EndIf
+        Local $retryCleanup = _MS_CleanupRetryAction($s) <> ""
         Local $display = $s["state"] & @CRLF & _MSW_Text($s["state"]) & @CRLF & _LI_Reason($s["detail"])
+        If $retryCleanup Then $display &= @CRLF & _MSW_Text("retry_cleanup_hint")
         If $last <> $display Then
             GUICtrlSetData($status, $display)
             Local $canStart = _MS_RetryAllowed($s["state"], $s["detail"])
-            Local $canStop = $s["state"] == "MANAGER_OPEN" Or $s["state"] == "OPENING" Or $s["state"] == "CLEANUP_DECLINED"
+            Local $canStop = $s["state"] == "MANAGER_OPEN" Or $s["state"] == "OPENING" Or $s["state"] == "CLEANUP_DECLINED" Or $retryCleanup
             Local $canReopen = $s["state"] == "WAIT_GUESTS" Or $s["state"] == "WAIT_BACKGROUND"
             GUICtrlSetState($start, ($canStart ? $GUI_ENABLE : $GUI_DISABLE))
+            GUICtrlSetData($stop, _MSW_Text(($retryCleanup ? "retry_cleanup" : "stop")))
             GUICtrlSetState($stop, ($canStop ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($reopen, ($canReopen ? $GUI_ENABLE : $GUI_DISABLE))
             GUICtrlSetState($recover, ((($s["state"] == "IDLE" Or $s["state"] == "BLOCKED") And $s["separated"]) ? $GUI_ENABLE : $GUI_DISABLE))

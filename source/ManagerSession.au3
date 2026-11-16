@@ -45,6 +45,71 @@ Func _MS_RetryAllowed($state, $detail)
         ($state == "BLOCKED" And $detail == "existing-or-unknown-VirtualBox")
 EndFunc
 
+; UI request eligibility only. The fixed helper still refuses any admitted or
+; ambiguous system-effect replay. Never infer preflight-only failure from exit 70.
+Func _MS_CleanupFailureAction($separated, $phase, $exitCode)
+    If Not IsBool($separated) Or Not $separated Or Not IsString($phase) Or Not IsInt($exitCode) Or $exitCode <> 70 Then Return ""
+    If $phase == "CLEANING" Or $phase == "CONSENT_FINISH" Then Return "Finish"
+    If $phase == "RECOVERING" Or $phase == "CONSENT_RECOVER" Then Return "Recover"
+    Return ""
+EndFunc
+
+Func _MS_CleanupRetryAction($s)
+    If Not IsMap($s) Then Return ""
+    For $key In StringSplit("state|separated|mutex|cycle|cleanup_retry_action|worker|owned|former_pid", "|", 2)
+        If Not MapExists($s, $key) Then Return ""
+    Next
+    If $s["state"] <> "FAILED" Or Not IsBool($s["separated"]) Or Not $s["separated"] Or $s["mutex"] = 0 Then Return ""
+    If Not IsInt($s["cycle"]) Or $s["cycle"] < 1 Or $s["cycle"] > 999 Then Return ""
+    Local $worker = $s["worker"]
+    If Not IsMap($worker) Then Return ""
+    For $key In StringSplit("handle|status|exit_code", "|", 2)
+        If Not MapExists($worker, $key) Then Return ""
+    Next
+    If $worker["handle"] <> 0 Or $worker["status"] <> "EXITED" Or Not IsInt($worker["exit_code"]) Or ($worker["exit_code"] <> 70 And $worker["exit_code"] <> 1223) Then Return ""
+    Switch $s["cleanup_retry_action"]
+        Case "Finish"
+            If IsBool($s["owned"]) And $s["owned"] And $s["former_pid"] = 0 Then Return "Finish"
+        Case "Recover"
+            If IsInt($s["former_pid"]) And $s["former_pid"] > 0 And $s["former_pid"] <> @AutoItPID Then Return "Recover"
+    EndSwitch
+    Return ""
+EndFunc
+
+Func _MS_TakeCleanupRetry(ByRef $s)
+    Local $action = _MS_CleanupRetryAction($s)
+    If $action == "" Then Return ""
+    ; Consume before transitioning/launching: repeated clicks cannot enqueue work.
+    $s["cleanup_retry_action"] = ""
+    Local $phase = _MS_ConsentPhase(True, $action)
+    _MS_State($s, $phase)
+    If $s["state"] <> $phase Then Return "" ; CLI gate failure stays fail-closed
+    $s["cleanup_recheck_action"] = $action
+    Return $action
+EndFunc
+
+Func _MS_RetryCleanup(ByRef $s)
+    If _MS_CleanupRetryAction($s) == "" Then Return False
+    If Not _MS_Allowed($s["root"], $s["workspace"]) Or Not _PB_Medium() Then Return False
+    Local $action = _MS_TakeCleanupRetry($s)
+    If $action == "" Then Return False
+    If Not _MS_Worker($s, $action) Then
+        Local $pending = $s["worker"]
+        If $pending["handle"] <> 0 Then
+            ; Creation may have returned a real child before identity observation
+            ; became uncertain. Keep polling that original handle in consent phase.
+            ; Consent phase/gate were fixed before launch. Do not re-run a gate
+            ; transition after a child exists: a late gate error must not stop polling.
+            $s["detail"] = "worker-not-confirmed-START-retain-session"
+            Return True
+        EndIf
+        $s["cleanup_recheck_action"] = ""
+        _MS_State($s, "FAILED", "cleanup-worker-not-started")
+        Return False
+    EndIf
+    Return True
+EndFunc
+
 ; Oracle's Manager persists geometry on a deferred timer. Closing immediately
 ; after first visibility can race that timer with COM teardown (observed in
 ; the real 7.2.22 GUI). Wait for an enabled, stable window, without sleeping
@@ -95,9 +160,29 @@ Func _MS_New($root, $workspace)
     $s["guests"] = 0
     $s["uncertain"] = 0
     $s["worker_uncertain"] = 0
+    $s["cleanup_retry_action"] = ""
+    $s["cleanup_recheck_action"] = ""
     $s["rebind"] = _PVR_New("NONE", "not-requested")
     $s["oracle_language"] = ""
     Return $s
+EndFunc
+
+; A gate error closes admission, but must not stop observing an existing child.
+; The same phase inventory is used by Tick, so retained workers stay reachable.
+Func _MS_WorkerPhase($state)
+    If Not IsString($state) Then Return False
+    Return _MS_ConsentPending($state) Or $state == "PREPARING" Or $state == "CLEANING" Or _
+        $state == "CONFIGURING" Or $state == "CONFIGURING_LANGUAGE" Or _
+        $state == "REBIND_UNREGISTER" Or $state == "REBIND_REGISTER" Or _
+        $state == "RECOVERING"
+EndFunc
+
+Func _MS_GateFailureState($current, $requested, $workerHandle)
+    If $workerHandle <> 0 Then
+        If _MS_WorkerPhase($current) Then Return $current
+        If _MS_WorkerPhase($requested) Then Return $requested
+    EndIf
+    Return "FAILED"
 EndFunc
 
 Func _MS_State(ByRef $s, $state, $detail = "")
@@ -108,7 +193,8 @@ Func _MS_State(ByRef $s, $state, $detail = "")
         If $ready And $ok Then $ok = _CG_Release($gate)
         If Not $ok Then
             _CG_SetReady($gate, False)
-            $state = "FAILED"
+            Local $pendingWorker = $s["worker"]
+            $state = _MS_GateFailureState($s["state"], $state, $pendingWorker["handle"])
             $detail = "portable-cli-gate-unverified-resources-retained"
         EndIf
         If $ok And ($state == "CLEAN" Or $state == "IDLE") Then _CG_Close($gate)
@@ -179,6 +265,20 @@ Func _MS_ConsentPhase($separated, $action)
         Case Else
             Return "BLOCKED"
     EndSwitch
+EndFunc
+
+; Cancelling a recheck cannot revive the assumptions of an ordinary first
+; cleanup cancellation: the earlier failure may already have had system effects.
+Func _MS_RecheckCancelled(ByRef $s)
+    If Not $s["separated"] Then Return False
+    Local $action = $s["cleanup_recheck_action"], $worker = $s["worker"]
+    If $action <> "Finish" And $action <> "Recover" Then Return False
+    If $s["state"] <> _MS_ConsentPhase(True, $action) Then Return False
+    If $worker["handle"] <> 0 Or $worker["status"] <> "EXITED" Or $worker["exit_code"] <> 1223 Then Return False
+    $s["cleanup_recheck_action"] = ""
+    $s["cleanup_retry_action"] = $action ; restore only the already action-bound ticket
+    _MS_State($s, "FAILED", "cleanup-recheck-consent-cancelled-resources-retained")
+    Return True
 EndFunc
 
 Func _MS_WorkerUnknownWait($elapsedMs)
@@ -497,6 +597,7 @@ Func _MS_CanLeaveDeclined($state, $owned, $workerHandle)
 EndFunc
 
 Func _MS_Stop(ByRef $s)
+    If _MS_CleanupRetryAction($s) <> "" Then Return _MS_RetryCleanup($s)
     If $s["state"] == "CLEANUP_DECLINED" Then
         $s["quiet"] = 0
         _MS_State($s, "READY_TO_CLEAN")
@@ -539,9 +640,7 @@ Func _MS_Tick(ByRef $s)
             _MS_State($s, "FAILED", "clean-host-never-stabilized-resources-retained")
         Return
     EndIf
-    If $state == "PREPARING" Or $state == "CLEANING" Or $state == "CONFIGURING" Or $state == "CONFIGURING_LANGUAGE" Or _
-            $state == "REBIND_UNREGISTER" Or $state == "REBIND_REGISTER" Or _
-            _MS_ConsentPending($state) Or $state == "RECOVERING" Then
+    If _MS_WorkerPhase($state) Then
         Local $worker = $s["worker"], $status = _MP_Poll($worker)
         $s["worker"] = $worker
         If $status == "PRESENT" Then
@@ -568,6 +667,8 @@ Func _MS_Tick(ByRef $s)
         $s["worker_uncertain"] = 0
         _MP_Release($worker)
         $s["worker"] = $worker
+        If _MS_RecheckCancelled($s) Then Return
+        $s["cleanup_recheck_action"] = ""
         If $s["separated"] And $worker["exit_code"] = 1223 Then
             If $state == "CLEANING" Or $state == "CONSENT_FINISH" Then
                 _MS_State($s, "CLEANUP_DECLINED", "click-finish-to-retry-elevation")
@@ -593,6 +694,7 @@ Func _MS_Tick(ByRef $s)
             Return
         EndIf
         If $worker["exit_code"] <> 0 Then
+            $s["cleanup_retry_action"] = _MS_CleanupFailureAction($s["separated"], $state, $worker["exit_code"])
             _MS_State($s, "FAILED", "worker-failed-no-guessed-cleanup-exit-" & $worker["exit_code"])
             Return
         EndIf

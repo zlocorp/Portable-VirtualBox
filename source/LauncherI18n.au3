@@ -479,6 +479,8 @@ Func _LI_ReasonRu($key)
             Return "Запрос отменен, но отсутствие системных изменений не подтверждено."
         Case "clean-host-never-stabilized-resources-retained"
             Return "Не удалось подтвердить стабильное отсутствие активности. Ресурсы сохранены."
+        Case "cleanup-recheck-consent-cancelled-resources-retained"
+            Return "Повторная проверка отменена в UAC. Прежнее неопределенное состояние и ресурсы сохранены; системные действия не повторялись."
         Case "cleanup-worker-not-started"
             Return "Не удалось запустить процесс очистки. Службы и драйверы могут оставаться в системе."
         Case "click-finish-to-retry-elevation"
