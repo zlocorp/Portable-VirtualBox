@@ -47,3 +47,18 @@ cleanup script; immutable proof/output admission follows successful validation.
   474 tests with seven expected platform skips in 130.766 seconds.
 - Windows CI results are pending publication. No workstation acceptance or
   successful real retry has yet been claimed for this tree.
+
+## Windows evidence correction
+
+- At published `72d8c20`, independent artifact inspection found both helper proofs
+  had `preflight_refusal_then_cleanup_verified=false` despite green job status.
+  The fixture iterates cycles 2 and 3, but the new case incorrectly selected 1.
+  Thus those jobs do not prove the real locked-INF refusal/retry scenario.
+- Correct both guards to cycle 2 and require the proof flag before any overall
+  success claim. A regression contract failed with `1 not found in {2, 3}` before
+  the fix and passed afterward. Independent source review accepted this correction.
+  No production code or cleanup authority is changed by this follow-up.
+- Exact-source successor Windows artifacts must show the flag true and actual
+  failed-then-successful worker evidence; earlier green jobs remain historical.
+
+- Final correction suite: 475 tests, seven expected skips, no failures (136.047 s).

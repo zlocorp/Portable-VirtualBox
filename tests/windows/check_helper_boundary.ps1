@@ -290,7 +290,7 @@ try {
         Wait-Exit $gateHost 0 ('gate-'+$cycle) 20
         $gateHost.Dispose();$gateHost=$null
         Await-Idle
-        if ($cycle -eq 1) {
+        if ($cycle -eq 2) {
             # A real sharing-denied read on our exact newly staged INF tests the
             # pre-effect boundary without modifying any registry/service/file.
             $stagePath=Join-Path $session 'stage\sup-standalone.json'
@@ -320,7 +320,7 @@ try {
             $refusalJournals=Get-JournalHashes $session
         }
         Helper-Action Finish $cycle 0 ('finish-'+$cycle)
-        if ($cycle -eq 1) {
+        if ($cycle -eq 2) {
             Assert-PriorJournals $session $refusalJournals
             $proof.preflight_refusal_then_cleanup_verified=$true
         }
@@ -331,6 +331,7 @@ try {
         if (-not $receipt.cleanup_verified -or -not $receipt.driver_package_removed -or $receipt.cleanup_basis -ne 'PrivilegedSession') { throw 'Cleanup not verified' }
         if ((Test-Path (Join-Path $session 'app64')) -or (Test-Path (Join-Path $session 'code')) -or -not (Test-Path (Join-Path $session 'payload-removed.json'))) { throw 'Protected payload not removed' }
     }
+    if (-not $proof.preflight_refusal_then_cleanup_verified) { throw 'Locked-INF preflight retry was not verified' }
     $proof.durable_journal_verified=$true;$proof.uuid=$uuid;$proof.two_cycles_clean=$true;$proof.portable_cli_verified=$true
     if (-not $front.CloseMainWindow()) { throw 'Idle frontend could not close' }
     Wait-Exit $front $(if($MainLauncher){2}else{0}) 'frontend close' 10

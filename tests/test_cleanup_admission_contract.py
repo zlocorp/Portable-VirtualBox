@@ -1,6 +1,7 @@
 """Source ordering supplement; executable Windows fixtures prove behavior."""
 from pathlib import Path
 import unittest
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,6 +28,16 @@ class CleanupAdmissionContract(unittest.TestCase):
         self.assertIn('[IO.FileShare]::None', text)
         self.assertIn('preflight_refusal_then_cleanup_verified', text)
         self.assertIn('assertNoCleanupEffects', text)
+
+
+    def test_locked_inf_guard_is_reachable_and_success_requires_its_proof(self):
+        text = (ROOT / 'tests/windows/check_helper_boundary.ps1').read_text()
+        cycles = {int(value) for value in re.search(r'foreach \(\$cycle in @\(([^)]*)\)\)', text).group(1).split(',')}
+        for marker in ("# A real sharing-denied read", 'Assert-PriorJournals $session $refusalJournals'):
+            guard = re.findall(r'if \(\$cycle -eq (\d+)\)', text[:text.index(marker)])[-1]
+            self.assertIn(int(guard), cycles)
+        success = text.index("$proof.durable_journal_verified=$true")
+        self.assertLess(text.index("if (-not $proof.preflight_refusal_then_cleanup_verified) { throw 'Locked-INF preflight retry was not verified' }"), success)
 
 
 if __name__ == '__main__':
