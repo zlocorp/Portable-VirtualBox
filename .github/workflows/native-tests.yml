@@ -88,6 +88,7 @@ on:
       - scripts/vbox_sup_package_identity.ps1
       - tests/windows/check_driver_package_identity.ps1
       - tests/windows/check_driver_start_gate.ps1
+      - tests/windows/check_sds_failure_capture.ps1
       - tests/windows/check_failed_start_recovery.ps1
       - scripts/vbox_sup_partial_cleanup.ps1
       - scripts/vbox_sup_start_owned.ps1
@@ -141,6 +142,12 @@ jobs:
       - name: Preserve cleanup evidence on failed final observation (no system effects)
         shell: powershell
         run: ./tests/windows/check_cleanup_report_finalization.ps1
+      - name: Read fixed SDS facts and verify bounded failure capture (no system effects)
+        shell: powershell
+        run: |
+          $output = & ./tests/windows/check_sds_failure_capture.ps1 6>&1
+          $output | ForEach-Object { Write-Host $_ }
+          if (($output | Out-String) -notmatch '(?m)^SDS_FAILURE_NATIVE_READ_PASS\s*$') { throw 'Windows read-only SDS probe did not execute' }
       - name: Execute failed driver-start gate contracts (no system effects)
         shell: powershell
         run: |

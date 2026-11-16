@@ -409,7 +409,7 @@ function Test-PrivilegedPrepare([string]$Source,[string]$TestRoot) {
     $prepare=$matches[0].Clauses[0].Item2
     # Fail closed on new commands/selectors before loading any production code.
     foreach ($selection in @(
-        @{Ast=$prepare;Allowed=@('Test-Path','Join-Path','Get-Content','ConvertFrom-Json','Run-Sds','Get-ItemProperty','ConvertTo-Json','Set-Content','Write-Host','Write-SdsRegistrationDiagnostics')},
+        @{Ast=$prepare;Allowed=@('Test-Path','Join-Path','Get-Content','ConvertFrom-Json','Run-Sds','Get-ItemProperty','ConvertTo-Json','Set-Content','Write-Host','Write-SdsRegistrationDiagnostics','Write-SdsFailureDiagnostics')},
         @{Ast=(Get-RequiredFunction $Source 'Run-Sds').Ast;Allowed=@('Start-Process','Join-Path','Invoke-ProtectedSds')},
         @{Ast=(Get-RequiredFunction $Source 'ConvertTo-SdsDiagnosticLines').Ast;Allowed=@('Get-DiagnosticToken','Get-DiagnosticNumber')},
         @{Ast=(Get-RequiredFunction $Source 'Write-SdsRegistrationDiagnostics').Ast;Allowed=@('ConvertTo-SdsDiagnosticLines')}
@@ -518,7 +518,7 @@ public sealed class SdsPrepareTestProcess {
         if ($case['Fault'] -eq 'Reporter') { function Write-SdsRegistrationDiagnostics { throw 'PRIVATE_REPORT_FAILURE' } }
         $session=Join-Path $TestRoot ('prepare-'+$case.Name); $root=$session; $app=Join-Path $session 'app64'
         New-Item -ItemType Directory -Path $session | Out-Null
-        $state=@{Trace=[Collections.Generic.List[string]]::new();Snapshots=@{};Forbidden=0;Registry=0;Preflight=0;Launch=0;PropertyReads=[Collections.Generic.List[string]]::new()}
+        $state=@{Trace=[Collections.Generic.List[string]]::new();Snapshots=@{};FailureCaptures=0;Forbidden=0;Registry=0;Preflight=0;Launch=0;PropertyReads=[Collections.Generic.List[string]]::new()}
         $intent=Join-Path $session 'prepare-intent.json'
         [IO.File]::WriteAllText($intent,'{"fixture":"durable-intent"}',[Text.UTF8Encoding]::new($false))
         $state.Snapshots[$intent]=[Convert]::ToBase64String([IO.File]::ReadAllBytes($intent))
@@ -559,6 +559,7 @@ public sealed class SdsPrepareTestProcess {
         }
         $key='HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS'
         $primaryError=if ($policy -eq 'Missing') { [Management.Automation.ErrorRecord]::new([Management.Automation.ItemNotFoundException]::new('MISSING_KEY'),'PathNotFound,Microsoft.PowerShell.Commands.GetItemPropertyCommand',[Management.Automation.ErrorCategory]::ObjectNotFound,$key) } else { [Management.Automation.ErrorRecord]::new([UnauthorizedAccessException]::new('READ_DENIED'),'FIXTURE_READ_DENIED',[Management.Automation.ErrorCategory]::PermissionDenied,$key) }
+        function Write-SdsFailureDiagnostics { param($ExpectedImage);$state.FailureCaptures++;throw 'FAILURE_COLLECTOR_FAILURE' }
         function Get-Service { $state.Forbidden++; throw 'Forbidden SCM observation' }
         function Get-CimInstance { $state.Forbidden++; throw 'Forbidden CIM observation' }
         function Get-Process { $state.Forbidden++; throw 'Forbidden process observation' }
@@ -625,6 +626,8 @@ public sealed class SdsPrepareTestProcess {
             }
         }
         $launched=if ($case.ContainsKey('NoLaunch')) { 0 } else { 1 }
+        $expectedCapture=if($launched -eq 1 -and -not $ok -and $case['Gate'] -ne 'identity_match'){1}else{0}
+        Assert-True ($state.FailureCaptures -eq $expectedCapture) "$($case.Name) failure-only capture trigger incorrect"
         $reads=if ($launched -eq 0 -or $case.ContainsKey('NoGate')) { 0 } else { 1 }
         Assert-True ($state.Preflight -eq $(if ($case.ContainsKey('Early')) { 0 } else { 1 })) "$($case.Name) changed preflight count"
         Assert-True ($state.Launch -eq $launched -and $state.Registry -eq $reads) "$($case.Name) gained a launch/registry query or skipped the gate"

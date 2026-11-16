@@ -234,6 +234,100 @@ function Write-SdsRegistrationDiagnostics([hashtable]$Facts) {
         try { [Console]::Out.Write($line+"`r`n") } catch { }
     }
 }
+# Failure-only, fixed read-only observations. Never consulted by admission gates.
+# No event messages, command lines, raw paths or exception strings are emitted.
+function Get-SdsFailureServiceFacts {
+    $facts=@{query='unknown';state='unknown';hresult=$null};$services=@()
+    try {
+        $services=@(Get-Service -Name VBoxSDS -ErrorAction Stop)
+        if ($services.Count -ne 1 -or $services[0] -isnot [System.ServiceProcess.ServiceController]) { return $facts }
+        $service=$services[0]
+        $facts.state=([string]$service.Status).ToLowerInvariant();$facts.query='observed'
+    } catch { $facts.query='error';$facts.hresult=$_.Exception.HResult }
+    finally {foreach($service in $services){try{if($service -is [System.ServiceProcess.ServiceController]){$service.Dispose()}}catch{$facts.query='error'}}}
+    return $facts
+}
+function Get-SdsFailureRegistryFacts([ValidateSet('Registry32','Registry64')][string]$View,[string]$ExpectedImage) {
+    $facts=@{query='unknown';image='unknown';type=$null;start=$null;account='unknown';hresult=$null}
+    $base=$null;$key=$null
+    try {
+        $base=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,[Microsoft.Win32.RegistryView]::$View)
+        $key=$base.OpenSubKey('SYSTEM\CurrentControlSet\Services\VBoxSDS',$false)
+        if ($null -eq $key) { $facts.query='missing';return $facts }
+        $image=$key.GetValue('ImagePath',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $account=$key.GetValue('ObjectName',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $facts.type=$key.GetValue('Type');$facts.start=$key.GetValue('Start')
+        if ($image -is [string]) { $facts.image=if ([string]::Equals($image.Trim().Trim('"'),$ExpectedImage,[StringComparison]::OrdinalIgnoreCase)) {'matches_requested'}else{'different'} }
+        if ($account -is [string]) { $facts.account=if ([string]::Equals($account,'LocalSystem',[StringComparison]::OrdinalIgnoreCase)) {'LocalSystem'}else{'different'} }
+        $facts.query='observed'
+    } catch { $facts.query='error';$facts.hresult=$_.Exception.HResult }
+    finally { try {if($null -ne $key){$key.Dispose()}}catch{$facts.query='error'};try{if($null -ne $base){$base.Dispose()}}catch{$facts.query='error'} }
+    return $facts
+}
+function Get-SdsFailureProcessFacts([string]$ExpectedImage) {
+    $facts=@{query='unknown';truncated=$false;rows=@()};$processes=@()
+    try {
+        $processes=@([Diagnostics.Process]::GetProcessesByName('VBoxSDS'))
+        $facts.truncated=$processes.Count -gt 4;$rows=[Collections.Generic.List[object]]::new()
+        for($i=0;$i -lt [Math]::Min(4,$processes.Count);$i++){
+            $row=@{pid=$null;created=$null;image='unknown'};$process=$processes[$i]
+            try{$row.pid=$process.Id}catch{}
+            try{$row.created=$process.StartTime.ToUniversalTime().ToFileTimeUtc()}catch{}
+            try{$image=$process.MainModule.FileName;$row.image=if([string]::Equals($image,$ExpectedImage,[StringComparison]::OrdinalIgnoreCase)){'matches_requested'}else{'different'}}catch{}
+            $rows.Add($row)
+        }
+        $facts.rows=$rows.ToArray();$facts.query='observed'
+    } catch { $facts.query='error' }
+    finally {foreach($process in $processes){try{$process.Dispose()}catch{$facts.query='error'}}}
+    return $facts
+}
+function ConvertTo-SdsFailureLines([hashtable]$Facts,[int]$Sample) {
+    function Number($Value,[long]$Min,[long]$Max) {
+        if (($Value -is [int] -or $Value -is [long]) -and $Value -ge $Min -and $Value -le $Max) { return ([long]$Value).ToString([Globalization.CultureInfo]::InvariantCulture) }
+        return 'unavailable'
+    }
+    function Token($Value,[string[]]$Allowed) {if($Value -is [string] -and $Value -cin $Allowed){return $Value};return 'unknown'}
+    if($Sample -lt 0 -or $Sample -gt 1){return}
+    $prefix='PVBOX_SDS_FAILURE_V1 authority=none sample='+$Sample+' utc_ticks='+(Number $Facts['utc'] 1 ([long]::MaxValue))
+    $service=$Facts['service'];if($service -isnot [hashtable]){$service=@{}}
+    "$prefix kind=scm query=$(Token $service['query'] @('observed','error')) state=$(Token $service['state'] @('stopped','running','startpending','stoppending','continuepending','pausepending','paused')) exception_hresult=$(Number $service['hresult'] ([int]::MinValue) ([int]::MaxValue))"
+    foreach($view in @('Registry32','Registry64')){
+        $registry=$Facts[$view];if($registry -isnot [hashtable]){$registry=@{}}
+        "$prefix kind=registry view=$view query=$(Token $registry['query'] @('observed','missing','error')) image=$(Token $registry['image'] @('matches_requested','different')) type=$(Number $registry['type'] ([int]::MinValue) ([int]::MaxValue)) start=$(Number $registry['start'] ([int]::MinValue) ([int]::MaxValue)) account=$(Token $registry['account'] @('LocalSystem','different')) exception_hresult=$(Number $registry['hresult'] ([int]::MinValue) ([int]::MaxValue))"
+    }
+    $process=$Facts['process'];if($process -isnot [hashtable]){$process=@{}}
+    $rows=$process['rows'];if($rows -isnot [object[]]){$rows=@()}
+    $truncated=if(($process['truncated'] -is [bool] -and $process['truncated']) -or $rows.Count -gt 4){'true'}else{'false'}
+    "$prefix kind=processes query=$(Token $process['query'] @('observed','error')) retained=$([Math]::Min(4,$rows.Count)) truncated=$truncated"
+    for($i=0;$i -lt [Math]::Min(4,$rows.Count);$i++){
+        $row=$rows[$i];if($row -isnot [hashtable]){$row=@{}}
+        "$prefix kind=process pid=$(Number $row['pid'] 1 ([int]::MaxValue)) created_filetime=$(Number $row['created'] 1 ([long]::MaxValue)) image=$(Token $row['image'] @('matches_requested','different'))"
+    }
+}
+function Write-SdsFailureDiagnostics([string]$ExpectedImage) {
+    # Two observations, not a retry loop; a later match cannot repair the gate.
+    # Reserve 2048 bytes for the unchanged V1 records: combined cap is 8192.
+    $total=0
+    for($sample=0;$sample -lt 2;$sample++){
+        try{
+            if($sample -gt 0){Start-Sleep -Milliseconds 200}
+            $facts=@{utc=[DateTime]::UtcNow.Ticks;service=@{};Registry32=@{};Registry64=@{};process=@{}}
+            try{$facts.service=Get-SdsFailureServiceFacts}catch{$facts.service=@{query='error'}}
+            foreach($view in @('Registry32','Registry64')){try{$facts[$view]=Get-SdsFailureRegistryFacts $view $ExpectedImage}catch{$facts[$view]=@{query='error'}}}
+            try{$facts.process=Get-SdsFailureProcessFacts $ExpectedImage}catch{$facts.process=@{query='error'}}
+            $lines=@(ConvertTo-SdsFailureLines $facts $sample)
+            if($lines.Count -gt 8){return}
+            foreach($line in $lines){
+                if($line -isnot [string] -or $line -cnotmatch '\APVBOX_SDS_FAILURE_V1 authority=none [a-zA-Z0-9_= -]+\z'){return}
+                $bytes=[Text.Encoding]::UTF8.GetByteCount($line+"`r`n")
+                if($bytes -gt 1024 -or $total+$bytes -gt 6144){return}
+                $total+=$bytes
+            }
+            foreach($line in $lines){try{[Console]::Out.Write($line+"`r`n")}catch{}}
+        }catch{}
+    }
+}
+
 # Loaded only from the exact embedded resource installed and hash-leased by
 # the parent helper. Never load the mutable portable-root helper assembly.
 function Initialize-ProtectedEffects {
@@ -396,10 +490,12 @@ try {
         } catch { }
         $sdsPreflight=$null; $sdsPreflightError=$null; $sds=$null; $sdsReadReturned=$false; $sdsReadError=$null
         $sdsIdentityDiffers=$null; $sdsIdentityError=$null
+        $sdsRegistrationEntered=$false;$sdsIdentityAccepted=$false
         try {
             try {
                 if (($sdsPreflight=Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) { throw 'SDS appeared before our explicit registration' }
             } catch { $sdsPreflightError=$_; throw }
+            $sdsRegistrationEntered=$true
             Run-Sds '--regservice' 'sds-register' $sdsFacts
             try {
                 $sds=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS' -ErrorAction Stop
@@ -409,6 +505,7 @@ try {
                 if (($sdsIdentityDiffers=(([string]$sds.ImagePath).Trim().Trim('"') -ine (Join-Path $app 'VBoxSDS.exe') -or
                     $sds.Type -ne 16 -or $sds.Start -ne 3 -or $sds.ObjectName -ne 'LocalSystem'))) { throw 'SDS registration identity differs' }
             } catch { $sdsIdentityError=$_; throw }
+            $sdsIdentityAccepted=$true
             # The final SDS effect is recorded independently BEFORE the final
             # prepared session receipt. A crash between registration and this marker
             # remains ambiguous and requires manual handling, not guessed cleanup.
@@ -420,6 +517,11 @@ try {
             [ordered]@{schema=1;portable_root=$root;protected_app=$app;controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();controller_image=$controllerImage;prepared=$true;source_commit=$env:GITHUB_SHA} |
                 ConvertTo-Json | Set-Content -LiteralPath (Join-Path $session 'session.json') -Encoding utf8
             Write-Host 'PRIVILEGED_PREPARED_WITHOUT_USER_PROFILE_EXECUTION'
+        } catch {
+            if($sdsRegistrationEntered -and -not $sdsIdentityAccepted){
+                try{Write-SdsFailureDiagnostics (Join-Path $app 'VBoxSDS.exe')}catch{}
+            }
+            throw
         } finally {
             # Only translate observations after the original marker/receipt or
             # refusal. Optional reporting cannot replace a propagating error.

@@ -35,10 +35,12 @@ class SdsDiagnosticSourceContracts(unittest.TestCase):
 
     def test_diagnostics_reuse_only_original_prepare_observations(self):
         worker = self.source("scripts/privileged_session_worker.ps1")
-        # A new diagnostic registry/SCM/process query in these regions fails
-        # even if an exception guard would hide it at runtime.
+        # The original V1 renderer and effect path still reuse gate facts.
+        # The separately tested failure-only collector is deliberately excluded.
         diagnostic_region = self.unique_region(
-            worker, "function ConvertTo-SdsDiagnosticLines", "\n    if ($Action -eq 'Prepare') {")
+            worker, "function ConvertTo-SdsDiagnosticLines", "# Failure-only, fixed read-only observations.")
+        diagnostic_region += self.unique_region(
+            worker, "function Initialize-ProtectedEffects", "\n    if ($Action -eq 'Prepare') {")
         prepare = self.unique_region(worker, "\n    if ($Action -eq 'Prepare') {", "\n    } else {")
         code = re.sub(r"(?m)^\s*#.*$", "", diagnostic_region + prepare)
         for command in ("Get-Service", "Get-CimInstance", "Get-WmiObject", "Get-Process",
