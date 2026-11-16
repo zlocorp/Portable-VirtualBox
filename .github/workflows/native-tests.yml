@@ -77,6 +77,12 @@ on:
       - tests/windows/ServiceIdentityObservationTests.ps1
       - tests/windows/ServiceIdentityNativeTests.cs
       - tests/windows/check_service_identity_native.ps1
+      - tests/windows/GuestConsoleObservation.cs
+      - tests/windows/GuestConsoleObservationTests.cs
+      - tests/windows/GuestConsoleReadiness.ps1
+      - tests/windows/check_guest_console_readiness.ps1
+      - tests/fixtures/guest-console/**
+      - tests/test_guest_console_readiness.py
       - tests/test_cleanup_preflight_admission.py
       - tests/windows/check_cleanup_preflight_admission.ps1
       - scripts/vbox_sup_package_identity.ps1
@@ -126,6 +132,9 @@ jobs:
       - name: Execute locale-independent OEM INF identity contracts (no system effects)
         shell: powershell
         run: ./tests/windows/check_driver_package_identity.ps1
+      - name: Exact guest console readiness observations (no VM or system effects)
+        shell: powershell
+        run: ./tests/windows/check_guest_console_readiness.ps1
       - name: Deferred cleanup admission and retry refusal (mocked system boundary)
         shell: powershell
         run: ./tests/windows/check_cleanup_preflight_admission.ps1

@@ -25,6 +25,7 @@ if ($GuestIso) {
     }
 }
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+if ($GuestIso) { . (Join-Path $PSScriptRoot 'GuestConsoleReadiness.ps1') }
 $out=Join-Path $env:RUNNER_TEMP 'helper-boundary-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $store=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Experiment'
@@ -205,22 +206,10 @@ try {
             if ($running -notmatch '(?m)^VMState="running"') { throw 'Independent guest state was not running' }
             if ($GuestIso) {
                 if ($running -notmatch '(?m)^longmode="on"') { throw 'Medium Linux guest long mode was not enabled' }
-                Start-Sleep -Seconds 25
-                $null=Oracle ('controlvm '+$uuid+' keyboardputstring root') 'protected-guest-login'
-                $null=Oracle ('controlvm '+$uuid+' keyboardputscancode 1c 9c') 'protected-guest-login-enter'
-                Start-Sleep -Seconds 3
                 $marker='PVBOX_PROTECTED_MEDIUM_GUEST_WRITE_20261027'
-                $guestCommand='echo '+$marker+' | dd of=/dev/sda bs=512 seek=2048 conv=notrunc; sync'
-                $null=Oracle ('controlvm '+$uuid+' keyboardputstring "'+$guestCommand+'"') 'protected-guest-write'
-                $null=Oracle ('controlvm '+$uuid+' keyboardputscancode 1c 9c') 'protected-guest-write-enter'
-                Start-Sleep -Seconds 8
-                $screen=Join-Path $out 'protected-guest-disk-command.png'
-                $null=Oracle ('controlvm '+$uuid+' screenshotpng "'+$screen+'"') 'protected-guest-screen'
-                $bytes=[IO.File]::ReadAllBytes($screen)
-                if ($bytes.Length -lt 1024 -or
-                    [BitConverter]::ToString($bytes,0,8) -ne '89-50-4E-47-0D-0A-1A-0A') {
-                    throw 'Protected medium guest did not render a valid screen'
-                }
+                $guestWriteEvidence=Invoke-ObservedGuestWrite $uuid $out $marker
+                # Exact standalone fresh ACK + shell observed, not a valid-PNG claim.
+                # The later offline raw sector readback remains mandatory.
                 $proof.guest_disk_write_checked=$true
             }
             $guests=@(Get-Process -Name VBoxHeadless -ErrorAction Stop)

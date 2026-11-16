@@ -87,8 +87,8 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('alpine-virt-3.24.3-x86_64.iso', workflow)
         self.assertIn('Get-FileHash -LiteralPath $iso -Algorithm SHA256', workflow)
         self.assertIn('-MainLauncher -GuestIso $env:MANAGER_GUEST_ISO', workflow)
-        for phrase in ('attach-guest-iso', '--boot1 dvd', 'guest-boot-alpine.png',
-                       'screenshotpng', 'guest_screen_capture=$true', 'GuestIsoSha256'):
+        for phrase in ('attach-guest-iso', '--boot1 dvd', 'Invoke-ObservedGuestWrite',
+                       'GuestConsoleReadiness.ps1', 'guest_screen_capture=$true', 'GuestIsoSha256'):
             self.assertIn(phrase, fixture)
         self.assertIn('guest_os_booted=$false', fixture)
         self.assertIn("'Linux_64'", fixture)
@@ -97,11 +97,13 @@ class MainManagerWiring(unittest.TestCase):
         self.assertIn('guest_64bit_cpu_configured=$true', fixture)
         self.assertIn('closemedium dvd',fixture)
         self.assertIn('eject-external-ci-iso',fixture)
+        observed=(R/'tests/windows/GuestConsoleReadiness.ps1').read_text()
         for expected in ('keyboardputstring root', 'keyboardputscancode 1c 9c',
-                         'dd of=/dev/sda bs=512 seek=2048 conv=notrunc',
-                         'clonemedium disk', 'guest_disk_io_confirmed=$true',
+                         'dd of=/dev/sda bs=512 seek=2048 conv=notrunc', 'screenshotpng'):
+            self.assertIn(expected, observed)
+        for expected in ('clonemedium disk', 'guest_disk_io_confirmed=$true',
                          'No guest-written VDI sector marker',
-                         'guest-disk-command.png'):
+                         'Invoke-ObservedGuestWrite'):
             self.assertIn(expected, fixture)
         self.assertIn('Remove-Item -LiteralPath $raw', fixture)
         self.assertIn('retention-days: 7', workflow)

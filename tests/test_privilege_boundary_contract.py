@@ -208,7 +208,7 @@ class PrivilegeBoundaryContract(unittest.TestCase):
         fixture=self.text('tests/windows/check_helper_boundary.ps1')
         for marker in ('GuestIsoSha256','guest_disk_survived_teardown=$false',
                        'PVBOX_PROTECTED_MEDIUM_GUEST_WRITE_20261027',
-                       'keyboardputstring', 'clonemedium disk',
+                       'Invoke-ObservedGuestWrite', 'clonemedium disk',
                        'guest_snapshot_preserved=$true', 'Remove-Item -LiteralPath $raw'):
             self.assertIn(marker,fixture)
         self.assertIn('GuestIsoSha256', workflow)

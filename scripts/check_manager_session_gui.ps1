@@ -27,6 +27,7 @@ if ($GuestIso) {
         throw 'Guest ISO missing, outside disposable runner or SHA-256 mismatch'
     }
 }
+if ($GuestIso) { . (Join-Path $PSScriptRoot '../tests/windows/GuestConsoleReadiness.ps1') }
 $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $exe=Join-Path $root $(if($MainLauncher){'Portable-VirtualBox.exe'}else{'Portable-VirtualBox-Session-Test.exe'})
@@ -532,31 +533,11 @@ try {
             throw 'Guest CPU long mode is not enabled: refusing false x86-64 boot evidence'
         }
         $proof.guest_64bit_cpu_configured=$true
-        # Oracle screenshotpng captures the *guest display*. It is visual
-        # evidence only, not proof of completed Linux boot or guest disk I/O.
-        Start-Sleep -Seconds 25
-        $screenshot=Join-Path $out 'guest-boot-alpine.png'
-        if (Test-Path -LiteralPath $screenshot) { throw 'Guest screenshot pre-exists' }
-        $null=Oracle ('controlvm '+$uuid+' screenshotpng "'+$screenshot+'"') 'alpine-guest-screen'
-        $png=[IO.File]::ReadAllBytes($screenshot)
-        if ($png.Length -lt 1024 -or [BitConverter]::ToString($png,0,8) -ne '89-50-4E-47-0D-0A-1A-0A') {
-            throw 'Guest display screenshot is not a nonempty PNG'
-        }
-        $proof.guest_screen_capture=$true
-        # Alpine's ISO console uses root without a password. Send all keys
-        # through Oracle's supported virtual keyboard to the guest, never a
-        # host shell. The marker can only be accepted from raw disk readback.
+        # Test-only observed login/shell/ACK gates; never infer boot from a PNG.
         $marker='PVBOX_GUEST_WRITE_OK_20261027'
-        $guestCommand='echo '+$marker+' | dd of=/dev/sda bs=512 seek=2048 conv=notrunc; sync'
-        $null=Oracle ('controlvm '+$uuid+' keyboardputstring root') 'guest-root-login'
-        $null=Oracle ('controlvm '+$uuid+' keyboardputscancode 1c 9c') 'guest-login-enter'
-        Start-Sleep -Seconds 3
-        $null=Oracle ('controlvm '+$uuid+' keyboardputstring "'+$guestCommand+'"') 'guest-disk-write-command'
-        $null=Oracle ('controlvm '+$uuid+' keyboardputscancode 1c 9c') 'guest-command-enter'
-        Start-Sleep -Seconds 8
-        $guestCommandScreen=Join-Path $out 'guest-disk-command.png'
-        $null=Oracle ('controlvm '+$uuid+' screenshotpng "'+$guestCommandScreen+'"') 'guest-write-screen'
-        Write-Host 'Guest disk write requested via virtual keyboard; not yet trusted until offline sector readback'
+        $guestWriteEvidence=Invoke-ObservedGuestWrite $uuid $out $marker
+        $proof.guest_screen_capture=$true
+        Write-Host 'Guest acknowledged disk write; offline sector readback still mandatory'
     }
     if ($SeparatePrivileges) {
         $guest=Get-Process -Name VBoxHeadless -ErrorAction Stop
