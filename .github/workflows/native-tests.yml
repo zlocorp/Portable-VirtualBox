@@ -71,6 +71,12 @@ on:
       - scripts/vbox_sup_cleanup.ps1
       - tests/windows/check_cleanup_report_finalization.ps1
       - tests/test_cleanup_report_finalization.py
+      - tests/test_service_identity_protocol.py
+      - tests/windows/ServiceIdentityObservationModel.cs
+      - tests/windows/ServiceIdentityObservationTests.cs
+      - tests/windows/ServiceIdentityObservationTests.ps1
+      - tests/windows/ServiceIdentityNativeTests.cs
+      - tests/windows/check_service_identity_native.ps1
       - tests/test_cleanup_preflight_admission.py
       - tests/windows/check_cleanup_preflight_admission.ps1
       - scripts/vbox_sup_package_identity.ps1
@@ -270,3 +276,17 @@ jobs:
       - name: Real production owner with closed harmless PowerShell fixtures
         shell: powershell
         run: ./tests/windows/check_fixed_effect_worker_native.ps1
+
+  service-identity-characterization:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Managed observation model (no native effects or production authority)
+        shell: powershell
+        run: ./tests/windows/ServiceIdentityObservationTests.ps1
+      - name: Disposable SCM handle lifetime (stopped GUID fixture services only)
+        shell: powershell
+        run: ./tests/windows/check_service_identity_native.ps1
