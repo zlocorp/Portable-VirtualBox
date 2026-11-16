@@ -132,6 +132,54 @@ Func _MSW_MayProcessClose($worker)
     Return $worker["handle"] = 0
 EndFunc
 
+; Reuse the existing read-only snapshot. Absence is not ownership or rollback.
+Func _MSW_ServicePresence(ByRef $rows, $name)
+    If $name <> "VBoxSup" And $name <> "VBoxSDS" Then Return "UNKNOWN"
+    If Not IsArray($rows) Then Return "UNKNOWN"
+    If UBound($rows, 0) <> 1 Or UBound($rows) > 32 Then Return "UNKNOWN"
+    Local $found = 0, $result = "UNKNOWN"
+    For $row In $rows
+        If Not IsMap($row) Then Return "UNKNOWN"
+        If Not MapExists($row, "name") Then Return "UNKNOWN"
+        If Not IsString($row["name"]) Then Return "UNKNOWN"
+        If $row["name"] == $name Then
+            $found += 1
+            For $key In StringSplit("kind|status|stage", "|", 2)
+                If Not MapExists($row, $key) Then Return "UNKNOWN"
+                If Not IsString($row[$key]) Then Return "UNKNOWN"
+            Next
+            Local $state = _PortableServiceState($row)
+            If $state == "ABSENT" Then
+                $result = "ABSENT"
+            ElseIf $state <> "UNKNOWN" Then
+                $result = "PRESENT"
+            EndIf
+        EndIf
+    Next
+    If $found <> 1 Then Return "UNKNOWN"
+    Return $result
+EndFunc
+
+Func _MSW_FailedPrepareHint($s, ByRef $rows, $ageMs = -1)
+    If Not _MS_FailedPreparation($s) Then Return ""
+    Local $ru = _LI_Language() == "ru"
+    Local $sup = _MSW_ServicePresence($rows, "VBoxSup"), $sds = _MSW_ServicePresence($rows, "VBoxSDS")
+    If Not IsNumber($ageMs) Or $ageMs < 0 Or $ageMs > 2500 Then
+        $sup = "UNKNOWN"
+        $sds = "UNKNOWN"
+    EndIf
+    If $ru Then
+        $sup = ($sup == "ABSENT" ? "не обнаружена" : ($sup == "PRESENT" ? "обнаружена" : "неизвестно"))
+        $sds = ($sds == "ABSENT" ? "не обнаружена" : ($sds == "PRESENT" ? "обнаружена" : "неизвестно"))
+        Return "Подготовка не завершена. Последняя проверка служб Windows: VBoxSup: " & $sup & "; VBoxSDS: " & $sds & "." & @CRLF & _
+            "Это не подтверждение владения или отката. Не повторяйте регистрацию и не удаляйте квитанции. Сохраните эту сборку и журнал; восстановление может быть отклонено."
+    EndIf
+    $sup = ($sup == "ABSENT" ? "not found" : ($sup == "PRESENT" ? "observed" : "unknown"))
+    $sds = ($sds == "ABSENT" ? "not found" : ($sds == "PRESENT" ? "observed" : "unknown"))
+    Return "Preparation incomplete. Last Windows service check: VBoxSup " & $sup & "; VBoxSDS " & $sds & "." & @CRLF & _
+        "Observation does not establish ownership or rollback. Do not repeat registration or delete receipts. Keep this build and its log; recovery may be refused."
+EndFunc
+
 Func _MSW_Show($root, $workspace)
     Local $h = GUICreate(_MSW_Text("title"), 760, 570)
     Local $warning = GUICtrlCreateLabel(_MSW_Text("warning"), 20, 16, 720, 48)
@@ -217,6 +265,8 @@ Func _MSW_Show($root, $workspace)
         EndIf
         Local $retryCleanup = _MS_CleanupRetryAction($s) <> ""
         Local $display = $s["state"] & @CRLF & _MSW_Text($s["state"]) & @CRLF & _LI_Reason($s["detail"])
+        Local $prepareHint = _MSW_FailedPrepareHint($s, $serviceRows, TimerDiff($serviceTick))
+        If $prepareHint <> "" Then $display = $s["state"] & @CRLF & $prepareHint & @CRLF & _LI_Reason($s["detail"])
         If $retryCleanup Then $display &= @CRLF & _MSW_Text("retry_cleanup_hint")
         If $last <> $display Then
             GUICtrlSetData($status, $display)

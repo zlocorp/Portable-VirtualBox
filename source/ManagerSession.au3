@@ -54,6 +54,23 @@ Func _MS_CleanupFailureAction($separated, $phase, $exitCode)
     Return ""
 EndFunc
 
+; Presentation eligibility only; never a cleanup or startup permission.
+Func _MS_FailedPreparation($s)
+    If Not IsMap($s) Then Return False
+    For $key In StringSplit("state|failed_worker_phase|worker", "|", 2)
+        If Not MapExists($s, $key) Then Return False
+    Next
+    If Not IsString($s["state"]) Or Not IsString($s["failed_worker_phase"]) Then Return False
+    If $s["state"] <> "FAILED" Then Return False
+    If $s["failed_worker_phase"] <> "PREPARING" And $s["failed_worker_phase"] <> "CONSENT_PREPARE" Then Return False
+    Local $worker = $s["worker"]
+    If Not IsMap($worker) Then Return False
+    For $key In StringSplit("handle|status|exit_code", "|", 2)
+        If Not MapExists($worker, $key) Then Return False
+    Next
+    Return IsInt($worker["handle"]) And $worker["handle"] = 0 And IsString($worker["status"]) And $worker["status"] == "EXITED" And IsInt($worker["exit_code"]) And $worker["exit_code"] <> 0 And $worker["exit_code"] <> 1223
+EndFunc
+
 Func _MS_CleanupRetryAction($s)
     If Not IsMap($s) Then Return ""
     For $key In StringSplit("state|separated|mutex|cycle|cleanup_retry_action|worker|owned|former_pid", "|", 2)
@@ -160,6 +177,7 @@ Func _MS_New($root, $workspace)
     $s["guests"] = 0
     $s["uncertain"] = 0
     $s["worker_uncertain"] = 0
+    $s["failed_worker_phase"] = ""
     $s["cleanup_retry_action"] = ""
     $s["cleanup_recheck_action"] = ""
     $s["rebind"] = _PVR_New("NONE", "not-requested")
@@ -288,6 +306,7 @@ EndFunc
 Func _MS_Worker(ByRef $s, $action)
     If $action <> "Prepare" And $action <> "Finish" And $action <> "Recover" Then Return False
     $s["worker_uncertain"] = 0
+    $s["failed_worker_phase"] = ""
     If $s["separated"] Then
         Local $privileged = _MP_New()
         If $action == "Recover" Then
@@ -694,6 +713,7 @@ Func _MS_Tick(ByRef $s)
             Return
         EndIf
         If $worker["exit_code"] <> 0 Then
+            $s["failed_worker_phase"] = $state
             $s["cleanup_retry_action"] = _MS_CleanupFailureAction($s["separated"], $state, $worker["exit_code"])
             _MS_State($s, "FAILED", "worker-failed-no-guessed-cleanup-exit-" & $worker["exit_code"])
             Return
