@@ -26,6 +26,8 @@ if ($GuestIso) {
 }
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 if ($GuestIso) { . (Join-Path $PSScriptRoot 'GuestConsoleReadiness.ps1') }
+. (Join-Path $PSScriptRoot 'FixtureVmLogEvidence.ps1')
+$fixtureVmLogBinding=$null
 $out=Join-Path $env:RUNNER_TEMP 'helper-boundary-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $store=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'PortableVirtualBox.Experiment'
@@ -178,8 +180,10 @@ try {
         } until ($manager.MainWindowHandle -ne [IntPtr]::Zero)
         if ($cycle -eq 2) {
             $guestType=if ($GuestIso) { 'Linux_64' } else { 'Other' }
+            $fixtureVmLogBinding=New-FixtureVmLogBinding $root 'pvbox_helper_boundary_fixture' $env:RUNNER_TEMP
             $created=Oracle ('createvm --name pvbox_helper_boundary_fixture --ostype '+$guestType+' --register') 'create-vm'
             if ($created -notmatch '(?im)^UUID:\s*([0-9a-f-]{36})\s*$') { throw 'Missing fixture UUID' };$uuid=$Matches[1]
+            $fixtureVmLogBinding.uuid=$uuid
             $memory=if ($GuestIso) { 256 } else { 128 }
             $config='modifyvm '+$uuid+' --memory '+$memory+' --nic1 none --audio-driver none'
             if ($GuestIso) { $config+=' --x86-long-mode on --boot1 dvd --boot2 disk --boot3 none --boot4 none' }
@@ -326,6 +330,12 @@ try {
     Wait-Exit $front $(if($MainLauncher){2}else{0}) 'frontend close' 10
     Write-Host ('PASS: main/medium helper + protected Oracle guest + two clean sessions; Linux VDI write/readback=' + $proof.guest_disk_survived_teardown + '; UAC NOT VERIFIED')
 } catch { $proof.error=$_.Exception.Message;throw } finally {
+    # Diagnostic export is independent of fixture success/failure. Never mask
+    # the original exception or turn a failed start into a successful fixture.
+    try {
+        $vmLogEvidence=Export-FixtureVmLog $fixtureVmLogBinding $out
+        $proof['vm_log_export_status']=$vmLogEvidence.status
+    } catch { $proof['vm_log_export_status']='export_error';Write-Warning 'Fixture VM log export failed; primary outcome unchanged' }
     $proof | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'helper-boundary-proof.json') -Encoding utf8
     if ($null -ne $gateHost) { $gateHost.Dispose() }
     if ($null -ne $front) { $front.Dispose() };if ($null -ne $manager) { $manager.Dispose() };if ($null -ne $guest) { $guest.Dispose() }

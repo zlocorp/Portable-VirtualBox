@@ -77,6 +77,9 @@ on:
       - tests/windows/ServiceIdentityObservationTests.ps1
       - tests/windows/ServiceIdentityNativeTests.cs
       - tests/windows/check_service_identity_native.ps1
+      - tests/windows/FixtureVmLogEvidence.ps1
+      - tests/windows/check_fixture_vm_log_export.ps1
+      - tests/test_fixture_vm_log_export.py
       - tests/windows/GuestConsoleObservation.cs
       - tests/windows/GuestConsoleObservationTests.cs
       - tests/windows/GuestConsoleReadiness.ps1
@@ -133,6 +136,9 @@ jobs:
       - name: Execute locale-independent OEM INF identity contracts (no system effects)
         shell: powershell
         run: ./tests/windows/check_driver_package_identity.ps1
+      - name: Bounded exact-fixture VM log export (no VM or system effects)
+        shell: powershell
+        run: ./tests/windows/check_fixture_vm_log_export.ps1
       - name: Exact guest console readiness observations (no VM or system effects)
         shell: powershell
         run: ./tests/windows/check_guest_console_readiness.ps1

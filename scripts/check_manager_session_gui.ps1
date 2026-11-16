@@ -28,6 +28,8 @@ if ($GuestIso) {
     }
 }
 if ($GuestIso) { . (Join-Path $PSScriptRoot '../tests/windows/GuestConsoleReadiness.ps1') }
+. (Join-Path $PSScriptRoot '../tests/windows/FixtureVmLogEvidence.ps1')
+$fixtureVmLogBinding=$null
 $out=Join-Path $env:RUNNER_TEMP 'manager-gui-proof'
 New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $exe=Join-Path $root $(if($MainLauncher){'Portable-VirtualBox.exe'}else{'Portable-VirtualBox-Session-Test.exe'})
@@ -503,9 +505,11 @@ try {
     if (-not $other.WaitForExit(10000) -or $other.ExitCode -ne $(if($MainLauncher){2}else{0})) { throw 'Refused controller did not exit normally' }
     $proof.second_controller_refused=$true
     $guestType=if ($GuestIso) { 'Linux_64' } else { 'Other' }
+    $fixtureVmLogBinding=New-FixtureVmLogBinding $root 'pvbox_manager_gui_fixture' $env:RUNNER_TEMP
     $created=Oracle ('createvm --name pvbox_manager_gui_fixture --ostype '+$guestType+' --register') 'create'
     if ($created -notmatch '(?im)^UUID:\s*([0-9a-f-]{36})\s*$') { throw 'No exact fixture UUID' }
     $uuid=$Matches[1]
+    $fixtureVmLogBinding.uuid=$uuid
     $null=Oracle ('modifyvm '+$uuid+' --memory 128 --nic1 none --audio-driver none') 'configure'
     # Create a real portable VDI under the disposable fixture only.
     $disk=Join-Path $root 'data\Machines\pvbox_manager_gui_fixture\portable-fixture.vdi'
@@ -885,6 +889,12 @@ try {
     } catch { Write-Warning ('Could not capture failed controller UI: '+$_.Exception.Message) }
     throw
 } finally {
+    # Diagnostic export is independent of fixture success/failure. Never mask
+    # the original exception or turn a failed start into a successful fixture.
+    try {
+        $vmLogEvidence=Export-FixtureVmLog $fixtureVmLogBinding $out
+        $proof['vm_log_export_status']=$vmLogEvidence.status
+    } catch { $proof['vm_log_export_status']='export_error';Write-Warning 'Fixture VM log export failed; primary outcome unchanged' }
     $proof | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $out 'manager-gui-proof.json') -Encoding utf8
     if ($null -ne $other) { $other.Dispose() }
     if ($null -ne $front) { $front.Dispose() }
