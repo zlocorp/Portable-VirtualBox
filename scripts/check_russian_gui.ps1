@@ -17,6 +17,34 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+// Last bounded observation only; diagnostics cannot authorize or retry UI actions.
+public static class LocaleProbeEvidence {
+ public static string Phase="Await";
+ public static int ExpectedPid,Index=-1;
+ public static long Owner,ProcessCreatedFiletime;
+ public static int Width,Height;
+ public static Dictionary<string,object> Last=new Dictionary<string,object>();
+ static string Limited(string s,int max) {
+  if(s==null)return "";var b=new StringBuilder();
+  foreach(char c in s){if(b.Length>=max)break;b.Append(Char.IsControl(c)?' ':c);}return b.ToString();
+ }
+ public static void Begin(long window,uint observedPid,string cls,string caption,uint message) {
+  // WM_GETTEXT precedes rectangle observation, including each Find loop pass.
+  if(message==13){Width=0;Height=0;}
+  Last=new Dictionary<string,object>{{"schema",1},{"authority","none"},
+   {"phase",Phase=="Await"||Phase=="Capture"||Phase=="Click"?Phase:"unknown"},
+   {"expected_pid",ExpectedPid},{"observed_pid",observedPid},{"owner_hwnd",Owner},{"hwnd",window},
+   {"process_created_filetime",ProcessCreatedFiletime},{"width",Width},{"height",Height},
+   {"index",Index},{"class",Limited(cls,64)},{"caption",Limited(caption,128)},
+   {"message",message},{"completed",false},{"timeout_ms",250},{"flags",3}};
+ }
+ public static void End(long result,ulong messageResult,int error,long elapsedTicks) {
+  Last["completed"]=true;Last["api_result"]=result;Last["message_result"]=messageResult;
+  Last["last_error"]=error;Last["elapsed_stopwatch_ticks"]=Math.Max(0,elapsedTicks);
+  Last["stopwatch_frequency"]=System.Diagnostics.Stopwatch.Frequency;
+  Last["transport"]=result!=0?"success":(error==0?"failure_unspecified":"failure_with_error");
+ }
+}
 public static class LocaleWindow {
  public delegate bool EnumProc(IntPtr h,IntPtr p);
  [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left,Top,Right,Bottom; }
@@ -26,8 +54,8 @@ public static class LocaleWindow {
  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);
  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassNameW(IntPtr h,StringBuilder s,int n);
- [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr SendMessageTimeoutW(IntPtr h,uint m,UIntPtr w,StringBuilder s,uint f,uint t,out UIntPtr r);
- [DllImport("user32.dll")] static extern IntPtr SendMessageTimeoutW(IntPtr h,uint m,UIntPtr w,IntPtr p,uint f,uint t,out UIntPtr r);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr SendMessageTimeoutW(IntPtr h,uint m,UIntPtr w,StringBuilder s,uint f,uint t,out UIntPtr r);
+ [DllImport("user32.dll",SetLastError=true)] static extern IntPtr SendMessageTimeoutW(IntPtr h,uint m,UIntPtr w,IntPtr p,uint f,uint t,out UIntPtr r);
  [DllImport("user32.dll")] public static extern bool PostMessageW(IntPtr h,uint m,IntPtr w,IntPtr p);
  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out Rect r);
  [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h,out Rect r);
@@ -38,28 +66,45 @@ public static class LocaleWindow {
  [DllImport("gdi32.dll")] static extern IntPtr GetStockObject(int i);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int DrawTextW(IntPtr dc,string t,int n,ref Rect r,uint flags);
  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h,IntPtr dc,uint flags);
+ [DllImport("kernel32.dll")] static extern void SetLastError(uint error);
  public static string Text(IntPtr h) {
   var s=new StringBuilder(4096);UIntPtr r;
-  if(SendMessageTimeoutW(h,13,(UIntPtr)4096,s,3,250,out r)==IntPtr.Zero) throw new Exception("Window text unavailable");
+  uint pid;GetWindowThreadProcessId(h,out pid);
+  LocaleProbeEvidence.Begin(h.ToInt64(),pid,Class(h),"",13);
+  long start=System.Diagnostics.Stopwatch.GetTimestamp();SetLastError(0);
+  IntPtr result=SendMessageTimeoutW(h,13,(UIntPtr)4096,s,3,250,out r);
+  int error=Marshal.GetLastWin32Error();long end=System.Diagnostics.Stopwatch.GetTimestamp();
+  LocaleProbeEvidence.End(result.ToInt64(),r.ToUInt64(),error,end-start);
+  if(result==IntPtr.Zero) throw new Exception("Window text unavailable");
   return s.ToString();
  }
  static string Class(IntPtr h) {var s=new StringBuilder(256);GetClassNameW(h,s,256);return s.ToString();}
  public static IntPtr Find(int pid,string title) {
   IntPtr found=IntPtr.Zero;int count=0;
   EnumWindows((h,p)=>{uint id;GetWindowThreadProcessId(h,out id);
-   if(id==pid && IsWindowVisible(h) && Class(h)=="AutoIt v3 GUI" && Text(h)==title) {found=h;count++;}
+   if(id==pid && IsWindowVisible(h) && Class(h)=="AutoIt v3 GUI") {
+    LocaleProbeEvidence.Owner=h.ToInt64();LocaleProbeEvidence.Index=-1;
+    if(Text(h)==title) {found=h;count++;}
+   }
    return true;},IntPtr.Zero);return count==1?found:IntPtr.Zero;
  }
  public static Control[] Controls(IntPtr owner,int pid) {
-  var rows=new List<Control>();
+  var rows=new List<Control>();LocaleProbeEvidence.ExpectedPid=pid;LocaleProbeEvidence.Owner=owner.ToInt64();LocaleProbeEvidence.Index=-1;
   EnumChildWindows(owner,(h,p)=>{
    if(rows.Count>=128) throw new Exception("Control count exceeds bound");
    uint id;GetWindowThreadProcessId(h,out id);if(id!=pid || !IsWindowVisible(h)) return true;
+   LocaleProbeEvidence.Index=rows.Count;LocaleProbeEvidence.Width=0;LocaleProbeEvidence.Height=0;
    var c=new Control{Handle=h,Class=Class(h),Text=Text(h),Fits=true};Rect r;
    if(!GetClientRect(h,out r)) throw new Exception("Control rectangle unavailable");
    c.Width=r.Right-r.Left;c.Height=r.Bottom-r.Top;
+   LocaleProbeEvidence.Width=c.Width;LocaleProbeEvidence.Height=c.Height;
    if(c.Class=="Button" && c.Text.Length>0) {
-    UIntPtr value;if(SendMessageTimeoutW(h,0x31,UIntPtr.Zero,IntPtr.Zero,3,250,out value)==IntPtr.Zero) throw new Exception("Control font unavailable");
+    LocaleProbeEvidence.Begin(h.ToInt64(),id,c.Class,c.Text,0x31);
+    UIntPtr value;long start=System.Diagnostics.Stopwatch.GetTimestamp();SetLastError(0);
+    IntPtr result=SendMessageTimeoutW(h,0x31,UIntPtr.Zero,IntPtr.Zero,3,250,out value);
+    int error=Marshal.GetLastWin32Error();long end=System.Diagnostics.Stopwatch.GetTimestamp();
+    LocaleProbeEvidence.End(result.ToInt64(),value.ToUInt64(),error,end-start);
+    if(result==IntPtr.Zero) throw new Exception("Control font unavailable");
     IntPtr font=new IntPtr(unchecked((long)value.ToUInt64()));if(font==IntPtr.Zero) font=GetStockObject(17);
     IntPtr dc=GetDC(h);if(dc==IntPtr.Zero) throw new Exception("Control device context unavailable");
     IntPtr old=SelectObject(dc,font);
@@ -78,6 +123,9 @@ public static class LocaleWindow {
 }
 '@
 function Await-View([Diagnostics.Process]$Process,[string]$Title,[string]$ExpectedHint) {
+    [LocaleProbeEvidence]::Phase="Await"
+    [LocaleProbeEvidence]::ExpectedPid=$Process.Id
+    [LocaleProbeEvidence]::Owner=0;[LocaleProbeEvidence]::Index=-1
     $deadline=[DateTime]::UtcNow.AddSeconds(20)
     do {
         if($Process.HasExited){throw 'Launcher exited before localized view'}
@@ -91,6 +139,7 @@ function Await-View([Diagnostics.Process]$Process,[string]$Title,[string]$Expect
     throw "Localized view not observed: $Title"
 }
 function Capture-View([Diagnostics.Process]$Process,[IntPtr]$Window,[string]$Label,[string[]]$Captions) {
+    [LocaleProbeEvidence]::Phase="Capture"
     $rows=[LocaleWindow]::Controls($Window,$Process.Id)
     foreach($caption in $Captions){
         if(@($rows | Where-Object {$_.Class -eq 'Button' -and $_.Text -ceq $caption}).Count -ne 1){throw "Missing exact localized button: $caption"}
@@ -110,13 +159,26 @@ function Capture-View([Diagnostics.Process]$Process,[IntPtr]$Window,[string]$Lab
     if(@($rows | Where-Object {-not $_.Fits}).Count -gt 0){throw "Caption exceeds its actual control in $Label; see evidence JSON/PNG"}
 }
 function Click-Exact([Diagnostics.Process]$Process,[IntPtr]$Window,[string]$Caption){
+    [LocaleProbeEvidence]::Phase="Click"
     $matches=@([LocaleWindow]::Controls($Window,$Process.Id) | Where-Object {$_.Class -eq 'Button' -and $_.Text -ceq $Caption})
     if($matches.Count -ne 1 -or -not [LocaleWindow]::PostMessageW($matches[0].Handle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero)){throw "Could not select language: $Caption"}
 }
-$process=$null;$window=[IntPtr]::Zero
+function Write-LocaleFailure([string]$Directory,[string]$FailureType) {
+    try {
+        $type=if($FailureType -cmatch '\A[A-Za-z0-9_.+]{1,128}\z'){$FailureType}else{'unknown'}
+        $phase=if([LocaleProbeEvidence]::Phase -cin @('Await','Capture','Click')){[LocaleProbeEvidence]::Phase}else{'unknown'}
+        $record=@{schema=1;authority='none';failure_kind='observation_or_gate_failure';failure_type=$type;failure_phase=$phase;last_observation=[LocaleProbeEvidence]::Last}
+        $json=$record | ConvertTo-Json -Depth 4 -Compress
+        $bytes=[Text.UTF8Encoding]::new($false,$true).GetBytes($json)
+        if($bytes.Length -gt 8192){return}
+        [IO.File]::WriteAllBytes((Join-Path $Directory 'failure.json'),$bytes)
+    }catch{} # Evidence write failures must never mask the original gate failure.
+}
+$process=$null;$window=[IntPtr]::Zero;$failed=$false
 try{
     $process=Start-Process -FilePath $exe -ArgumentList '--lang ru' -PassThru -WorkingDirectory $root
     $null=$process.Handle # retain the actual process identity/exit code
+    try{[LocaleProbeEvidence]::ProcessCreatedFiletime=$process.StartTime.ToUniversalTime().ToFileTimeUtc()}catch{}
     $window=Await-View $process 'Портативный VirtualBox' 'Копируется только папка data. Диски ВМ вне data не включены.'
     Capture-View $process $window 'launcher-ru' @('Русский','Английский','Запомнить язык','Восстановить в новую папку','Отменить копирование')
     Click-Exact $process $window 'Английский'
@@ -129,7 +191,12 @@ try{
     if(-not $process.WaitForExit(10000) -or $process.ExitCode -ne 2){throw 'Read-only GUI did not exit normally'}
     if(@(Get-ChildItem -LiteralPath $root -Force).Count -ne 1){throw 'Language switching wrote portable files'}
     Write-Host 'PASS: actual RU/EN/RU launcher controls, preserved read-only state and font measurements; PNGs require visual review'
+}catch{
+    $failed=$true
+    try{Write-LocaleFailure $evidence ($_.Exception.GetType().FullName)}catch{}
+    throw
 }finally{
+    try {
     if($null -ne $process){
         if(-not $process.HasExited -and $window -ne [IntPtr]::Zero){
             $null=[LocaleWindow]::PostMessageW($window,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
@@ -137,4 +204,5 @@ try{
         }
         $process.Dispose()
     }
+    } catch {if(-not $failed){throw}}
 }
