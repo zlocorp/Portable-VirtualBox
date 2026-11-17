@@ -1,0 +1,26 @@
+# Generated outputs
+/build/
+/dist/
+/.reports/
+
+# Portable application runtime and user-owned virtual machines
+/app32/
+/app64/
+/data/
+/temp/
+/update/
+/vboxadditions/
+*.vdi
+*.vmdk
+*.vbox
+*.vbox-prev
+*.vbox-tmp
+Portable-VirtualBox.error.txt
+
+# Editor and OS metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+__pycache__/
+*.py[cod]

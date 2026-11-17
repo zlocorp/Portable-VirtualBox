@@ -1,0 +1,36 @@
+{
+  "status": "prepared-not-installed",
+  "file_count": 185,
+  "total_bytes": 247738522,
+  "excluded": [],
+  "validation": {
+    "required_pe_count": 13,
+    "required_data_count": 2,
+    "required_pe_machine": "AMD64",
+    "runtime_executed": false,
+    "driver_installed": false,
+    "installer_sha256": "a81777d2b36380ce042a29e9c554cf032eb46a793f62e3cc82e7411e535c2c26",
+    "product": "Oracle VirtualBox 7.2.20",
+    "product_version": "7.2.20",
+    "platform": "x64;1033,1031,1049,1032,1036,1040,1055,1028,2052,1053,1038,1057,1037",
+    "cabinets": [
+      {"cabinet": "#product.cab", "sha256": "aeaf05944716cc327efe79373e408158b313c5c03fd5a8d030039b6d79e51f55", "member_count": 107, "selected_count": 107},
+      {"cabinet": "common.cab", "sha256": "65a3ac87ff3be03e4db4837139eb286e4e1387e1fd5d758d72c6ff745f6e10db", "member_count": 78, "selected_count": 78}
+    ],
+    "package_inputs_unchanged": true,
+    "msi_open_mode": "read-only",
+    "installer_executed": false,
+    "msi_installed": false
+  },
+  "sourceCommit": "833ee0d4c975c8df60e42f21f72421f1abdcc7d5",
+  "independentFileHashesChecked": true,
+  "vboxServiceRegistryUnchanged": true,
+  "mainExecutableSignature": "Valid",
+  "mainExecutableVersion": "7.2.20.175154",
+  "artifactId": 12170898231,
+  "runId": 39220194066,
+  "artifactSha256": "847efa8318ab43d62e7ca359149c05af943543b26f5ce9ab60061b498069f761",
+  "canonicalFileInventorySha256": "c56185a347583cb7e1994712f0245ff22c15d40b828762bea03aeb22ac609505",
+  "previousRunFileInventoryIdentical": true,
+  "previousRunId": 39219766229
+}

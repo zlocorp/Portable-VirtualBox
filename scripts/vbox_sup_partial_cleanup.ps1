@@ -1,0 +1,471 @@
+# Exact-owned rollback from a protected, INTERRUPTED VBoxSup prepare.
+# No operation is permitted without the original exclusive PnP receipt, a
+# pinned Oracle payload, and a departed original controller. This is a
+# disposable-host-only research primitive; NEVER general Windows cleanup.
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)][string]$AppDir,
+    [Parameter(Mandatory)][string]$SessionDir,
+    [Parameter(Mandatory)][string]$PartialRecoveryReport,
+    [Parameter(Mandatory)][string]$OutputDirectory,
+    [Parameter(Mandatory)][long]$OriginalControllerCreated,
+    [string]$ProspectiveProofJson,
+    [ValidateRange(10,75)][int]$TimeoutSeconds = 45
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+if ($env:PVBOX_FIXED_HELPER_MODE -eq 'ALPHA') {
+    if (-not (Get-Command -Name Assert-PortableFixedHelper -CommandType Function -ErrorAction SilentlyContinue)) {
+        throw 'Alpha effects require the embedded fixed-helper worker function'
+    }
+    Assert-PortableFixedHelper
+} elseif ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
+    $env:GITHUB_REPOSITORY -ne 'zlocorp/Portable-VirtualBox' -or $env:RUNNER_OS -ne 'Windows') {
+    throw 'Exact partial recovery restricted to disposable Windows'
+}
+if (-not $env:RUNNER_TEMP) { throw 'Protected runtime boundary absent' }
+$runner=(Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path.TrimEnd('\')+'\'
+$session=(Resolve-Path -LiteralPath $SessionDir).Path
+$app=(Resolve-Path -LiteralPath $AppDir).Path
+$prospective=$PSBoundParameters.ContainsKey('ProspectiveProofJson')
+$proofPath=if ($prospective) { [IO.Path]::GetFullPath($PartialRecoveryReport) } else { (Resolve-Path -LiteralPath $PartialRecoveryReport).Path }
+$outPath=[IO.Path]::GetFullPath($OutputDirectory)
+if (-not ($session+'\').StartsWith($runner,[StringComparison]::OrdinalIgnoreCase) -or
+    $app -ine (Join-Path $session 'app64') -or
+    $proofPath -ine (Join-Path $session 'partial-recovery-quiescent.json') -or
+    $outPath -ine (Join-Path $session 'cleanup')) { throw 'Recovery outside exact protected session' }
+if ((Test-Path -LiteralPath $outPath) -or (Test-Path -LiteralPath (Join-Path $session 'session.json')) -or
+    (Test-Path -LiteralPath (Join-Path $session 'payload-removed.json'))) { throw 'Session has already been committed or recovered' }
+
+$stagePath=Join-Path $session 'stage\sup-standalone.json'
+$startPath=Join-Path $session 'start\sup-start-results.json'
+$sdsMarkerPath=Join-Path $session 'sds-registered.json'
+$intentPath=Join-Path $session 'prepare-intent.json'
+$intentRaw=Get-Content -LiteralPath $intentPath -Raw -Encoding UTF8 -ErrorAction Stop
+$stageRaw=Get-Content -LiteralPath $stagePath -Raw -Encoding UTF8 -ErrorAction Stop
+$intent=$intentRaw | ConvertFrom-Json
+$stage=$stageRaw | ConvertFrom-Json
+if ($prospective) {
+    if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA') -or
+        [string]::IsNullOrWhiteSpace($ProspectiveProofJson) -or
+        [Text.Encoding]::UTF8.GetByteCount($ProspectiveProofJson) -gt 16384) {
+        throw 'Invalid protected prospective partial recovery proof'
+    }
+    # Validate the same immutable bytes later committed at admission.
+    $proofBytes=[Text.Encoding]::UTF8.GetBytes($ProspectiveProofJson)
+    $proofText=$ProspectiveProofJson
+    $proof=ConvertFrom-Json -InputObject $proofText -ErrorAction Stop
+    if ($proof -isnot [Management.Automation.PSCustomObject]) { throw 'Invalid prospective proof object' }
+} else {
+    $proofText=Get-Content -LiteralPath $proofPath -Raw -Encoding UTF8 -ErrorAction Stop
+    $proof=$proofText | ConvertFrom-Json
+}
+function Test-OriginalControllerAbsent([int]$OldPid) {
+    if ($OldPid -le 0) { return $false }
+    return $null -eq (Get-CimInstance Win32_Process -Filter "ProcessId=$OldPid" -ErrorAction Stop)
+}
+function Get-VBoxNames {
+    return @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop |
+        Where-Object PSChildName -match '^VBox' | ForEach-Object PSChildName | Sort-Object -Unique)
+}
+function Get-VBoxProcesses {
+    return @(Get-Process -ErrorAction Stop | Where-Object ProcessName -match '^(VBox|VirtualBox)' | ForEach-Object Id)
+}
+function Require-Quiescent {
+    if (@(Get-VBoxProcesses).Count -ne 0) { throw 'Running VBox process forbids partial recovery' }
+    if (-not (Test-OriginalControllerAbsent ([int]$proof.original_controller_pid))) {
+        throw 'Original controller is live or its state is unknown'
+    }
+    $controller=[Diagnostics.Process]::GetProcessById([int]$proof.controller_pid)
+    try {
+        if ($controller.StartTime.ToFileTimeUtc().ToString() -ne $proof.controller_created_filetime -or
+            $controller.MainModule.FileName -ine $proof.controller_image) {
+            throw 'Recovery controller generation changed'
+        }
+    } finally { $controller.Dispose() }
+}
+if ($proof.experiment -ne 'partial-protected-manager-quiescent' -or $proof.schema -ne 1 -or
+    $proof.protected_app -ine $app -or $intent.phase -ne 'pre-system-effects' -or
+    $intent.schema -ne 1 -or $intent.protected_app -ine $app -or $intent.portable_root -ine $proof.portable_root -or
+    $intent.controller_pid -ne $proof.original_controller_pid -or
+    $intent.controller_created_filetime -ne $proof.original_controller_created_filetime -or
+    $OriginalControllerCreated.ToString() -ne $proof.original_controller_created_filetime -or
+    $proof.controller_pid -le 0 -or $proof.original_controller_pid -le 0 -or
+    $proof.original_controller_pid -eq $proof.controller_pid -or
+    $proof.controller_image -notin @((Join-Path $proof.portable_root 'Portable-VirtualBox-Session-Test.exe'), (Join-Path $proof.portable_root 'Portable-VirtualBox.exe')) -or
+    -not $proof.no_vbox_processes_verified) { throw 'Incomplete preparation ownership proof mismatch' }
+# Before *any* system mutation, require old owner absence and live/new owner.
+Require-Quiescent
+if ((Test-Path -LiteralPath 'HKLM:\SOFTWARE\Oracle\VirtualBox') -or
+    (Test-Path -LiteralPath 'HKLM:\SOFTWARE\WOW6432Node\Oracle\VirtualBox')) {
+    throw 'Foreign system Oracle installation detected'
+}
+$pinSys='4d4af7a0bf01e97854d5bee9ee2bde9445aad408355bcfdae643f7eef7d523be'
+$pinInf='2fc48547de7dad96e3ebf0b49c339757317abd0c8a482f5f412a59fb730e05e4'
+$stageServices=@($stage.services_after)
+if ($stage.experiment -ne 'standalone-VBoxSup-primitive-INF-pnputil' -or
+    $stage.oracle_version -ne '7.2.22' -or $stage.pnputil_status -ne 'EXITED' -or
+    $stage.pnputil_exit_code -ne 0 -or -not $stage.package_verified -or
+    -not $stage.service_registered -or -not $stage.system_driver_matches_package -or
+    $stage.system_driver_sha256 -ne $pinSys -or
+    @($stage.services_before).Count -ne 0 -or $stageServices.Count -ne 1 -or
+    $stageServices[0] -ne 'VBoxSup' -or $stage.service_type -ne 1 -or $stage.service_start -ne 1) {
+    throw 'No exact exclusive VBoxSup staging receipt for this interrupted attempt'
+}
+$sys=Join-Path $env:SystemRoot 'System32\drivers\VBoxSup.sys'
+$packageInf=Join-Path $app 'drivers\vboxsup\VBoxSup.inf'
+if ((Get-FileHash -LiteralPath $sys -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinSys -or
+    (Get-FileHash -LiteralPath $packageInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf) {
+    throw 'Pinned VBoxSup driver/INF differed; no cleanup'
+}
+$sig=Get-AuthenticodeSignature -LiteralPath $sys
+if ($sig.Status -ne 'Valid') { throw 'Installed VBoxSup not properly signed' }
+# Resolve only the exact new-package identity from the protected stage receipt.
+# PnPUtil output is localized and must never authorize package removal.
+. (Join-Path $PSScriptRoot 'vbox_sup_package_identity.ps1')
+$published=Get-PortableOwnedPublishedInf -InfDirectory (Join-Path $env:SystemRoot 'INF') -Receipt $stage -ExpectedSha256 $pinInf
+$installedInf=Join-Path (Join-Path $env:SystemRoot 'INF') $published
+if ((Get-FileHash -LiteralPath $installedInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf) {
+    throw 'Published INF identity differs from this signed package'
+}
+$driverSvc=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSup' -ErrorAction Stop
+if ([int]$driverSvc.Type -ne 1 -or [int]$driverSvc.Start -ne 1 -or
+    [string]$driverSvc.ImagePath -ine '\SystemRoot\System32\drivers\VBoxSup.sys') {
+    throw 'Kernel service does not match pinned owner'
+}
+$startedRaw=$null;$markerRaw=$null
+$startExists=Test-Path -LiteralPath $startPath -PathType Leaf
+if ((Test-Path -LiteralPath (Join-Path $session 'start')) -and -not $startExists) {
+    throw 'Interrupted driver activation without a committed start report'
+}
+$phase='Stage'
+if ($startExists) {
+    $startedRaw=Get-Content -LiteralPath $startPath -Raw -Encoding UTF8 -ErrorAction Stop
+    $started=$startedRaw | ConvertFrom-Json
+    $startSucceeded=($started.experiment -eq 'owned-standalone-VBoxSup-start' -and
+        $started.start_exit_code -eq 0 -and $started.start_status -eq 'EXITED' -and
+        $started.driver_running -is [bool] -and $started.driver_running -eq $true -and
+        $started.initial_status -eq 'Stopped' -and $started.service_status_after -eq 'Running')
+    # A completed, explicit SCM failure with two stopped observations is the
+    # only failed-start receipt eligible for rollback. Timeout, launch failure,
+    # absent proof and mixed states remain unknown and retain resources.
+    $startFailedStopped=($started.experiment -eq 'owned-standalone-VBoxSup-start' -and
+        $started.start_status -eq 'EXITED' -and
+        ($started.start_exit_code -is [int] -or $started.start_exit_code -is [long]) -and
+        $started.start_exit_code -gt 0 -and $started.start_exit_code -le [int]::MaxValue -and
+        $started.driver_running -is [bool] -and $started.driver_running -eq $false -and
+        $started.initial_status -eq 'Stopped' -and $started.service_status_after -eq 'Stopped' -and
+        $started.wmi_driver_state -eq 'Stopped' -and
+        $started.no_other_vbox_services_before -is [bool] -and $started.no_other_vbox_services_before -eq $true)
+    if (-not $startSucceeded -and -not $startFailedStopped) { throw 'Unverified driver activation receipt' }
+    $phase=if ($startFailedStopped) { 'StartFailedStopped' } else { 'Start' }
+}
+$names=@(Get-VBoxNames)
+$sdsExists=Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS'
+$markerExists=Test-Path -LiteralPath $sdsMarkerPath -PathType Leaf
+if ($sdsExists -ne $markerExists) { throw 'SDS service and its committed protected marker disagree' }
+if (-not $markerExists -and ((Test-Path -LiteralPath (Join-Path $session 'sds-register.stdout.txt')) -or
+                            (Test-Path -LiteralPath (Join-Path $session 'sds-register.stderr.txt')))) {
+    throw 'SDS may have registered without a durable marker'
+}
+if ($markerExists) {
+    if ($phase -ne 'Start') { throw 'SDS registered before proven driver start' }
+    $markerRaw=Get-Content -LiteralPath $sdsMarkerPath -Raw -Encoding UTF8 -ErrorAction Stop
+    $marker=$markerRaw | ConvertFrom-Json
+    $sdsExe=Join-Path $app 'VBoxSDS.exe'
+    if ($marker.schema -ne 1 -or -not $marker.registered -or
+        $marker.protected_app -ine $app -or
+        $marker.controller_pid -ne $proof.original_controller_pid -or
+        $marker.controller_created_filetime -ne $proof.original_controller_created_filetime -or
+        $marker.sds_image -ine $sdsExe) { throw 'SDS marker owner differs' }
+    $sds=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS'
+    if ([string]$sds.ImagePath.Trim().Trim('"') -ine $sdsExe -or [int]$sds.Type -ne 16 -or
+        [int]$sds.Start -ne 3 -or [string]$sds.ObjectName -ne 'LocalSystem' -or
+        (Get-Service VBoxSDS -ErrorAction Stop).Status -ne 'Stopped') {
+        throw 'SDS service is not the exact stopped protected session service'
+    }
+    $publisher=Get-AuthenticodeSignature -LiteralPath $sdsExe
+    if ($publisher.Status -ne 'Valid' -or $publisher.SignerCertificate.Subject -notmatch 'Oracle') {
+        throw 'Untrusted SDS signer'
+    }
+    if ($names.Count -ne 2 -or $names -notcontains 'VBoxSup' -or $names -notcontains 'VBoxSDS') {
+        throw 'Unexpected VBox service in registered phase'
+    }
+    $phase='Sds'
+} elseif ($names.Count -ne 1 -or $names[0] -ne 'VBoxSup') {
+    throw 'Unexpected VBox service in interrupted stage/start phase'
+}
+$driverStatus=(Get-Service -Name 'VBoxSup' -ErrorAction Stop).Status
+if ($driverStatus -ne $(if ($phase -in @('Start','Sds')) {'Running'} else {'Stopped'})) {
+    throw 'Driver service does not match last durable start checkpoint'
+}
+function Assert-FailedStartStopped {
+    if ($phase -ne 'StartFailedStopped') { return }
+    $observed=Get-CimInstance Win32_SystemDriver -Filter "Name='VBoxSup'" -ErrorAction Stop
+    if ($null -eq $observed -or $observed.State -ne 'Stopped' -or
+        (Get-Service -Name 'VBoxSup' -ErrorAction Stop).Status -ne 'Stopped') {
+        throw 'Failed-start driver state changed or is unknown; package retained'
+    }
+}
+Assert-FailedStartStopped
+Require-Quiescent
+# Commit partial cleanup admission only after read-only preflight. Once the
+# proof exists, even a partial write or later refusal blocks all replay.
+if ($prospective) {
+    foreach ($name in @('quiescent-session.json','recovery-quiescent.json',
+        'partial-recovery-quiescent.json','cleanup','payload-cleanup.json','payload-removed.json')) {
+        if (Test-Path -LiteralPath (Join-Path $session $name) -ErrorAction Stop) {
+            throw 'Refusing existing cleanup admission'
+        }
+    }
+    Require-Quiescent
+    $proofStream=$null
+    try {
+        $proofStream=[IO.File]::Open($proofPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+        $proofStream.Write($proofBytes,0,$proofBytes.Length)
+        $proofStream.Flush($true)
+    } finally {
+        if ($null -ne $proofStream) { $proofStream.Dispose() }
+    }
+}
+# All observations above must pass before the FIRST destructive operation.
+$out=(New-Item -Path $outPath -ItemType Directory -ErrorAction Stop).FullName
+$report=[ordered]@{experiment='exact-partial-preparation-recovery';source_commit=$env:GITHUB_SHA;
+    cleanup_basis='PartialRecovery';validated_checkpoint=$phase;published_inf=$published;
+    sds_cleanup='NOT_ATTEMPTED';service_stop='NOT_ATTEMPTED';driver_package_removal='NOT_ATTEMPTED';
+    service_delete='NOT_ATTEMPTED';cleanup_verified=$false;driver_package_removed=$false;errors=@();
+    # Diagnostics only. Entry is not proof of child launch or system effects.
+    operation_observations=[ordered]@{
+        sds_cleanup=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+        service_stop=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+        driver_package_removal=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+        service_delete=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+    }}
+function Run-Bounded([string]$Command,[string]$Arguments,[string]$Label) {
+    $p=$null
+    try {
+        $p=Start-Process -FilePath $Command -ArgumentList $Arguments -NoNewWindow -PassThru -ErrorAction Stop `
+            -RedirectStandardOutput (Join-Path $out ($Label+'.stdout.txt')) -RedirectStandardError (Join-Path $out ($Label+'.stderr.txt'))
+        $ownedHandle=$p.Handle
+        if ($ownedHandle -eq [IntPtr]::Zero) { throw 'Recovery tool process handle unavailable' }
+        if (-not $p.WaitForExit($TimeoutSeconds*1000)) {
+            # This is a one-shot recovery mutation; never lose the live child.
+            $p.WaitForExit()
+            throw "$Label exceeded deadline; child has exited, recovery state requires inspection"
+        }
+        return [int]$p.ExitCode
+    } finally { if ($null -ne $p) { $p.Dispose() } }
+}
+# Re-observe immediately before each effect. These checks narrow the interval
+# introduced by admission; they do not prove SCM/PnP object continuity.
+function Assert-PartialReceiptsUnchanged {
+    if ((Get-Content -LiteralPath $proofPath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $proofText -or
+        (Get-Content -LiteralPath $intentPath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $intentRaw -or
+        (Get-Content -LiteralPath $stagePath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $stageRaw -or
+        [bool](Test-Path -LiteralPath $startPath -PathType Leaf) -ne $startExists -or
+        [bool](Test-Path -LiteralPath $sdsMarkerPath -PathType Leaf) -ne $markerExists) {
+        throw 'Partial recovery receipts changed after preflight'
+    }
+    if ($startExists -and (Get-Content -LiteralPath $startPath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $startedRaw) { throw 'Start receipt changed after preflight' }
+    if ($markerExists -and (Get-Content -LiteralPath $sdsMarkerPath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $markerRaw) { throw 'SDS receipt changed after preflight' }
+}
+function Assert-PartialDriver([string]$ExpectedStatus) {
+    $current=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSup' -ErrorAction Stop
+    if ([int]$current.Type -ne 1 -or [int]$current.Start -ne 1 -or
+        [string]$current.ImagePath -ine '\SystemRoot\System32\drivers\VBoxSup.sys' -or
+        (Get-Service -Name 'VBoxSup' -ErrorAction Stop).Status -ne $ExpectedStatus) {
+        throw 'VBoxSup identity or status changed after preflight'
+    }
+    if ((Get-FileHash -LiteralPath $sys -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinSys -or
+        (Get-FileHash -LiteralPath $packageInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf -or
+        (Get-FileHash -LiteralPath $installedInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf -or
+        (Get-AuthenticodeSignature -LiteralPath $sys).Status -ne 'Valid' -or
+        (Get-PortableOwnedPublishedInf -InfDirectory (Join-Path $env:SystemRoot 'INF') -Receipt $stage -ExpectedSha256 $pinInf) -cne $published) {
+        throw 'VBoxSup package changed after preflight'
+    }
+}
+$primaryFailure=$null
+try {
+    if ($markerExists) {
+        Require-Quiescent
+        Assert-PartialReceiptsUnchanged
+        Assert-PartialDriver 'Running'
+        $currentSds=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS' -ErrorAction Stop
+        $currentSigner=Get-AuthenticodeSignature -LiteralPath $sdsExe
+        $currentNames=@(Get-VBoxNames)
+        if ([string]$currentSds.ImagePath.Trim().Trim('"') -ine $sdsExe -or [int]$currentSds.Type -ne 16 -or
+            [int]$currentSds.Start -ne 3 -or [string]$currentSds.ObjectName -ne 'LocalSystem' -or
+            (Get-Service -Name 'VBoxSDS' -ErrorAction Stop).Status -ne 'Stopped' -or
+            $currentSigner.Status -ne 'Valid' -or $currentSigner.SignerCertificate.Subject -notmatch 'Oracle' -or
+            $currentNames.Count -ne 2 -or $currentNames -notcontains 'VBoxSup' -or $currentNames -notcontains 'VBoxSDS') {
+            throw 'VBoxSDS identity or status changed after preflight'
+        }
+        Require-Quiescent
+        if ($env:PVBOX_FIXED_HELPER_MODE) {
+            if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
+            $report.sds_cleanup='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.sds_cleanup.dispatch_entered=$true
+            $sdsResult=Invoke-ProtectedSds -Operation UnregisterPartial -TimeoutSeconds $TimeoutSeconds
+            $report.operation_observations.sds_cleanup.within_deadline=[bool]$sdsResult.WithinDeadline
+            $report.operation_observations.sds_cleanup.exit_code_known=[bool]$sdsResult.ExitCodeKnown
+            if ($sdsResult.ExitCodeKnown) {
+                $report.operation_observations.sds_cleanup.exit_code=[int]$sdsResult.ExitCode
+                $report.sds_cleanup="EXIT_$([int]$sdsResult.ExitCode)"
+            }
+            if (-not $sdsResult.WithinDeadline) { throw 'SDS unregistration exceeded safety deadline; child exited, retain resources' }
+            if (-not $sdsResult.ExitCodeKnown) { throw 'SDS unregistration exit code unavailable' }
+            $result=[int]$sdsResult.ExitCode
+        } else {
+            # Explicit standalone fixture path, not a fallback on protected failure.
+            $report.sds_cleanup='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.sds_cleanup.dispatch_entered=$true
+            $result=Run-Bounded $sdsExe '--unregservice' 'sds-unregister'
+            $report.operation_observations.sds_cleanup.within_deadline=$true
+            $report.operation_observations.sds_cleanup.exit_code_known=$true
+            $report.operation_observations.sds_cleanup.exit_code=$result
+            $report.sds_cleanup="EXIT_$result"
+        }
+        if ($result -ne 0 -or (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) {
+            throw 'Owned SDS unregistration unconfirmed'
+        }
+        $report.sds_cleanup='CLEAN'
+    }
+    if (@(Get-VBoxNames).Count -ne 1 -or @(Get-VBoxNames)[0] -ne 'VBoxSup') {
+        throw 'Driver service not exclusive after SDS checkpoint'
+    }
+    Require-Quiescent
+    $sc=Join-Path $env:SystemRoot 'System32\sc.exe'
+    if ($phase -in @('Start','Sds')) {
+        Assert-PartialReceiptsUnchanged
+        Assert-PartialDriver 'Running'
+        if (@(Get-VBoxNames).Count -ne 1 -or @(Get-VBoxNames)[0] -ne 'VBoxSup') { throw 'Service namespace changed before driver stop' }
+        Require-Quiescent
+        if ($env:PVBOX_FIXED_HELPER_MODE) {
+            if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+            $report.service_stop='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_stop.dispatch_entered=$true
+            $fixed=Invoke-ProtectedDriver -Operation StopSup -TimeoutSeconds $TimeoutSeconds
+            $report.operation_observations.service_stop.within_deadline=[bool]$fixed.WithinDeadline
+            $report.operation_observations.service_stop.exit_code_known=[bool]$fixed.ExitCodeKnown
+            if ($fixed.ExitCodeKnown) {
+                $report.operation_observations.service_stop.exit_code=[int]$fixed.ExitCode
+                $report.service_stop="EXIT_$([int]$fixed.ExitCode)"
+            }
+            if (-not $fixed.WithinDeadline) { throw 'sup-stop exceeded deadline; child has exited, recovery state requires inspection' }
+            if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
+            $status=[int]$fixed.ExitCode
+        } else {
+            $report.service_stop='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_stop.dispatch_entered=$true
+            $status=Run-Bounded $sc 'stop VBoxSup' 'sup-stop'
+            $report.operation_observations.service_stop.within_deadline=$true
+            $report.operation_observations.service_stop.exit_code_known=$true
+            $report.operation_observations.service_stop.exit_code=$status
+            $report.service_stop="EXIT_$status"
+        }
+        $report.service_stop="EXIT_$status"
+        if ($status -ne 0) { throw 'Owned driver stop failed' }
+        for($i=0;$i -lt 25;$i++) {
+            if ((Get-Service VBoxSup).Status -eq 'Stopped') { break }
+            Start-Sleep -Seconds 1
+        }
+    }
+    if ((Get-Service VBoxSup).Status -ne 'Stopped') { throw 'Owned driver not stopped, package retained' }
+    Require-Quiescent
+    if ((Get-FileHash -LiteralPath $sys -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinSys -or
+        (Get-FileHash -LiteralPath $installedInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf) {
+        throw 'Changed driver package before removal'
+    }
+    # Only the exact published OEM INF created on an initially clean host.
+    # No /force and never a blanket service/driver-name wildcard.
+    $pnputil=Join-Path $env:SystemRoot 'System32\pnputil.exe'
+    Assert-FailedStartStopped
+    Assert-PartialReceiptsUnchanged
+    Assert-PartialDriver 'Stopped'
+    if (@(Get-VBoxNames).Count -ne 1 -or @(Get-VBoxNames)[0] -ne 'VBoxSup') { throw 'Service namespace changed before package removal' }
+    Assert-FailedStartStopped
+    Require-Quiescent
+    if ($env:PVBOX_FIXED_HELPER_MODE) {
+        if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+        $report.driver_package_removal='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.driver_package_removal.dispatch_entered=$true
+        $fixed=Invoke-ProtectedDriver -Operation RemoveSupPackage -TimeoutSeconds $TimeoutSeconds
+        $report.operation_observations.driver_package_removal.within_deadline=[bool]$fixed.WithinDeadline
+        $report.operation_observations.driver_package_removal.exit_code_known=[bool]$fixed.ExitCodeKnown
+        if ($fixed.ExitCodeKnown) {
+            $report.operation_observations.driver_package_removal.exit_code=[int]$fixed.ExitCode
+            $report.driver_package_removal="EXIT_$([int]$fixed.ExitCode)"
+        }
+        if (-not $fixed.WithinDeadline) { throw 'sup-package-remove exceeded deadline; child has exited, recovery state requires inspection' }
+        if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
+        $status=[int]$fixed.ExitCode
+    } else {
+        $report.driver_package_removal='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.driver_package_removal.dispatch_entered=$true
+        $status=Run-Bounded $pnputil "/delete-driver $published /uninstall" 'sup-package-remove'
+        $report.operation_observations.driver_package_removal.within_deadline=$true
+        $report.operation_observations.driver_package_removal.exit_code_known=$true
+        $report.operation_observations.driver_package_removal.exit_code=$status
+        $report.driver_package_removal="EXIT_$status"
+    }
+    $report.driver_package_removal="EXIT_$status"
+    if ($status -ne 0) { throw 'PnPUtil refused exact owned package deletion' }
+    for($i=0;$i -lt 25;$i++) {
+        if (-not (Test-Path $installedInf) -and -not (Test-Path $sys)) { break }
+        Start-Sleep -Seconds 1
+    }
+    $report.driver_package_removed=(-not (Test-Path $installedInf) -and -not (Test-Path $sys))
+    if (-not $report.driver_package_removed) { throw 'Driver bytes or INF remain; no service-delete fallback' }
+    $names=@(Get-VBoxNames)
+    if ($names.Count -eq 1 -and $names[0] -eq 'VBoxSup') {
+        if ((Get-Service VBoxSup).Status -ne 'Stopped' -or
+            [int](Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSup').Type -ne 1 -or
+            @(Get-VBoxProcesses).Count -ne 0) { throw 'Residual service not exclusively ours' }
+        if ($env:PVBOX_FIXED_HELPER_MODE) {
+            if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+            $report.service_delete='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_delete.dispatch_entered=$true
+            $fixed=Invoke-ProtectedDriver -Operation DeleteSupService -TimeoutSeconds $TimeoutSeconds
+            $report.operation_observations.service_delete.within_deadline=[bool]$fixed.WithinDeadline
+            $report.operation_observations.service_delete.exit_code_known=[bool]$fixed.ExitCodeKnown
+            if ($fixed.ExitCodeKnown) {
+                $report.operation_observations.service_delete.exit_code=[int]$fixed.ExitCode
+                $report.service_delete="EXIT_$([int]$fixed.ExitCode)"
+            }
+            if (-not $fixed.WithinDeadline) { throw 'sup-service-delete exceeded deadline; child has exited, recovery state requires inspection' }
+            if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
+            $result=[int]$fixed.ExitCode
+        } else {
+            $report.service_delete='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_delete.dispatch_entered=$true
+            $result=Run-Bounded $sc 'delete VBoxSup' 'sup-service-delete'
+            $report.operation_observations.service_delete.within_deadline=$true
+            $report.operation_observations.service_delete.exit_code_known=$true
+            $report.operation_observations.service_delete.exit_code=$result
+            $report.service_delete="EXIT_$result"
+        }
+        $report.service_delete="EXIT_$result"
+        if ($result -ne 0) { throw 'Stopped owned service delete failed' }
+        for($i=0;$i -lt 25;$i++) {
+            if (-not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSup')) { break }
+            Start-Sleep -Seconds 1
+        }
+    }
+    $report.cleanup_verified=(@(Get-VBoxNames).Count -eq 0 -and @(Get-VBoxProcesses).Count -eq 0 -and
+        -not (Test-Path $installedInf) -and -not (Test-Path $sys))
+    if (-not $report.cleanup_verified) { throw 'Incomplete preparation cleanup did not leave clean host' }
+} catch { $primaryFailure=$_; $report.errors+= $_.Exception.Message }
+finally {
+    try {
+        $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $out 'cleanup-results.json') -Encoding utf8
+    } catch {
+        # A failed write can leave a missing or incomplete report. Preserve the
+        # original operation exception and make the separate write failure visible.
+        if ($null -ne $primaryFailure) {
+            throw [InvalidOperationException]::new(($primaryFailure.Exception.Message + '; cleanup report write failed: ' + $_.Exception.Message), $primaryFailure.Exception)
+        }
+        throw
+    }
+}
+if ($report.errors.Count -ne 0) { throw ($report.errors -join '; ') }
+Write-Host ("PARTIAL_PREPARATION_CLEAN checkpoint="+$phase+" exact_owned_driver_package_removed=true")

@@ -1,0 +1,91 @@
+name: Read-only hosted runner virtualization capabilities (not acceptance)
+
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths: [.github/workflows/isolated-workstation-capabilities.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-capabilities:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Observe existing Linux capabilities without changing them
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import fcntl, json, os, pathlib, shutil, stat
+          result = {'scope': 'hosted-runner-read-only', 'acceptance': False,
+                    'vm_created': False, 'settings_changed': False}
+          cpu = pathlib.Path('/proc/cpuinfo').read_text()
+          flags = set()
+          for line in cpu.splitlines():
+              if line.startswith('flags') and ':' in line:
+                  flags.update(line.split(':', 1)[1].split())
+          result['cpu_vmx_observed'] = 'vmx' in flags
+          result['cpu_svm_observed'] = 'svm' in flags
+          result['memory_kib'] = next((int(line.split()[1]) for line in
+              pathlib.Path('/proc/meminfo').read_text().splitlines()
+              if line.startswith('MemTotal:')), None)
+          result['workspace_free_bytes'] = shutil.disk_usage('.').free
+          result['qemu_available'] = shutil.which('qemu-system-x86_64') is not None
+          result['kvm'] = {'exists': os.path.exists('/dev/kvm')}
+          fd = None
+          try:
+              metadata = os.stat('/dev/kvm')
+              result['kvm']['character_device'] = stat.S_ISCHR(metadata.st_mode)
+              if not stat.S_ISCHR(metadata.st_mode):
+                  raise ValueError('unexpected device type')
+              # Query the kernel KVM API version only. No VM/vCPU is created.
+              fd = os.open('/dev/kvm', os.O_RDONLY | os.O_CLOEXEC)
+              result['kvm']['api_version'] = fcntl.ioctl(fd, 0xAE00, 0)
+          except OSError as error:
+              result['kvm']['query_errno'] = error.errno
+          except ValueError:
+              result['kvm']['query'] = 'unexpected_device_type'
+          finally:
+              if fd is not None:
+                  os.close(fd)
+          for module in ('kvm_intel', 'kvm_amd'):
+              try:
+                  value = pathlib.Path('/sys/module/' + module + '/parameters/nested').read_text().strip()
+                  result[module + '_nested'] = value if value in ('Y', 'N', '0', '1') else 'UNKNOWN'
+              except OSError as error:
+                  result[module + '_nested'] = {'read_errno': error.errno}
+          print('PVBOX_HOST_CAPABILITIES ' + json.dumps(result, sort_keys=True))
+          PY
+  windows-capabilities:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - name: Observe existing Windows capabilities without changing them
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $result=[ordered]@{scope='hosted-runner-read-only';acceptance=$false;vm_created=$false;settings_changed=$false}
+          try {
+            $os=Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 15
+            $result.os_caption=[string]$os.Caption
+            $result.os_version=[string]$os.Version
+            $result.os_product_type=[int]$os.ProductType
+            $result.os_architecture=[string]$os.OSArchitecture
+          } catch { $result.os_query='UNKNOWN' }
+          try {
+            $computer=Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 15
+            $result.hypervisor_present=[bool]$computer.HypervisorPresent
+            $result.memory_bytes=[long]$computer.TotalPhysicalMemory
+          } catch { $result.computer_query='UNKNOWN' }
+          try {
+            $result.processor_observations=@(Get-CimInstance Win32_Processor -OperationTimeoutSec 15 | ForEach-Object {
+              [ordered]@{vm_monitor_mode_extensions=$_.VMMonitorModeExtensions;slat=$_.SecondLevelAddressTranslationExtensions;virtualization_firmware_enabled=$_.VirtualizationFirmwareEnabled}
+            })
+          } catch { $result.processor_query='UNKNOWN' }
+          $result.hyperv_new_vm_command_available=($null -ne (Get-Command New-VM -ErrorAction SilentlyContinue))
+          $result.hyperv_get_vmhost_command_available=($null -ne (Get-Command Get-VMHost -ErrorAction SilentlyContinue))
+          $result.qemu_available=($null -ne (Get-Command qemu-system-x86_64.exe -ErrorAction SilentlyContinue))
+          try { $result.system_drive_free_bytes=[long](Get-PSDrive -Name $env:SystemDrive.TrimEnd(':')).Free } catch { $result.disk_query='UNKNOWN' }
+          Write-Output ('PVBOX_HOST_CAPABILITIES '+($result | ConvertTo-Json -Depth 5 -Compress))

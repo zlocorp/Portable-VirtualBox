@@ -1,0 +1,60 @@
+name: Ordinary launcher offline Oracle preparation (no MSI execution)
+
+on:
+  push:
+    branches: [dev/modernization-2026]
+    paths:
+      - .github/workflows/offline-app64-preparation.yml
+      - scripts/portable_prepare.py
+      - scripts/prepare_app64.py
+      - scripts/build_portable_setup.ps1
+      - scripts/check_portable_setup.ps1
+      - source/PortableAppSetup.au3
+      - source/Portable-VirtualBox.au3
+      - source/LauncherGui.au3
+      - scripts/package_preview.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-preparation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-preparation:
+    if: github.repository == 'zlocorp/Portable-VirtualBox'
+    runs-on: windows-2022
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Compile self-contained non-admin app64 preparer
+        shell: pwsh
+        run: ./scripts/build_portable_setup.ps1
+      - name: Download and verify exact official Oracle 7.2.22 installer
+        shell: pwsh
+        run: |
+          $temp=Join-Path $env:RUNNER_TEMP 'official-oracle'
+          ./scripts/inspect_oracle.ps1 -WorkDirectory $temp
+          $installer=Join-Path $temp 'VirtualBox-7.2.22-175245-Win.exe'
+          if (-not (Test-Path -LiteralPath $installer)) { throw 'Pinned installer not downloaded' }
+          "OFFICIAL_INSTALLER=$installer" >> $env:GITHUB_ENV
+      - name: Compile official signed AutoIt main user GUI
+        shell: pwsh
+        run: |
+          $archive=Join-Path $env:RUNNER_TEMP 'official-autoit.zip'
+          Invoke-WebRequest -Uri 'https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v3.3.18.0.zip' -OutFile $archive
+          $dir=Join-Path $env:RUNNER_TEMP 'official-autoit'
+          Expand-Archive -LiteralPath $archive -DestinationPath $dir
+          $binary=@(Get-ChildItem -LiteralPath $dir -Recurse -File -Filter 'Aut2exe_x64.exe')
+          if ($binary.Count -ne 1) { throw 'Unknown AutoIt compiler' }
+          $signed=Get-AuthenticodeSignature -LiteralPath $binary[0].FullName
+          if ($signed.Status -ne 'Valid' -or $signed.SignerCertificate.Subject -notmatch 'AutoIt') { throw 'Unsigned/foreign AutoIt compiler' }
+          $compilerRoot=Split-Path (Split-Path $binary[0].FullName -Parent) -Parent
+          ./scripts/build.ps1 -AutoItRoot $compilerRoot
+      - name: Real compiled launcher file-only setup and repeat refusal
+        shell: pwsh
+        run: ./scripts/check_portable_setup.ps1 -Installer $env:OFFICIAL_INSTALLER
