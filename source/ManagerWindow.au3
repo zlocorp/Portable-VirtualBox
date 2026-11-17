@@ -53,8 +53,8 @@ Func _MSW_Text($key)
             If $ru Then Return "Очистка отменена в UAC. Драйверы и службы этой сессии ОСТАНУТСЯ в системе. Завершить лаунчер без очистки и при следующем запуске явно выбрать «Восстановить после сбоя»? Для безопасной очистки сейчас нажмите «Нет», затем «Завершить сессию»."
             Return "Cleanup UAC was declined. This session's drivers/services WILL REMAIN installed. Exit without cleanup and use explicit Recover on the next launch? Choose No and Finish session to retry cleanup now."
         Case "leave_failed"
-            If $ru Then Return "ALPHA: состояние ВМ, служб или драйвера НЕ ПОДТВЕРЖДЕНО. Если выйти, ресурсы могут остаться работающими. После закрытия гостевых ВМ потребуется отдельное восстановление по защищённым квитанциям, а при неопределённости откат снимка тестовой Windows. Закрыть весь лаунчер без очистки?"
-            Return "ALPHA: VM, driver or service state is NOT VERIFIED. Exit may leave them running. After all guests stop, explicit protected-receipt recovery is required; unknown states need restoring the disposable Windows snapshot. Exit the entire launcher without cleanup?"
+            If $ru Then Return "ALPHA: состояние ВМ, служб или драйвера НЕ ПОДТВЕРЖДЕНО. Если выйти, ресурсы могут остаться работающими. Штатно выключите управляемых гостей; неизвестные процессы не завершайте принудительно. Следующий запуск может лишь запросить проверку Recover; перезапуск не снимает запрет повторной очистки. При отказе сохраните доказательства и остановитесь. Закрыть весь лаунчер без очистки?"
+            Return "ALPHA: VM, driver or service state is NOT VERIFIED. Exit may leave them running. Shut down controllable guests normally; do not force-close unknown processes. A new launch can only request Recover checks; restarting does not reset the cleanup replay restriction. If refused, keep the evidence and stop. Exit the entire launcher without cleanup?"
         Case "IDLE"
             If $ru Then Return "Готов к началу изолированной тестовой сессии."
             Return "Ready to start the isolated test session."
@@ -119,8 +119,8 @@ Func _MSW_Text($key)
             If $ru Then Return "Запуск заблокирован: конфликт или неподходящая среда."
             Return "Start blocked: conflict or unsupported environment."
         Case "FAILED"
-            If $ru Then Return "Результат операции не подтверждён. Автоматическая очистка остановлена; проверьте журнал."
-            Return "The operation could not be verified. Automatic cleanup stopped; inspect the session log."
+            If $ru Then Return "Результат операции не подтверждён. Сохраните исходную сборку и журнал. Не завершайте принудительно процессы и не удаляйте службы или квитанции. Если доступна «Повторить проверку», используйте её; иначе остановитесь и проверьте журнал."
+            Return "The operation could not be verified. Keep the original build and log. Do not force-close processes or delete services or receipts. If Retry cleanup checks is available, use it; otherwise stop and inspect the log."
     EndSwitch
     Return $key
 EndFunc
@@ -172,12 +172,12 @@ Func _MSW_FailedPrepareHint($s, ByRef $rows, $ageMs = -1)
         $sup = ($sup == "ABSENT" ? "не обнаружена" : ($sup == "PRESENT" ? "обнаружена" : "неизвестно"))
         $sds = ($sds == "ABSENT" ? "не обнаружена" : ($sds == "PRESENT" ? "обнаружена" : "неизвестно"))
         Return "Подготовка не завершена. Последняя проверка служб Windows: VBoxSup: " & $sup & "; VBoxSDS: " & $sds & "." & @CRLF & _
-            "Это не подтверждение владения или отката. Не повторяйте регистрацию и не удаляйте квитанции. Сохраните эту сборку и журнал; восстановление может быть отклонено."
+            "Это не подтверждение владения или отката. Не повторяйте регистрацию и не удаляйте квитанции. Сохраните эту сборку и журнал. После штатного выхода всего лаунчера откройте ту же ALPHA и запросите первую проверку очистки через «Восстановить после сбоя». Это не повтор уже начатой очистки; восстановление может быть отклонено."
     EndIf
     $sup = ($sup == "ABSENT" ? "not found" : ($sup == "PRESENT" ? "observed" : "unknown"))
     $sds = ($sds == "ABSENT" ? "not found" : ($sds == "PRESENT" ? "observed" : "unknown"))
     Return "Preparation incomplete. Last Windows service check: VBoxSup " & $sup & "; VBoxSDS " & $sds & "." & @CRLF & _
-        "Observation does not establish ownership or rollback. Do not repeat registration or delete receipts. Keep this build and its log; recovery may be refused."
+        "Observation does not establish ownership or rollback. Do not repeat registration or delete receipts. Keep this build and its log. After the entire launcher exits normally, reopen the same ALPHA and request the first cleanup check with Recover abandoned session. This is not a replay of admitted cleanup; recovery may be refused."
 EndFunc
 
 Func _MSW_Show($root, $workspace)

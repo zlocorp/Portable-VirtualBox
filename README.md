@@ -6,6 +6,14 @@ A modernization of [vboxme/Portable-VirtualBox](https://github.com/vboxme/Portab
 
 > **Development preview, not an approved everyday VM launcher.** Normal double-click does not install drivers or start VMs. An explicitly opted-in ALPHA and a CI-only path use the integrated real Oracle Manager, but Windows 10/11 workstation UAC and driver installation acceptance remain pending. Real Alpine Linux x86-64 boot and VDI writes have passed isolated Windows Server CI.
 
+## Start here: one disposable VM
+
+1. **Inspect or prepare files:** the ordinary preview is diagnostic-only. Preparing Oracle files does not install drivers or start a VM.
+2. **Test a VM:** use the separate ALPHA only on an isolated Windows 10/11 x64 test system with a recoverable baseline. Follow the [short ALPHA procedure](docs/ALPHA-WINDOWS-TEST.md). Real workstation UAC acceptance is still pending.
+3. **Finish:** shut down the guest normally, then Finish session. FAILED or a closed window is not proof of cleanup. Keep the original paired build until its session is resolved.
+
+Backup, moved-VM repair and multi-VM reports below are optional advanced features, not prerequisites for this first test. Do not start with valuable VM data.
+
 **Minimal release scope:** Russian UI and one local VM; [release gates and remaining Windows 10/11 checks](docs/RELEASE-GATES.md), [current security boundaries](docs/SECURITY-MODEL.md). System-effect tests belong only on isolated disposable hosts, never the primary OS.
 
 **First-run setup without installed Python.** Click **Prepare VirtualBox / folders**: **Yes** downloads pinned Oracle VirtualBox 7.2.22 over official HTTPS, **No** selects an already-downloaded installer. The separate non-admin `Portable-VirtualBox-Setup.exe` checks its built-in SHA-256 and prepares `app64` without executing an MSI or installing drivers. Existing `app64` is not overwritten. CLI: `--download-app64` or `--prepare-app64 "INSTALLER_PATH"`. Both routes passed [compiled Windows acceptance](https://github.com/zlocorp/Portable-VirtualBox/actions/runs/40209800549). Download progress shows transferred MiB (and a percentage when Oracle provides its content length), then separate verification/extraction phases. The status is informational; only the validated app64 receipt marks success.

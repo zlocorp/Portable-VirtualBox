@@ -20,3 +20,8 @@ class FailedPreparePresentation(unittest.TestCase):
   s=(ROOT/'tests/native/test_failed_prepare_presentation.au3').read_text(encoding='utf-8-sig')
   for marker in ('ManagerWindow.au3','_MSW_FailedPrepareHint','_MS_CleanupRetryAction','duplicate','UNKNOWN','CONSENT_PREPARE','retained'):
    self.assertIn(marker,s)
+
+ def test_failure_guidance_names_safe_next_steps_without_promising_replay(self):
+  s=source('ManagerWindow.au3')
+  for phrase in ('first cleanup check', 'первую проверку очистки', 'Do not force-close', 'Не завершайте принудительно', 'restarting does not reset', 'перезапуск не снимает'):
+   self.assertIn(phrase,s)

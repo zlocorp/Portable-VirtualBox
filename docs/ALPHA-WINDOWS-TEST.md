@@ -58,6 +58,18 @@ no Oracle binaries, guest OS disks or running VMs. It is **not a release**:
 unsigned frontend executables may trigger Windows publisher warnings; do not
 disable UAC, AV, HVCI or SmartScreen to bypass them.
 
+## If an operation fails
+
+- Keep the exact original frontend/helper pair and logs. Do not upgrade, delete receipts, or repeat installation to make a refusal disappear. FAILED does not mean the guest stopped or the host was cleaned.
+- If **Retry cleanup checks** is offered, it requests the existing helper checks with new UAC consent. It does not grant permission to repeat admitted system effects; refusal remains possible.
+- After a failed **Prepare**, a normal confirmed exit of the entire old controller may allow the same ALPHA's **Recover abandoned session** to request its **first** cleanup using authentic acquisition receipts. This is distinct from replay after an already-started Finish/Recover. The helper decides eligibility, not the visible presence or absence of services.
+- A verified durable system-teardown checkpoint can permit the existing payload-only continuation. Never create or edit a checkpoint yourself. No supported general retry exists after an uncertain system-effect outcome.
+- If checks refuse or ownership is unknown, preserve evidence and stop. Shut down a controllable guest normally; never force-kill an unknown worker. Use only the disposable host's pre-existing snapshot if restoration is safe. Restoration loses later changes on included disks and does not roll back external/shared disks, network effects or external services. Save needed new data separately only when access is safe.
+
+## Optional advanced tests
+
+Relocation and multi-VM reports are not prerequisites for the first one-VM test.
+
 Before attempting any relocation, finish all guests and verify exact-owned
 driver cleanup. After moving the entire portable root, use the normal main
 EXE's read-only `--plan-vm-rebind`, then
