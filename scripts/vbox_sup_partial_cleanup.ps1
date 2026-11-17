@@ -233,7 +233,14 @@ $out=(New-Item -Path $outPath -ItemType Directory -ErrorAction Stop).FullName
 $report=[ordered]@{experiment='exact-partial-preparation-recovery';source_commit=$env:GITHUB_SHA;
     cleanup_basis='PartialRecovery';validated_checkpoint=$phase;published_inf=$published;
     sds_cleanup='NOT_ATTEMPTED';service_stop='NOT_ATTEMPTED';driver_package_removal='NOT_ATTEMPTED';
-    service_delete='NOT_ATTEMPTED';cleanup_verified=$false;driver_package_removed=$false;errors=@()}
+    service_delete='NOT_ATTEMPTED';cleanup_verified=$false;driver_package_removed=$false;errors=@();
+    # Diagnostics only. Entry is not proof of child launch or system effects.
+    operation_observations=[ordered]@{
+        sds_cleanup=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+        service_stop=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+        driver_package_removal=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+        service_delete=[ordered]@{dispatch_entered=$false;within_deadline=$null;exit_code_known=$null;exit_code=$null}
+    }}
 function Run-Bounded([string]$Command,[string]$Arguments,[string]$Label) {
     $p=$null
     try {
@@ -277,6 +284,7 @@ function Assert-PartialDriver([string]$ExpectedStatus) {
         throw 'VBoxSup package changed after preflight'
     }
 }
+$primaryFailure=$null
 try {
     if ($markerExists) {
         Require-Quiescent
@@ -295,13 +303,27 @@ try {
         Require-Quiescent
         if ($env:PVBOX_FIXED_HELPER_MODE) {
             if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
+            $report.sds_cleanup='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.sds_cleanup.dispatch_entered=$true
             $sdsResult=Invoke-ProtectedSds -Operation UnregisterPartial -TimeoutSeconds $TimeoutSeconds
+            $report.operation_observations.sds_cleanup.within_deadline=[bool]$sdsResult.WithinDeadline
+            $report.operation_observations.sds_cleanup.exit_code_known=[bool]$sdsResult.ExitCodeKnown
+            if ($sdsResult.ExitCodeKnown) {
+                $report.operation_observations.sds_cleanup.exit_code=[int]$sdsResult.ExitCode
+                $report.sds_cleanup="EXIT_$([int]$sdsResult.ExitCode)"
+            }
             if (-not $sdsResult.WithinDeadline) { throw 'SDS unregistration exceeded safety deadline; child exited, retain resources' }
             if (-not $sdsResult.ExitCodeKnown) { throw 'SDS unregistration exit code unavailable' }
             $result=[int]$sdsResult.ExitCode
         } else {
             # Explicit standalone fixture path, not a fallback on protected failure.
+            $report.sds_cleanup='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.sds_cleanup.dispatch_entered=$true
             $result=Run-Bounded $sdsExe '--unregservice' 'sds-unregister'
+            $report.operation_observations.sds_cleanup.within_deadline=$true
+            $report.operation_observations.sds_cleanup.exit_code_known=$true
+            $report.operation_observations.sds_cleanup.exit_code=$result
+            $report.sds_cleanup="EXIT_$result"
         }
         if ($result -ne 0 -or (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS')) {
             throw 'Owned SDS unregistration unconfirmed'
@@ -320,12 +342,26 @@ try {
         Require-Quiescent
         if ($env:PVBOX_FIXED_HELPER_MODE) {
             if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+            $report.service_stop='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_stop.dispatch_entered=$true
             $fixed=Invoke-ProtectedDriver -Operation StopSup -TimeoutSeconds $TimeoutSeconds
+            $report.operation_observations.service_stop.within_deadline=[bool]$fixed.WithinDeadline
+            $report.operation_observations.service_stop.exit_code_known=[bool]$fixed.ExitCodeKnown
+            if ($fixed.ExitCodeKnown) {
+                $report.operation_observations.service_stop.exit_code=[int]$fixed.ExitCode
+                $report.service_stop="EXIT_$([int]$fixed.ExitCode)"
+            }
             if (-not $fixed.WithinDeadline) { throw 'sup-stop exceeded deadline; child has exited, recovery state requires inspection' }
             if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
             $status=[int]$fixed.ExitCode
         } else {
+            $report.service_stop='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_stop.dispatch_entered=$true
             $status=Run-Bounded $sc 'stop VBoxSup' 'sup-stop'
+            $report.operation_observations.service_stop.within_deadline=$true
+            $report.operation_observations.service_stop.exit_code_known=$true
+            $report.operation_observations.service_stop.exit_code=$status
+            $report.service_stop="EXIT_$status"
         }
         $report.service_stop="EXIT_$status"
         if ($status -ne 0) { throw 'Owned driver stop failed' }
@@ -351,12 +387,26 @@ try {
     Require-Quiescent
     if ($env:PVBOX_FIXED_HELPER_MODE) {
         if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+        $report.driver_package_removal='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.driver_package_removal.dispatch_entered=$true
         $fixed=Invoke-ProtectedDriver -Operation RemoveSupPackage -TimeoutSeconds $TimeoutSeconds
+        $report.operation_observations.driver_package_removal.within_deadline=[bool]$fixed.WithinDeadline
+        $report.operation_observations.driver_package_removal.exit_code_known=[bool]$fixed.ExitCodeKnown
+        if ($fixed.ExitCodeKnown) {
+            $report.operation_observations.driver_package_removal.exit_code=[int]$fixed.ExitCode
+            $report.driver_package_removal="EXIT_$([int]$fixed.ExitCode)"
+        }
         if (-not $fixed.WithinDeadline) { throw 'sup-package-remove exceeded deadline; child has exited, recovery state requires inspection' }
         if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
         $status=[int]$fixed.ExitCode
     } else {
+        $report.driver_package_removal='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+        $report.operation_observations.driver_package_removal.dispatch_entered=$true
         $status=Run-Bounded $pnputil "/delete-driver $published /uninstall" 'sup-package-remove'
+        $report.operation_observations.driver_package_removal.within_deadline=$true
+        $report.operation_observations.driver_package_removal.exit_code_known=$true
+        $report.operation_observations.driver_package_removal.exit_code=$status
+        $report.driver_package_removal="EXIT_$status"
     }
     $report.driver_package_removal="EXIT_$status"
     if ($status -ne 0) { throw 'PnPUtil refused exact owned package deletion' }
@@ -373,12 +423,26 @@ try {
             @(Get-VBoxProcesses).Count -ne 0) { throw 'Residual service not exclusively ours' }
         if ($env:PVBOX_FIXED_HELPER_MODE) {
             if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
+            $report.service_delete='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_delete.dispatch_entered=$true
             $fixed=Invoke-ProtectedDriver -Operation DeleteSupService -TimeoutSeconds $TimeoutSeconds
+            $report.operation_observations.service_delete.within_deadline=[bool]$fixed.WithinDeadline
+            $report.operation_observations.service_delete.exit_code_known=[bool]$fixed.ExitCodeKnown
+            if ($fixed.ExitCodeKnown) {
+                $report.operation_observations.service_delete.exit_code=[int]$fixed.ExitCode
+                $report.service_delete="EXIT_$([int]$fixed.ExitCode)"
+            }
             if (-not $fixed.WithinDeadline) { throw 'sup-service-delete exceeded deadline; child has exited, recovery state requires inspection' }
             if (-not $fixed.ExitCodeKnown) { throw 'Driver cleanup exit code unavailable' }
             $result=[int]$fixed.ExitCode
         } else {
+            $report.service_delete='DISPATCH_ENTERED_OUTCOME_UNKNOWN'
+            $report.operation_observations.service_delete.dispatch_entered=$true
             $result=Run-Bounded $sc 'delete VBoxSup' 'sup-service-delete'
+            $report.operation_observations.service_delete.within_deadline=$true
+            $report.operation_observations.service_delete.exit_code_known=$true
+            $report.operation_observations.service_delete.exit_code=$result
+            $report.service_delete="EXIT_$result"
         }
         $report.service_delete="EXIT_$result"
         if ($result -ne 0) { throw 'Stopped owned service delete failed' }
@@ -390,9 +454,18 @@ try {
     $report.cleanup_verified=(@(Get-VBoxNames).Count -eq 0 -and @(Get-VBoxProcesses).Count -eq 0 -and
         -not (Test-Path $installedInf) -and -not (Test-Path $sys))
     if (-not $report.cleanup_verified) { throw 'Incomplete preparation cleanup did not leave clean host' }
-} catch { $report.errors+= $_.Exception.Message }
+} catch { $primaryFailure=$_; $report.errors+= $_.Exception.Message }
 finally {
-    $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $out 'cleanup-results.json') -Encoding utf8
+    try {
+        $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $out 'cleanup-results.json') -Encoding utf8
+    } catch {
+        # A failed write can leave a missing or incomplete report. Preserve the
+        # original operation exception and make the separate write failure visible.
+        if ($null -ne $primaryFailure) {
+            throw [InvalidOperationException]::new(($primaryFailure.Exception.Message + '; cleanup report write failed: ' + $_.Exception.Message), $primaryFailure.Exception)
+        }
+        throw
+    }
 }
 if ($report.errors.Count -ne 0) { throw ($report.errors -join '; ') }
 Write-Host ("PARTIAL_PREPARATION_CLEAN checkpoint="+$phase+" exact_owned_driver_package_removed=true")

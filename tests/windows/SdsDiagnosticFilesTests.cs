@@ -17,11 +17,12 @@ namespace PortableVBox {
    public void Dispose(){Called=true;throw Error;}
   }
   sealed class FaultStream : FileStream {
+   internal static int CloseFinalizerDisposals;
    internal readonly Exception Fault=new IOException("injected stream fault");internal readonly string Site;internal bool Closed;
    internal FaultStream(string path,string site):base(path,FileMode.CreateNew,FileAccess.Write,FileShare.Read){Site=site;}
    public override void Write(byte[] bytes,int offset,int count){if(Site=="write")throw Fault;base.Write(bytes,offset,count);}
    public override void Flush(bool durable){if(Site=="flush")throw Fault;base.Flush(durable);}
-   protected override void Dispose(bool disposing){Closed=true;base.Dispose(disposing);if(Site=="close")throw Fault;}
+   protected override void Dispose(bool disposing){if(!disposing && Site=="close")System.Threading.Interlocked.Increment(ref CloseFinalizerDisposals);Closed=true;base.Dispose(disposing);if(disposing && Site=="close")throw Fault;}
   }
   static Task<string> Failed(Exception error){var task=new TaskCompletionSource<string>();task.SetException(error);return task.Task;}
   static Exception Caught(Action action){try{action();return null;}catch(Exception e){return e;}}
@@ -66,6 +67,8 @@ namespace PortableVBox {
     }
    }
   }
+  public static int CloseFaultFinalizerDisposals {get{return FaultStream.CloseFinalizerDisposals;}}
+  static void CleanupDiagnostic(string message){try{Console.WriteLine(message);}catch{}}
   public static int Main(){
    string root=Path.Combine(Path.GetTempPath(),"pvbox-sds-files-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
    try {
@@ -97,7 +100,11 @@ namespace PortableVBox {
     }
     CompletionCases(root);
     Console.WriteLine("SDS_DIAGNOSTIC_FILES_PASS");return 0;
-   }finally{Directory.Delete(root,true);}
+   }finally{
+    CleanupDiagnostic("SDS_DIAGNOSTIC_FILES_CLEANUP_ENTERED");
+    Directory.Delete(root,true);
+    CleanupDiagnostic("SDS_DIAGNOSTIC_FILES_CLEANUP_COMPLETED");
+   }
   }
  }
 }

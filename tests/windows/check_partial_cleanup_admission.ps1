@@ -11,6 +11,7 @@ if (([regex]::Matches($source,[regex]::Escape('[Diagnostics.Process]::GetProcess
 $source=$source.Replace('[Diagnostics.Process]::GetProcessById([int]$proof.controller_pid)', '(Get-FixtureController ([int]$proof.controller_pid))')
 if (([regex]::Matches($source,[regex]::Escape('[IO.File]::Open($proofPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)'))).Count -ne 1) { throw 'Unexpected proof writer sites' }
 $source=$source.Replace('[IO.File]::Open($proofPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)', '(Open-FixtureProof $proofPath ([IO.FileMode]::CreateNew) ([IO.FileAccess]::Write) ([IO.FileShare]::Read))')
+$source=$source.Replace("| Set-Content -LiteralPath (Join-Path `$out 'cleanup-results.json') -Encoding utf8", "| Write-FixtureReport -LiteralPath (Join-Path `$out 'cleanup-results.json') -Encoding utf8")
 if([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT){
     $source=$source.Replace(".Path.TrimEnd('\')+'\'", ".Path.TrimEnd('/')+'/'")
     $source=$source.Replace("(`$session+'\').StartsWith", "(`$session+'/').StartsWith")
@@ -60,6 +61,10 @@ function Open-FixtureProof($Path,$Mode,$Access,$Share){
     return $wrapper
 }
 function New-Item { [CmdletBinding()]param($Path,$ItemType) if($global:fault -eq 'output' -and $Path -eq $global:out){throw 'FIXTURE_OUTPUT'};Microsoft.PowerShell.Management\New-Item -Path $Path -ItemType $ItemType }
+function Write-FixtureReport {
+ [CmdletBinding()]param([Parameter(ValueFromPipeline=$true)]$Value,$LiteralPath,$Encoding)
+ process {if($global:fault -eq 'report-write'){throw 'FIXTURE_REPORT_WRITE'};Microsoft.PowerShell.Management\Set-Content -LiteralPath $LiteralPath -Encoding $Encoding -Value $Value}
+}
 function Start-Process {throw 'UNEXPECTED_NATIVE_LAUNCH'}
 function Invoke-ProtectedSds {param($Operation,$TimeoutSeconds);Invoke-ProtectedDriver -Operation $Operation -TimeoutSeconds $TimeoutSeconds}
 function Invoke-ProtectedDriver {param($Operation,$TimeoutSeconds)
@@ -120,6 +125,10 @@ try {
     $message=Call-Cleanup;Check ($effects -eq 1 -and [IO.File]::ReadAllText($proof) -ceq $proofJson) 'legacy proof replayed or changed'
     Setup 'legacy-bad-proof';[IO.File]::WriteAllText($proof,'{}');$argsForCleanup.Remove('ProspectiveProofJson')
     $message=Call-Cleanup;Check ($effects -eq 0 -and -not [IO.Directory]::Exists($out) -and [IO.File]::ReadAllText($proof) -ceq '{}') 'invalid legacy proof admitted or changed'
+    Setup 'failed-report-write';$global:fault='report-write';$message=Call-Cleanup
+    Check ($message -match 'FIXTURE_EFFECT_FAILURE' -and $message -match 'FIXTURE_REPORT_WRITE' -and $effects -eq 1 -and [IO.File]::Exists($proof)) ('report write masked effect failure: '+$message)
+    $bytes=[IO.File]::ReadAllBytes($proof);$global:fault='none';$message=Call-Cleanup
+    Check ($effects -eq 1 -and [Convert]::ToBase64String([IO.File]::ReadAllBytes($proof)) -eq [Convert]::ToBase64String($bytes)) 'report write allowed replay or changed proof'
     Setup 'race-proof';$global:fault='race-proof';$message=Call-Cleanup
     Check ($effects -eq 0 -and [IO.File]::ReadAllText($proof) -ceq 'race sentinel') 'CreateNew overwrote racing proof'
     Setup 'sds-without-marker';[IO.File]::WriteAllText((Join-Path $session 'sds-register.stdout.txt'),'evidence');$message=Call-Cleanup

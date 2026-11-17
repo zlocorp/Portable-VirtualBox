@@ -14,6 +14,7 @@ on:
       - tests/windows/check_full_owner_import_faults.ps1
       - tests/windows/check_full_owner_import_runner_contract.ps1
       - tests/test_fixed_effect_worker.py
+      - tests/test_fixed_effect_worker_diagnostics.py
       - tests/test_fixed_effect_worker_retention.py
       - tests/windows/FixedEffectAcquiredChildProbe.cs
       - tests/windows/check_fixed_effect_acquired_child.ps1
@@ -96,6 +97,8 @@ on:
       - tests/windows/check_cleanup_preflight_admission.ps1
       - tests/test_partial_cleanup_admission.py
       - tests/windows/check_partial_cleanup_admission.ps1
+      - tests/test_partial_cleanup_operation_observations.py
+      - tests/windows/check_partial_cleanup_operation_observations.ps1
       - scripts/vbox_sup_package_identity.ps1
       - tests/windows/check_driver_package_identity.ps1
       - tests/windows/check_driver_start_gate.ps1
@@ -156,6 +159,9 @@ jobs:
       - name: Partial cleanup admission and retry refusal (mocked system boundary)
         shell: powershell
         run: ./tests/windows/check_partial_cleanup_admission.ps1
+      - name: Partial cleanup dispatch observations (mocked system boundary)
+        shell: powershell
+        run: ./tests/windows/check_partial_cleanup_operation_observations.ps1
       - name: Preserve cleanup evidence on failed final observation (no system effects)
         shell: powershell
         run: ./tests/windows/check_cleanup_report_finalization.ps1
@@ -290,6 +296,11 @@ jobs:
       - name: Managed actual reader and interrupted join contracts
         shell: powershell
         run: ./tests/windows/check_fixed_effect_worker_managed.ps1
+      - name: Managed diagnostic exit and finalizer contracts (no system effects)
+        shell: powershell
+        run: |
+          $env:PVBOX_TEST_POWERSHELL=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          python -X utf8 -m unittest tests.test_fixed_effect_worker_diagnostics -v
       - name: Closed SDS admission and protected wrapper refusal contracts
         shell: powershell
         run: |
