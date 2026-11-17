@@ -22,7 +22,17 @@ try {
         $sdsMarkerPath=Join-Path $session 'sds-registered.json'; $outPath=Join-Path $session 'cleanup'
         $sys=Join-Path $session 'VBoxSup.sys'; $installedInf=Join-Path $session 'oem7.inf'; $published='oem7.inf'
         Set-Content -LiteralPath $sys -Value 'owned driver'; Set-Content -LiteralPath $installedInf -Value 'owned inf'
-        $pinSys='sys-hash'; $pinInf='inf-hash'; $TimeoutSeconds=10; $env:SystemRoot=$session
+        $pinSys='sys-hash'; $pinInf='inf-hash'; $TimeoutSeconds=10; $env:SystemRoot=$session; $prospective=$false
+        # This extracted body begins after production captured these read-only
+        # receipt snapshots; provide actual temporary files with stable contents.
+        $intentPath=Join-Path $session 'intent.json';$stagePath=Join-Path $session 'stage.json'
+        [IO.File]::WriteAllText($intentPath,'intent');[IO.File]::WriteAllText($stagePath,'stage')
+        $intentRaw='intent';$stageRaw='stage';$stage=@{};$packageInf=Join-Path $session 'package.inf'
+        $proofPath=Join-Path $session 'proof.json';$proofText='proof';[IO.File]::WriteAllText($proofPath,$proofText)
+        $startedRaw=$null;$markerRaw=$null
+        function Get-ItemProperty { [pscustomobject]@{Type=1;Start=1;ImagePath='\SystemRoot\System32\drivers\VBoxSup.sys'} }
+        function Get-AuthenticodeSignature { [pscustomobject]@{Status='Valid'} }
+        function Get-PortableOwnedPublishedInf { return 'oem7.inf' }
         $receipt=@{experiment='owned-standalone-VBoxSup-start';start_status='EXITED';start_exit_code=5;initial_status='Stopped';service_status_after='Stopped';wmi_driver_state='Stopped';driver_running=$false;no_other_vbox_services_before=$true}
         switch ($case) {
             'Started' { $receipt.start_exit_code=0; $receipt.service_status_after='Running'; $receipt.wmi_driver_state='Running'; $receipt.driver_running=$true }

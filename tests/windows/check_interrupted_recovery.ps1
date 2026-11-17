@@ -24,7 +24,7 @@ $old=$null;$new=$null
 $proof=[ordered]@{source_commit=$env:GITHUB_SHA;scenario=$Scenario;interactive_uac_verified=$false;
     guest_os_booted=$false;validated_checkpoints=@();original_data_preserved=$false;
     two_copies=$false;live_owner_denied=$false;missing_receipt_denied=$false;
-    all_owned_services_removed=$false;forged_receipts_denied=$false;
+    all_owned_services_removed=$false;forged_receipts_denied=$false;preflight_refusal_then_recovery=@();
     system_effects_retained_due_to_refusal=$false;unauthorized_cleanups=0}
 function Start-Medium([string]$Image,[string]$Label) {
     $p=[MediumProcess]::Start($Image,'--lang en --separate-privileges',$root,
@@ -84,7 +84,7 @@ try {
     $hash2=(Get-FileHash -LiteralPath $sentinel2 -Algorithm SHA256).Hash
     $proof.two_copies=$true
     $i=0
-    # A *denied* recovery is one-shot and MUST NOT be rearmed after tampering:
+    # Tamper cases are deliberately never rearmed after a denied recovery:
     # each adversarial case gets an independent disposable Windows VM runner.
     # Normal recovery validates all three phases with clean host between cycles.
     $phases=if($Scenario -eq 'tamper-stage') { @('Stage') }
@@ -132,10 +132,41 @@ try {
                 if ((Get-Service VBoxSup).Status -ne 'Running') { throw 'Missing proof altered driver' }
             } finally { [IO.File]::WriteAllBytes($stagePath,$stageBytes) }
         }
+        if ($Scenario -eq 'normal') {
+            # A sharing-denied read exercises real preflight failure without
+            # changing the protected receipt or any Windows system resource.
+            $stagePath=Join-Path $session 'stage\sup-standalone.json'
+            $stageReceipt=Get-Content -LiteralPath $stagePath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($stageReceipt.published_inf -cnotmatch '\Aoem[0-9]{1,6}\.inf\z') { throw 'Invalid staged INF identity' }
+            $publishedPath=Join-Path (Join-Path $env:SystemRoot 'INF') $stageReceipt.published_inf
+            $stageHash=(Get-FileHash -LiteralPath $stagePath -Algorithm SHA256).Hash
+            $infHash=(Get-FileHash -LiteralPath $publishedPath -Algorithm SHA256).Hash
+            $beforeJournals=Get-JournalHashes $session
+            $lockedInf=[IO.File]::Open($publishedPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+            try {
+                Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 70 ('preflight-locked-inf-'+$label)
+                foreach ($name in @('quiescent-session.json','recovery-quiescent.json','partial-recovery-quiescent.json','cleanup','payload-cleanup.json','payload-removed.json')) {
+                    if (Test-Path -LiteralPath (Join-Path $session $name)) { throw ('Preflight admitted cleanup: '+$name) }
+                }
+                if ((Get-Service VBoxSup -ErrorAction Stop).Status -ne $(if($phase -eq 'Stage'){'Stopped'}else{'Running'})) { throw 'Preflight changed VBoxSup' }
+                if ([bool](Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS') -ne ($phase -eq 'Sds')) { throw 'Preflight changed SDS presence' }
+                $failed=@(Get-ChildItem -LiteralPath $session -Filter 'helper-Recover-*.journal' -File | Where-Object { -not $beforeJournals.ContainsKey($_.Name) })
+                if($failed.Count -ne 1){throw 'Missing locked-INF recovery journal'}
+                $errorName=[IO.Path]::GetFileNameWithoutExtension($failed[0].Name)+'.stderr.txt'
+                $reason=Get-Content -LiteralPath (Join-Path $session $errorName) -Raw -Encoding UTF8
+                # Windows PowerShell may wrap inside either the path or message.
+                $compactReason=$reason -replace '\s+', ''
+                $compactPath=$publishedPath -replace '\s+', ''
+                if($compactReason -notmatch [regex]::Escape($compactPath) -or $compactReason -notmatch 'beingusedbyanotherprocess'){throw 'Expected locked INF preflight refusal'}
+            } finally { $lockedInf.Dispose() }
+            if ((Get-FileHash -LiteralPath $stagePath -Algorithm SHA256).Hash -ne $stageHash -or
+                (Get-FileHash -LiteralPath $publishedPath -Algorithm SHA256).Hash -ne $infHash) { throw 'Preflight changed stage or INF evidence' }
+            $refusalJournals=Get-JournalHashes $session
+        }
         if ($Scenario -eq 'tamper-stage' -and $phase -eq 'Stage') {
             # Test-only corruption of protected journal on disposable host.
-            # Once denied, DO NOT repair the journal and retry on this host:
-            # one-shot quiescence is already consumed, preserving uncertainty.
+            # Preserve the denial and discard this disposable host; do not
+            # repair tampered evidence or run a second recovery.
             $stagePath=Join-Path $session 'stage\sup-standalone.json'
             $record=Get-Content -LiteralPath $stagePath -Raw | ConvertFrom-Json
             $record.system_driver_sha256='0000000000000000000000000000000000000000000000000000000000000000'
@@ -182,6 +213,7 @@ try {
             return
         }
         Helper ('Recover '+$new.Id+' '+$oldPid+' '+$cycle) 0 ('recover-'+$label)
+        if ($Scenario -eq 'normal') { Assert-PriorJournals $session $refusalJournals; $proof.preflight_refusal_then_recovery+=$phase }
         Assert-Clean ('after-recovery-clean-'+$label)
         $result=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw | ConvertFrom-Json
         if ($result.cleanup_basis -ne 'PartialRecovery' -or $result.validated_checkpoint -ne $phase -or
@@ -200,6 +232,7 @@ try {
         $new.Dispose();$new=$null
         Write-Host "PASS: $phase partial recovery, owner/refusal/replay proof, after-recovery-clean, VM data preserved"
     }
+    if (@($proof.preflight_refusal_then_recovery).Count -ne 3) { throw 'Locked-INF recovery was not verified for all checkpoints' }
     $proof.original_data_preserved=$true
     $proof.all_owned_services_removed=$true
     Write-Host 'PASS: protected PartialRecovery at Stage, Start, Sds checkpoints; old owner refused, missing-receipt-denied, forged-receipt-denied, after-recovery-clean, two_copies original_data_preserved; UAC NOT VERIFIED'

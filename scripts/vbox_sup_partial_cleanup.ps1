@@ -9,6 +9,7 @@ param(
     [Parameter(Mandatory)][string]$PartialRecoveryReport,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [Parameter(Mandatory)][long]$OriginalControllerCreated,
+    [string]$ProspectiveProofJson,
     [ValidateRange(10,75)][int]$TimeoutSeconds = 45
 )
 Set-StrictMode -Version Latest
@@ -26,7 +27,8 @@ if (-not $env:RUNNER_TEMP) { throw 'Protected runtime boundary absent' }
 $runner=(Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path.TrimEnd('\')+'\'
 $session=(Resolve-Path -LiteralPath $SessionDir).Path
 $app=(Resolve-Path -LiteralPath $AppDir).Path
-$proofPath=(Resolve-Path -LiteralPath $PartialRecoveryReport).Path
+$prospective=$PSBoundParameters.ContainsKey('ProspectiveProofJson')
+$proofPath=if ($prospective) { [IO.Path]::GetFullPath($PartialRecoveryReport) } else { (Resolve-Path -LiteralPath $PartialRecoveryReport).Path }
 $outPath=[IO.Path]::GetFullPath($OutputDirectory)
 if (-not ($session+'\').StartsWith($runner,[StringComparison]::OrdinalIgnoreCase) -or
     $app -ine (Join-Path $session 'app64') -or
@@ -38,9 +40,26 @@ if ((Test-Path -LiteralPath $outPath) -or (Test-Path -LiteralPath (Join-Path $se
 $stagePath=Join-Path $session 'stage\sup-standalone.json'
 $startPath=Join-Path $session 'start\sup-start-results.json'
 $sdsMarkerPath=Join-Path $session 'sds-registered.json'
-$intent=Get-Content -LiteralPath (Join-Path $session 'prepare-intent.json') -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
-$stage=Get-Content -LiteralPath $stagePath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
-$proof=Get-Content -LiteralPath $proofPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
+$intentPath=Join-Path $session 'prepare-intent.json'
+$intentRaw=Get-Content -LiteralPath $intentPath -Raw -Encoding UTF8 -ErrorAction Stop
+$stageRaw=Get-Content -LiteralPath $stagePath -Raw -Encoding UTF8 -ErrorAction Stop
+$intent=$intentRaw | ConvertFrom-Json
+$stage=$stageRaw | ConvertFrom-Json
+if ($prospective) {
+    if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA') -or
+        [string]::IsNullOrWhiteSpace($ProspectiveProofJson) -or
+        [Text.Encoding]::UTF8.GetByteCount($ProspectiveProofJson) -gt 16384) {
+        throw 'Invalid protected prospective partial recovery proof'
+    }
+    # Validate the same immutable bytes later committed at admission.
+    $proofBytes=[Text.Encoding]::UTF8.GetBytes($ProspectiveProofJson)
+    $proofText=$ProspectiveProofJson
+    $proof=ConvertFrom-Json -InputObject $proofText -ErrorAction Stop
+    if ($proof -isnot [Management.Automation.PSCustomObject]) { throw 'Invalid prospective proof object' }
+} else {
+    $proofText=Get-Content -LiteralPath $proofPath -Raw -Encoding UTF8 -ErrorAction Stop
+    $proof=$proofText | ConvertFrom-Json
+}
 function Test-OriginalControllerAbsent([int]$OldPid) {
     if ($OldPid -le 0) { return $false }
     return $null -eq (Get-CimInstance Win32_Process -Filter "ProcessId=$OldPid" -ErrorAction Stop)
@@ -114,13 +133,15 @@ if ([int]$driverSvc.Type -ne 1 -or [int]$driverSvc.Start -ne 1 -or
     [string]$driverSvc.ImagePath -ine '\SystemRoot\System32\drivers\VBoxSup.sys') {
     throw 'Kernel service does not match pinned owner'
 }
+$startedRaw=$null;$markerRaw=$null
 $startExists=Test-Path -LiteralPath $startPath -PathType Leaf
 if ((Test-Path -LiteralPath (Join-Path $session 'start')) -and -not $startExists) {
     throw 'Interrupted driver activation without a committed start report'
 }
 $phase='Stage'
 if ($startExists) {
-    $started=Get-Content -LiteralPath $startPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $startedRaw=Get-Content -LiteralPath $startPath -Raw -Encoding UTF8 -ErrorAction Stop
+    $started=$startedRaw | ConvertFrom-Json
     $startSucceeded=($started.experiment -eq 'owned-standalone-VBoxSup-start' -and
         $started.start_exit_code -eq 0 -and $started.start_status -eq 'EXITED' -and
         $started.driver_running -is [bool] -and $started.driver_running -eq $true -and
@@ -149,7 +170,8 @@ if (-not $markerExists -and ((Test-Path -LiteralPath (Join-Path $session 'sds-re
 }
 if ($markerExists) {
     if ($phase -ne 'Start') { throw 'SDS registered before proven driver start' }
-    $marker=Get-Content -LiteralPath $sdsMarkerPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $markerRaw=Get-Content -LiteralPath $sdsMarkerPath -Raw -Encoding UTF8 -ErrorAction Stop
+    $marker=$markerRaw | ConvertFrom-Json
     $sdsExe=Join-Path $app 'VBoxSDS.exe'
     if ($marker.schema -ne 1 -or -not $marker.registered -or
         $marker.protected_app -ine $app -or
@@ -187,6 +209,25 @@ function Assert-FailedStartStopped {
 }
 Assert-FailedStartStopped
 Require-Quiescent
+# Commit partial cleanup admission only after read-only preflight. Once the
+# proof exists, even a partial write or later refusal blocks all replay.
+if ($prospective) {
+    foreach ($name in @('quiescent-session.json','recovery-quiescent.json',
+        'partial-recovery-quiescent.json','cleanup','payload-cleanup.json','payload-removed.json')) {
+        if (Test-Path -LiteralPath (Join-Path $session $name) -ErrorAction Stop) {
+            throw 'Refusing existing cleanup admission'
+        }
+    }
+    Require-Quiescent
+    $proofStream=$null
+    try {
+        $proofStream=[IO.File]::Open($proofPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+        $proofStream.Write($proofBytes,0,$proofBytes.Length)
+        $proofStream.Flush($true)
+    } finally {
+        if ($null -ne $proofStream) { $proofStream.Dispose() }
+    }
+}
 # All observations above must pass before the FIRST destructive operation.
 $out=(New-Item -Path $outPath -ItemType Directory -ErrorAction Stop).FullName
 $report=[ordered]@{experiment='exact-partial-preparation-recovery';source_commit=$env:GITHUB_SHA;
@@ -208,8 +249,49 @@ function Run-Bounded([string]$Command,[string]$Arguments,[string]$Label) {
         return [int]$p.ExitCode
     } finally { if ($null -ne $p) { $p.Dispose() } }
 }
+# Re-observe immediately before each effect. These checks narrow the interval
+# introduced by admission; they do not prove SCM/PnP object continuity.
+function Assert-PartialReceiptsUnchanged {
+    if ((Get-Content -LiteralPath $proofPath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $proofText -or
+        (Get-Content -LiteralPath $intentPath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $intentRaw -or
+        (Get-Content -LiteralPath $stagePath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $stageRaw -or
+        [bool](Test-Path -LiteralPath $startPath -PathType Leaf) -ne $startExists -or
+        [bool](Test-Path -LiteralPath $sdsMarkerPath -PathType Leaf) -ne $markerExists) {
+        throw 'Partial recovery receipts changed after preflight'
+    }
+    if ($startExists -and (Get-Content -LiteralPath $startPath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $startedRaw) { throw 'Start receipt changed after preflight' }
+    if ($markerExists -and (Get-Content -LiteralPath $sdsMarkerPath -Raw -Encoding UTF8 -ErrorAction Stop) -cne $markerRaw) { throw 'SDS receipt changed after preflight' }
+}
+function Assert-PartialDriver([string]$ExpectedStatus) {
+    $current=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSup' -ErrorAction Stop
+    if ([int]$current.Type -ne 1 -or [int]$current.Start -ne 1 -or
+        [string]$current.ImagePath -ine '\SystemRoot\System32\drivers\VBoxSup.sys' -or
+        (Get-Service -Name 'VBoxSup' -ErrorAction Stop).Status -ne $ExpectedStatus) {
+        throw 'VBoxSup identity or status changed after preflight'
+    }
+    if ((Get-FileHash -LiteralPath $sys -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinSys -or
+        (Get-FileHash -LiteralPath $packageInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf -or
+        (Get-FileHash -LiteralPath $installedInf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pinInf -or
+        (Get-AuthenticodeSignature -LiteralPath $sys).Status -ne 'Valid' -or
+        (Get-PortableOwnedPublishedInf -InfDirectory (Join-Path $env:SystemRoot 'INF') -Receipt $stage -ExpectedSha256 $pinInf) -cne $published) {
+        throw 'VBoxSup package changed after preflight'
+    }
+}
 try {
     if ($markerExists) {
+        Require-Quiescent
+        Assert-PartialReceiptsUnchanged
+        Assert-PartialDriver 'Running'
+        $currentSds=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\VBoxSDS' -ErrorAction Stop
+        $currentSigner=Get-AuthenticodeSignature -LiteralPath $sdsExe
+        $currentNames=@(Get-VBoxNames)
+        if ([string]$currentSds.ImagePath.Trim().Trim('"') -ine $sdsExe -or [int]$currentSds.Type -ne 16 -or
+            [int]$currentSds.Start -ne 3 -or [string]$currentSds.ObjectName -ne 'LocalSystem' -or
+            (Get-Service -Name 'VBoxSDS' -ErrorAction Stop).Status -ne 'Stopped' -or
+            $currentSigner.Status -ne 'Valid' -or $currentSigner.SignerCertificate.Subject -notmatch 'Oracle' -or
+            $currentNames.Count -ne 2 -or $currentNames -notcontains 'VBoxSup' -or $currentNames -notcontains 'VBoxSDS') {
+            throw 'VBoxSDS identity or status changed after preflight'
+        }
         Require-Quiescent
         if ($env:PVBOX_FIXED_HELPER_MODE) {
             if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected SDS mode' }
@@ -232,6 +314,10 @@ try {
     Require-Quiescent
     $sc=Join-Path $env:SystemRoot 'System32\sc.exe'
     if ($phase -in @('Start','Sds')) {
+        Assert-PartialReceiptsUnchanged
+        Assert-PartialDriver 'Running'
+        if (@(Get-VBoxNames).Count -ne 1 -or @(Get-VBoxNames)[0] -ne 'VBoxSup') { throw 'Service namespace changed before driver stop' }
+        Require-Quiescent
         if ($env:PVBOX_FIXED_HELPER_MODE) {
             if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
             $fixed=Invoke-ProtectedDriver -Operation StopSup -TimeoutSeconds $TimeoutSeconds
@@ -258,6 +344,11 @@ try {
     # No /force and never a blanket service/driver-name wildcard.
     $pnputil=Join-Path $env:SystemRoot 'System32\pnputil.exe'
     Assert-FailedStartStopped
+    Assert-PartialReceiptsUnchanged
+    Assert-PartialDriver 'Stopped'
+    if (@(Get-VBoxNames).Count -ne 1 -or @(Get-VBoxNames)[0] -ne 'VBoxSup') { throw 'Service namespace changed before package removal' }
+    Assert-FailedStartStopped
+    Require-Quiescent
     if ($env:PVBOX_FIXED_HELPER_MODE) {
         if ($env:PVBOX_FIXED_HELPER_MODE -notin @('CI','ALPHA')) { throw 'Unknown protected driver mode' }
         $fixed=Invoke-ProtectedDriver -Operation RemoveSupPackage -TimeoutSeconds $TimeoutSeconds

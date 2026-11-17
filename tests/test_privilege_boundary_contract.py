@@ -243,11 +243,13 @@ class PrivilegeBoundaryContract(unittest.TestCase):
             'scripts/vbox_sup_start_owned.ps1'
         ):
             source=self.text(path)
+            # Protected reads can be parsed as JSON later or re-read to check
+            # receipt stability, so inspect every Get-Content, not just pipes.
             matches=[line for line in source.splitlines()
-                     if 'Get-Content ' in line and '| ConvertFrom-Json' in line]
+                     if 'Get-Content ' in line and not line.lstrip().startswith('#')]
             self.assertTrue(matches, path)
             for line in matches:
-                self.assertIn('-Encoding UTF8', line, path)
+                self.assertRegex(line, r'-Encoding\s+UTF8\b', path)
 
     def test_alpha_store_is_not_ci_experiment_store(self):
         adapter=self.text('source/PrivilegeBoundary.au3')

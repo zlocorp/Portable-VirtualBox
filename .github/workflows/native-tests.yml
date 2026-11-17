@@ -94,6 +94,8 @@ on:
       - tests/test_guest_console_readiness.py
       - tests/test_cleanup_preflight_admission.py
       - tests/windows/check_cleanup_preflight_admission.ps1
+      - tests/test_partial_cleanup_admission.py
+      - tests/windows/check_partial_cleanup_admission.ps1
       - scripts/vbox_sup_package_identity.ps1
       - tests/windows/check_driver_package_identity.ps1
       - tests/windows/check_driver_start_gate.ps1
@@ -151,6 +153,9 @@ jobs:
       - name: Deferred cleanup admission and retry refusal (mocked system boundary)
         shell: powershell
         run: ./tests/windows/check_cleanup_preflight_admission.ps1
+      - name: Partial cleanup admission and retry refusal (mocked system boundary)
+        shell: powershell
+        run: ./tests/windows/check_partial_cleanup_admission.ps1
       - name: Preserve cleanup evidence on failed final observation (no system effects)
         shell: powershell
         run: ./tests/windows/check_cleanup_report_finalization.ps1

@@ -568,14 +568,14 @@ try {
             }
             if (@(VBox-Processes).Count -ne 0) { throw 'Active VBox activity; partial preparation recovery denied' }
             $partialProof=Join-Path $session 'partial-recovery-quiescent.json'
-            [ordered]@{schema=1;experiment='partial-protected-manager-quiescent';portable_root=$root;
+            $prospectiveProof=[ordered]@{schema=1;experiment='partial-protected-manager-quiescent';portable_root=$root;
                 protected_app=$app;original_controller_pid=$OriginalControllerPid;
                 original_controller_created_filetime=$OriginalControllerCreated.ToString();
                 controller_pid=$ControllerPid;controller_created_filetime=$ControllerCreated.ToString();
                 controller_image=$controllerImage;no_vbox_processes_verified=$true;source_commit=$env:GITHUB_SHA} |
-                ConvertTo-Json | Set-Content -LiteralPath $partialProof -Encoding utf8
+                ConvertTo-Json
             if (-not (Test-OriginalControllerAbsent $OriginalControllerPid)) { throw 'Old owner reappeared before partial recovery' }
-            & (Join-Path $PSScriptRoot 'vbox_sup_partial_cleanup.ps1') -AppDir $app -SessionDir $session -PartialRecoveryReport $partialProof -OutputDirectory (Join-Path $session 'cleanup') -OriginalControllerCreated $OriginalControllerCreated
+            & (Join-Path $PSScriptRoot 'vbox_sup_partial_cleanup.ps1') -AppDir $app -SessionDir $session -PartialRecoveryReport $partialProof -OutputDirectory (Join-Path $session 'cleanup') -OriginalControllerCreated $OriginalControllerCreated -ProspectiveProofJson $prospectiveProof
             $clean=Get-Content -LiteralPath (Join-Path $session 'cleanup\cleanup-results.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             if (-not $clean.cleanup_verified -or -not $clean.driver_package_removed -or @(VBox-Processes).Count -ne 0) {
                 throw 'Partial preparation teardown unconfirmed'
